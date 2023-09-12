@@ -1,0 +1,67 @@
+server:
+  url: http://localhost:7111
+
+stores:
+  manifests:
+    type: iiif-json
+    path: ./content
+    subFiles: true
+    ignore: content/objects/**/*
+    pattern: "**/*.json"
+
+  bridges:
+    type: iiif-remote
+    url: https://view.nls.uk/collections/7446/74466699.json
+    saveManifests: true
+    overrides: ./content
+    slugTemplates:
+      - nls-manifests
+      - nls-collections
+
+  hutton:
+    type: iiif-remote
+    url: https://view.nls.uk/collections/7446/74466682.json
+    slugTemplates:
+      - nls-manifests
+      - nls-collections
+
+  wellcomePaintings:
+    type: iiif-remote
+    url: https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings
+    slugTemplates:
+      - wellcome-manifest
+      - wellcome-collection
+
+slugs:
+  wellcome-manifest:
+    type: Manifest
+    prefix: https://iiif.wellcomecollection.org/
+    pattern: /presentation/:id
+    slugTemplate: wellcome/manifests/:id
+    examples:
+      - https://iiif.wellcomecollection.org/presentation/b30496974
+
+  wellcome-collection:
+    type: Collection
+    prefix: https://iiif.wellcomecollection.org/
+    pattern: /presentation/collections/:a/:b?
+    slugTemplate: wellcome/collections/:a/:b?
+    examples:
+      - https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings
+
+  nls-manifests:
+    type: Manifest
+    prefix: https://view.nls.uk/manifest/
+    pattern: /:id1/:id2/manifest.json
+    slugTemplate: manifests/nls-:id1-:id2
+    examples:
+      - https://view.nls.uk/manifest/7446/74464117/manifest.json
+
+  nls-collections:
+    type: Collection
+    prefix: https://view.nls.uk/collections/
+    pattern: /:id1/:id2.json
+    slugTemplate: collections/nls-:id1-:id2
+    examples:
+      - https://view.nls.uk/collections/7446/74466699.json
+

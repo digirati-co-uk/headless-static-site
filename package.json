@@ -1,0 +1,42 @@
+{
+  "name": "headless-static-site",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [],
+  "author": "Stephen Fraser <stephen.fraser@digirati.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.1",
+    "@types/glob-watcher": "^5.0.2",
+    "@types/micromatch": "^4.0.2",
+    "@types/node": "^20.5.9",
+    "@types/object-hash": "^3.0.4",
+    "bun-plugin-yaml": "^0.0.1",
+    "bun-types": "^1.0.1",
+    "commander": "^11.0.0",
+    "object-hash": "^3.0.0",
+    "prettier": "^3.0.3",
+    "threads": "^1.7.0",
+    "typescript": "^5.2.2",
+    "tslib": "^2.6.2"
+  },
+  "dependencies": {
+    "@atlas-viewer/iiif-image-api": "^2.1.1",
+    "@iiif/presentation-3": "^2.0.5",
+    "@iiif/vault": "https://pkg.csb.dev/IIIF-Commons/vault/commit/60ff763a/@iiif/vault/_pkg.tgz",
+    "@iiif/vault-helpers": "https://pkg.csb.dev/IIIF-Commons/vault-helpers/commit/fc0bf4dc/@iiif/vault-helpers/_pkg.tgz",
+    "cosmiconfig": "^8.3.4",
+    "fs-extra": "^11.1.1",
+    "glob-watcher": "^6.0.0",
+    "iiif-builder": "^1.0.6",
+    "js-yaml": "^4.1.0",
+    "micromatch": "^4.0.5",
+    "mkdirp": "^3.0.1",
+    "node-fetch": "^3.3.2",
+    "path-to-regexp": "^6.2.1",
+    "pdiiif": "^0.1.9",
+    "translate": "^2.0.2"
+  }
+}
