@@ -52,7 +52,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       let source: ParsedResource["source"] = { type: "remote", url: store.url };
 
       if (override && existsSync(join(cwd(), override))) {
-        source = { type: "disk", path: override };
+        source = { type: "disk", path: override, alias: slug };
       }
       // This is a manifest, probably shouldn't have requested it...
       return [
@@ -102,7 +102,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
     resource: ParsedResource,
     caches: ProtoResourceDirectory["caches.json"],
   ) {
-    if (!caches.load) {
+    if (!caches.load && !caches.urls) {
       return true;
     }
 
@@ -110,6 +110,8 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       const file = await stat(resource.source.path);
       const key = file.mtime + "-" + file.ctime + "-" + file.size;
       return key !== caches.load;
+    } else if (caches.urls && resource.source.url) {
+      return !caches.urls.includes(resource.source.url);
     }
 
     return true;
@@ -121,6 +123,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         : await api.requestCache.fetch(resource.path);
 
     const id = json.id || json["@id"];
+    const key = await api.requestCache.getKey(resource.path);
 
     if (!id) {
       throw new Error("No id found in json");
@@ -128,12 +131,6 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
 
     const vault = new Vault();
     await vault.load(id, json);
-
-    await mkdirp(directory);
-    await writeFile(
-      join(directory, "resource.json"),
-      JSON.stringify(json, null, 2),
-    );
 
     // Copy any sub files.
     const caches: any = {};
@@ -153,8 +150,12 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
           await copy(resource.slug, destination, { overwrite: true });
         }
       }
+    } else if (key) {
+      caches.urls = caches.urls || [];
+      if (!caches.urls.includes(key)) {
+        caches.urls.push(key);
+      }
     }
-
     return createProtoDirectory(
       {
         id,

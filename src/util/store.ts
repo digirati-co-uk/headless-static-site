@@ -10,6 +10,7 @@ export interface StoreApi {
   requestCache: {
     fetch<T = any>(url: string): Promise<T>;
     didChange(url: string): Promise<boolean>;
+    getKey(url: string): Promise<string | null>;
   };
 }
 export interface Store<T> {

@@ -10,6 +10,12 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
   const didChangeCache = new Map<string, string>();
 
   return {
+    async getKey(url: string) {
+      if (cache.has(url) || didChangeCache.has(url)) {
+        return url;
+      }
+      return null;
+    },
     async didChange(url: string) {
       let data = null;
 
@@ -51,7 +57,7 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
         // Also populate the cache.
         await mkdirp(dir);
         await writeFile(cachePath, JSON.stringify(data));
-        cache.set(cachePath, data);
+        cache.set(cachePath, data as any);
 
         return data;
       }
@@ -62,14 +68,14 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
 
       if (await pathExists(cachePath)) {
         const data = await readJson(cachePath);
-        cache.set(cachePath, data);
+        cache.set(url, data);
         return data;
       }
 
       const resp = await fetch(url);
       const data = await resp.json();
       const cachedData = { ...data, _cached: true };
-      cache.set(cachePath, cachedData as any);
+      cache.set(url, cachedData as any);
       await mkdirp(dir);
       await writeFile(cachePath, JSON.stringify(cachedData));
 

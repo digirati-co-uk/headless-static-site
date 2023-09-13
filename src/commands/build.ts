@@ -92,7 +92,7 @@ export async function build(options: BuildOptions, command: Command) {
   if (options.scripts) {
     const scriptsPath = join(cwd(), options.scripts);
     if (existsSync(scriptsPath)) {
-      const allFiles = await readAllFiles(scriptsPath);
+      const allFiles = readAllFiles(scriptsPath);
       for (const file of allFiles) {
         await import(file);
       }
@@ -200,7 +200,7 @@ export async function build(options: BuildOptions, command: Command) {
         !options.cache ||
         (await storeType.invalidate(storeConfig as any, resource, caches));
       if (valid) {
-        // log('Building ' + resource.path);
+        log('Building ' + resource.path);
         await mkdirp(resourceDir);
         const data = await storeType.load(
           storeConfig as any,
