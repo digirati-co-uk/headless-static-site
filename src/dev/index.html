@@ -12,12 +12,49 @@
             <a href="/explorer">Explorer</a>
         </li>
     </ul>
+    <h3>Index</h3>
+    <div id="list"></div>
 
 
     <script type="module">
         import { create } from '/client.ts';
 
         const helper = create(`${window.location.origin}`);
+
+        const index = await helper.getSitemap();
+        const editable = await helper.getEditable();
+        const $list = document.getElementById('list');
+
+        if (index) {
+            const $ul = document.createElement('ul');
+
+            for (const [item, obj] of Object.entries(index)) {
+                if (obj.type === 'Collection') {
+                    const $li = document.createElement('li');
+                    $li.innerText = item;
+                    $ul.appendChild($li);
+                    continue;
+                }
+
+                const overrides = obj.source.overrides;
+
+                const $li = document.createElement('li');
+                $li.innerHTML = `
+                    ${obj.label || item}
+                    <a href="/clover/${item}">[view]</a>
+                    ${overrides ? `<a href="/editor/${item}#copy">[save copy]</a>` : ''}
+                    ${editable[item] ? `<a href="/editor/${item}">[edit]</a>` : ''}
+                `;
+
+                // const $a = document.createElement('a');
+                // $a.setAttribute('href', `/editor/${item}`);
+                // $a.innerText = item;
+                $ul.appendChild($li);
+            }
+
+            $list.innerHTML = '';
+            $list.appendChild($ul);
+        }
     </script>
 
 </body>

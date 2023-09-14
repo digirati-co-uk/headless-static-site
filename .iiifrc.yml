@@ -6,14 +6,18 @@ stores:
     type: iiif-json
     path: ./content
     subFiles: true
-    ignore: content/objects/**/*
+    ignore:
+      - content/objects/**/*
+      - content/manifests/*
     pattern: "**/*.json"
+    destination: manifests
+    base: ./content
 
   bridges:
     type: iiif-remote
     url: https://view.nls.uk/collections/7446/74466699.json
-    saveManifests: true
     overrides: ./content
+    saveManifests: true
     slugTemplates:
       - nls-manifests
       - nls-collections
@@ -21,6 +25,7 @@ stores:
   hutton:
     type: iiif-remote
     url: https://view.nls.uk/collections/7446/74466682.json
+    overrides: ./content
     slugTemplates:
       - nls-manifests
       - nls-collections

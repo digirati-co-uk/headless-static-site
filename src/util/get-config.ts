@@ -6,20 +6,7 @@ export interface IIIFRC {
   server?: {
     url: string;
   };
-  stores: Record<
-    string,
-    {
-      path: string;
-      type: string;
-      pattern?: string;
-      options?: Record<string, any>;
-      metadata?: {
-        label: string;
-        description?: string;
-      };
-      slugTemplates?: string[];
-    }
-  >;
+  stores: Record<string, GenericStore>;
   slugs?: Record<
     string,
     {
@@ -31,6 +18,18 @@ export interface IIIFRC {
       examples?: string[];
     }
   >;
+}
+
+export interface GenericStore {
+  path: string;
+  type: string;
+  pattern?: string;
+  options?: Record<string, any>;
+  metadata?: {
+    label: string;
+    description?: string;
+  };
+  slugTemplates?: string[];
 }
 
 const DEFAULT_CONFIG: IIIFRC = {

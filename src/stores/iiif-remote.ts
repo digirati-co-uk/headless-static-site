@@ -6,9 +6,7 @@ import {
 } from "../util/store";
 // @ts-ignore
 import { Vault } from "@iiif/vault";
-import { writeFile } from "fs/promises";
 import { join } from "node:path";
-import { mkdirp } from "mkdirp";
 import { existsSync } from "fs";
 import { cwd } from "process";
 import { stat } from "node:fs/promises";
@@ -49,7 +47,11 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       : undefined;
 
     if (isManifest) {
-      let source: ParsedResource["source"] = { type: "remote", url: store.url };
+      let source: ParsedResource["source"] = {
+        type: "remote",
+        url: store.url,
+        overrides: store.overrides,
+      };
 
       if (override && existsSync(join(cwd(), override))) {
         source = { type: "disk", path: override, alias: slug };
@@ -63,6 +65,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
           path: store.url,
           storeId: api.storeId,
           source,
+          saveToDisk: store.saveManifests || false,
         },
       ];
     }
@@ -74,7 +77,8 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         slugSource,
         path: store.url,
         storeId: api.storeId,
-        source: { type: "remote", url: store.url },
+        saveToDisk: store.saveManifests || false,
+        source: { type: "remote", url: store.url, overrides: store.overrides },
       },
     ];
     // We need to loop through.

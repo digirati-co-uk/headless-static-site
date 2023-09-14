@@ -12,6 +12,8 @@ export function create(url: string) {
     manifests: `${url}/manifests.json`,
     top: `${url}/top.json`,
     sitemap: `${url}/sitemap.json`,
+    editable: `${url}/editable.json`,
+    overrides: `${url}/overrides.json`,
   };
 
   const cache: Record<string, any> = {};
@@ -30,6 +32,11 @@ export function create(url: string) {
   const getStores = () => cachedGet<IIIFRC["stores"]>(endpoints.stores);
   const getManifests = () => cachedGet<Collection>(endpoints.manifests);
   const getTop = () => cachedGet<Collection>(endpoints.top);
+  const getEditable = () =>
+    cachedGet<Record<string, string>>(endpoints.editable);
+
+  const getOverrides = () =>
+    cachedGet<Record<string, string>>(endpoints.overrides);
   const getSitemap = () =>
     cachedGet<
       Record<
@@ -60,6 +67,12 @@ export function create(url: string) {
   }
 
   async function getManifest(url: string) {
+    const overrides = await getOverrides();
+    const urlWithoutSlash = url.startsWith("/") ? url.slice(1) : url;
+    if (overrides && overrides[urlWithoutSlash]) {
+      return "/" + overrides[urlWithoutSlash];
+    }
+
     const remote = await resolveFromSlug(url);
     if (remote) {
       return remote;
@@ -80,6 +93,7 @@ export function create(url: string) {
     getTop,
     getSitemap,
     resolveFromSlug,
+    getEditable,
     getManifest,
   };
 }

@@ -1,9 +1,9 @@
-import { sha1 } from 'object-hash';
-import { Extraction } from '../util/extract';
+import { sha1 } from "object-hash";
+import { Extraction } from "../util/extract";
 
 export const extractLabelString: Extraction = {
   name: "Extract label as string",
-  types: ['Manifest'],
+  types: ["Manifest"],
   async invalidate(manifest, api) {
     const resource = api.resource;
     if (!resource.label) {
@@ -25,22 +25,21 @@ export const extractLabelString: Extraction = {
       return {};
     }
 
-    const firstValue = (label[keys[0]] || [])[0] || '';
+    const firstValue = (label[keys[0]] || [])[0] || "";
     return {
       caches: {
         extractLabelString: sha1(resource.label),
       },
       meta: {
         label: firstValue,
-      }
-    }
-  }
-}
-
+      },
+    };
+  },
+};
 
 export const extractLabelStringNoCache: Extraction = {
   name: "Extract label as string",
-  types: ['Manifest'],
+  types: ["Manifest"],
   async invalidate() {
     return true;
   },
@@ -50,11 +49,20 @@ export const extractLabelStringNoCache: Extraction = {
     if (keys.length === 0) {
       return {};
     }
-    const firstValue = (label[keys[0]] || [])[0] || '';
+    const firstValue = (label[keys[0]] || [])[0] || "";
     return {
       meta: {
         label: firstValue,
-      }
-    }
+      },
+    };
+  },
+};
+
+export function getValue(value: any) {
+  const label = value || {};
+  const keys = Object.keys(label);
+  if (keys.length === 0) {
+    return "";
   }
+  return (label[keys[0]] || [])[0] || "";
 }

@@ -6,41 +6,46 @@ import {
   StoreApi,
 } from "../util/store";
 import { readAllFiles } from "../util/read-all-files";
-import micromatch from "micromatch";
 import { readFile, stat } from "node:fs/promises";
+// @ts-ignore
 import { Vault } from "@iiif/vault";
 import { existsSync } from "fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { cwd } from "process";
 import { copy, pathExists } from "fs-extra/esm";
 import { isEmpty } from "../util/is-empty";
 import objectHash from "object-hash";
+import { rewritePath } from "../util/rewrite-path.ts";
+import { readFilteredFiles } from "../util/read-filtered-files.ts";
 
 interface IIIFJSONStore {
   type: "iiif-json";
   path: string;
   pattern?: string;
-  ignore?: string;
+  ignore?: string | string[];
   subFiles?: boolean;
+  base?: string;
+  destination?: string;
 }
 
 async function parse(
   store: IIIFJSONStore,
   api: StoreApi,
 ): Promise<ParsedResource[]> {
-  const allStoreFiles = readAllFiles(store.path);
-  let allFiles = Array.from(allStoreFiles);
-  if (store.pattern) {
-    allFiles = micromatch(allFiles, store.pattern, { ignore: store.ignore });
-  }
-
+  const allFiles = readFilteredFiles(store);
+  const fileNameToPath = rewritePath(store);
   const newAllFiles: Array<[string, string]> = [];
   const subFileMap: Record<string, string[]> = {};
+
   if (store.subFiles) {
-    // Check for sub-files
-    const allFilesWithoutExtension = allFiles.map((f) =>
-      f.replace(/\.[A-Za-z0-9]+$/, ""),
-    );
+    // Check for sub-files.
+    // Sub-files work like this:
+    //  - example/some-manifest.json <-- this is Manifest JSON itself on disk
+    //  - example/some-manifest/some-image.jpg <-- this is a sub-file
+    //
+    // All files that are in a folder with the same name as the file, are considered sub-files if this
+    // option is enabled. This allows for relative links to resources such as Annotation Lists to work.
+    const allFilesWithoutExtension = allFiles.map(fileNameToPath);
     for (let i = 0; i < allFilesWithoutExtension.length; i++) {
       const file = allFilesWithoutExtension[i];
       let dupe = false;
@@ -61,7 +66,7 @@ async function parse(
     }
   } else {
     for (const file of allFiles) {
-      newAllFiles.push([file, file.replace(/\.[A-Za-z0-9]+$/, "")]);
+      newAllFiles.push([file, fileNameToPath(file)]);
     }
   }
 
@@ -74,6 +79,7 @@ async function parse(
       storeId: api.storeId,
       subFiles: subFileMap[fileWithoutExtension],
       source: { type: "disk", path: file },
+      saveToDisk: true,
     });
   }
 
@@ -130,7 +136,7 @@ async function load(
   const id = json.id || json["@id"];
 
   if (!id) {
-    throw new Error("No id found in json");
+    throw new Error("No id found in json" + resource.path);
   }
 
   if (store.subFiles) {

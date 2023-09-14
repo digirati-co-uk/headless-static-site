@@ -1,4 +1,4 @@
-import { extract } from "../src/lib/scripts";
+import { extract } from "../lib/scripts";
 
 extract(
   {

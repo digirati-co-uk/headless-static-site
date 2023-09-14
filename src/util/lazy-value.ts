@@ -1,6 +1,6 @@
 export function lazyValue<T>(loader: () => Promise<T>): LazyValue<T> {
   let isLoaded = false;
-  let value = null;
+  let value: any = null;
 
   return {
     get value() {
@@ -9,8 +9,8 @@ export function lazyValue<T>(loader: () => Promise<T>): LazyValue<T> {
         isLoaded = true;
       }
       return value;
-    }
-  }
+    },
+  };
 }
 
 export interface LazyValue<T> {

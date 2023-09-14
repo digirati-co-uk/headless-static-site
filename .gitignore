@@ -2,3 +2,5 @@ node_modules
 .iiif
 .idea
 content
+build
+examples
