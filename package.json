@@ -12,12 +12,16 @@
   "bin": "build/hss",
   "author": "Stephen Fraser <stephen.fraser@digirati.com>",
   "license": "MIT",
+  "typings": "lib/scripts.d.ts",
   "scripts": {
     "prepack": "bun build ./src/index.ts --compile --outfile build/hss"
   },
   "exports": {
     ".": {
       "import": "./lib/scripts.js"
+    },
+    "./lib/scripts.d.ts": {
+      "import": "./lib/scripts.d.ts"
     }
   },
   "devDependencies": {
