@@ -2,13 +2,13 @@ import { getConfig } from "../util/get-config.ts";
 import { cwd } from "process";
 import { join } from "node:path";
 import { BuildOutput } from "bun";
-import { existsSync } from "fs";
 import { build } from "./build.ts";
 
-export async function serve() {
-  const config = await getConfig();
-  let cachedBundle: BuildOutput | null = null;
+import { macro } from "../macro.ts" assert { type: "macro" };
+import { mkdirp } from "mkdirp";
+import { dirname } from "path/posix";
 
+export async function serve() {
   const options = {
     enrich: true,
     extract: true,
@@ -19,6 +19,8 @@ export async function serve() {
     build({ dev: true, watch: false, ...options }, null as any);
 
   await fullBuild();
+
+  const files = await macro();
 
   build(
     {
@@ -55,6 +57,8 @@ export async function serve() {
 
   console.log("Serving on http://localhost:7111");
 
+  const devFolder = join(import.meta.file, "../dev");
+
   Bun.serve({
     port: 7111,
     async fetch(req) {
@@ -65,40 +69,36 @@ export async function serve() {
       }
 
       if (url.pathname === "/client.js" || url.pathname === "/client.ts") {
-        if (!cachedBundle) {
-          cachedBundle = await Bun.build({
-            entrypoints: ["./src/lib/client.ts"],
-            sourcemap: "inline",
-            target: "browser",
-          });
-        }
-
-        return new Response(cachedBundle.outputs[0]);
+        return new Response(files.client, {
+          headers: { "content-type": "text/javascript", ...corsHeaders },
+        });
       }
 
-      const html = existsSync(join("src/dev", url.pathname + ".html"));
-      if (html) {
-        const index = Bun.file(join(cwd(), "src/dev", url.pathname + ".html"));
-        return new Response(index.stream());
+      if (url.pathname.startsWith("/explorer")) {
+        return new Response(files.explorer, {
+          headers: { "Content-Type": "text/html" },
+        });
       }
 
       if (url.pathname.startsWith("/clover/")) {
-        const index = Bun.file(join(cwd(), "src/dev/clover.html"));
-        return new Response(index.stream());
+        return new Response(files.clover, {
+          headers: { "Content-Type": "text/html" },
+        });
       }
 
       if (url.pathname.startsWith("/editor/")) {
-        const index = Bun.file(join(cwd(), "src/dev/editor.html"));
-        return new Response(index.stream());
+        return new Response(files.editor, {
+          headers: { "Content-Type": "text/html" },
+        });
       }
 
       if (url.pathname === "/") {
-        const index = Bun.file(join(cwd(), "src/dev/index.html"));
-        return new Response(index.stream());
+        return new Response(files.index, {
+          headers: { "Content-Type": "text/html" },
+        });
       }
 
       const file = Bun.file(join(cwd(), ".iiif/dev/build", url.pathname));
-
       if (req.method === "POST") {
         if (!url.pathname.endsWith("manifest.json")) {
           return new Response("", { status: 404 });
@@ -127,10 +127,10 @@ export async function serve() {
           }
         }
 
-        console.log("trying to save..", editablePath);
-
         const body = await req.json();
         if (body) {
+          await mkdirp(dirname(editablePath));
+
           await Bun.write(
             join(cwd(), editablePath),
             JSON.stringify(body, null, 2),
