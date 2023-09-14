@@ -1,3 +1,4 @@
+import "../bun.ts";
 import { Command } from "commander";
 import { argv } from "process";
 import { build } from "./commands/build";
