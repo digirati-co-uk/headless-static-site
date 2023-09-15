@@ -52,6 +52,7 @@
         $config.innerText = JSON.stringify({
             stores,
             slugs,
+            editable,
         }, null, 2);
 
         if (index) {
@@ -59,13 +60,9 @@
 
             for (const [item, obj] of Object.entries(index)) {
                 if (obj.type === 'Collection') {
-                    // const $li = document.createElement('li');
-                    // $li.innerText = item;
-                    // $ul.appendChild($li);
                     continue;
                 }
 
-                const overrides = obj.source.overrides;
                 const l = 'text-blue-800 hover:underline text-sm';
                 const $li = document.createElement('li');
 
@@ -79,8 +76,6 @@
                         ${obj.label || item}
                     </span>
                     <a class="${l}" href="/clover/${item}">[view]</a>
-                    ${overrides ? `<a class="${l}" href="/editor/${item}#copy">[save copy]</a>` : ''}
-                    ${editable[item] ? `<a class="${l}" href="/editor/${item}">[edit]</a>` : ''}
                 `;
 
                 $ul.appendChild($li);

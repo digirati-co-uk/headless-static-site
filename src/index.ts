@@ -22,11 +22,14 @@ program
   .option("--no-extract", "Disable extraction")
   .option("--no-enrich", "Disable enrichment")
   .option("--no-client", "Disable client.js building")
+  .option("--html", "Include HTML in build")
   .action(build);
 
 program
   .command("serve")
   .description("Serve headless static site")
+  .option("-d, --dev", "Development mode")
+  .option("-s, --scripts <path>", "Build scripts")
   .action(serve);
 
 program

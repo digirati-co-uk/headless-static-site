@@ -10,6 +10,9 @@ export async function macro() {
   const index = await Bun.file(
     import.meta.resolveSync("./dev/index.html"),
   ).text();
+  const indexProd = await Bun.file(
+    import.meta.resolveSync("./dev/index.prod.html"),
+  ).text();
   const clover = await Bun.file(
     import.meta.resolveSync("./dev/clover.html"),
   ).text();
@@ -23,6 +26,7 @@ export async function macro() {
   return {
     client,
     index,
+    indexProd,
     clover,
     explorer,
     editor,

@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { getConfig } from "../util/get-config";
 import { IIIFJSONStore } from "../stores/iiif-json";
 import { mkdirp } from "mkdirp";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { existsSync } from "fs";
 import { extractLabelString } from "../extract/extract-label-string";
 import { homepageProperty } from "../enrich/homepage-property";
@@ -40,6 +40,7 @@ export type BuildOptions = {
   emit?: boolean;
   skipFirstBuild?: boolean;
   client?: boolean;
+  html?: boolean;
 
   // Programmatic only
   onBuild?: () => void | Promise<void>;
@@ -85,14 +86,11 @@ export async function build(options: BuildOptions, command: Command) {
       loadStores({ storeResources }, buildConfig),
     );
 
-    const { siteMap } = await time(
-      "Extracting resources",
-      extract({ allResources }, buildConfig),
-    );
+    await time("Extracting resources", extract({ allResources }, buildConfig));
 
     await time("Enriching resources", enrich({ allResources }, buildConfig));
 
-    const { storeCollections, manifestCollection, indexCollection } =
+    const { storeCollections, manifestCollection, indexCollection, siteMap } =
       await time(
         "Emitting files",
         emit({ allResources, allPaths }, buildConfig),
@@ -137,7 +135,6 @@ export async function build(options: BuildOptions, command: Command) {
 
 export async function getBuildConfig(options: BuildOptions) {
   const config = await getConfig();
-  const globals = getNodeGlobals();
 
   const extractions = [...builtInExtractions];
   const enrichments = [...buildInEnrichments];
@@ -163,6 +160,30 @@ export async function getBuildConfig(options: BuildOptions) {
     throw new Error("No stores defined in config");
   }
 
+  const log = (...args: any[]) => {
+    options.debug && console.log(...args);
+  };
+
+  // Load external configs / scripts.
+  if (options.scripts) {
+    const scriptsPath = join(cwd(), options.scripts);
+    if (existsSync(scriptsPath)) {
+      const allFiles = Array.from(readAllFiles(scriptsPath));
+      log(`Loading ${allFiles.length} script(s)`);
+      for (const file of allFiles) {
+        console.log(" => ", relative(cwd(), file));
+        try {
+          await import(file);
+        } catch (e) {
+          console.log(chalk.red(e));
+          process.exit(1);
+        }
+      }
+    }
+  }
+
+  const globals = getNodeGlobals();
+
   extractions.push(...globals.extractions);
   enrichments.push(...globals.enrichments);
 
@@ -183,10 +204,6 @@ export async function getBuildConfig(options: BuildOptions) {
 
   const server = options.dev ? { url: "http://localhost:7111" } : config.server;
 
-  const log = (...args: any[]) => {
-    options.debug && console.log(...args);
-  };
-
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
     const resp = await promise.catch((e) => {
@@ -196,17 +213,6 @@ export async function getBuildConfig(options: BuildOptions) {
     log(chalk.blue(label) + chalk.grey(` (${Date.now() - startTime}ms)`));
     return resp;
   };
-
-  // Load external configs / scripts.
-  if (options.scripts) {
-    const scriptsPath = join(cwd(), options.scripts);
-    if (existsSync(scriptsPath)) {
-      const allFiles = readAllFiles(scriptsPath);
-      for (const file of allFiles) {
-        await import(file);
-      }
-    }
-  }
 
   const requestCache = createStoreRequestCache("_thumbs", requestCacheDir);
   const imageServiceLoader = new (class extends ImageServiceLoader {

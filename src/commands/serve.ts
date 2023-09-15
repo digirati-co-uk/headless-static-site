@@ -1,18 +1,21 @@
-import { getConfig } from "../util/get-config.ts";
 import { cwd } from "process";
 import { join } from "node:path";
-import { BuildOutput } from "bun";
 import { build } from "./build.ts";
-
 import { macro } from "../macro.ts" assert { type: "macro" };
+import { macro as macroDev } from "../macro.ts";
 import { mkdirp } from "mkdirp";
 import { dirname } from "path/posix";
 
-export async function serve() {
+interface ServeOptions {
+  dev: boolean;
+  scripts?: string;
+}
+export async function serve({ dev, scripts }: ServeOptions) {
   const options = {
     enrich: true,
     extract: true,
     emit: true,
+    scripts,
   };
 
   const fullBuild = () =>
@@ -20,7 +23,25 @@ export async function serve() {
 
   await fullBuild();
 
-  const files = await macro();
+  const files = !dev
+    ? await macro()
+    : {
+        get client() {
+          return macroDev().then((r) => r.client);
+        },
+        get explorer() {
+          return macroDev().then((r) => r.explorer);
+        },
+        get clover() {
+          return macroDev().then((r) => r.clover);
+        },
+        get editor() {
+          return macroDev().then((r) => r.editor);
+        },
+        get index() {
+          return macroDev().then((r) => r.index);
+        },
+      };
 
   build(
     {
@@ -57,8 +78,6 @@ export async function serve() {
 
   console.log("Serving on http://localhost:7111");
 
-  const devFolder = join(import.meta.file, "../dev");
-
   Bun.serve({
     port: 7111,
     async fetch(req) {
@@ -69,31 +88,31 @@ export async function serve() {
       }
 
       if (url.pathname === "/client.js" || url.pathname === "/client.ts") {
-        return new Response(files.client, {
+        return new Response(await files.client, {
           headers: { "content-type": "text/javascript", ...corsHeaders },
         });
       }
 
       if (url.pathname.startsWith("/explorer")) {
-        return new Response(files.explorer, {
+        return new Response(await files.explorer, {
           headers: { "Content-Type": "text/html" },
         });
       }
 
-      if (url.pathname.startsWith("/clover/")) {
-        return new Response(files.clover, {
+      if (url.pathname.startsWith("/clover")) {
+        return new Response(await files.clover, {
           headers: { "Content-Type": "text/html" },
         });
       }
 
       if (url.pathname.startsWith("/editor/")) {
-        return new Response(files.editor, {
+        return new Response(await files.editor, {
           headers: { "Content-Type": "text/html" },
         });
       }
 
       if (url.pathname === "/") {
-        return new Response(files.index, {
+        return new Response(await files.index, {
           headers: { "Content-Type": "text/html" },
         });
       }

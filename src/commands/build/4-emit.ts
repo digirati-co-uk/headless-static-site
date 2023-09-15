@@ -11,6 +11,7 @@ import { existsSync } from "fs";
 import { isEmpty } from "../../util/is-empty.ts";
 import { copy } from "fs-extra/esm";
 import { ActiveResourceJson } from "../../util/store.ts";
+import { getValue } from "../../extract/extract-label-string.ts";
 
 export async function emit(
   {
@@ -26,6 +27,8 @@ export async function emit(
     return {};
   }
 
+  const siteMap: Record<string, { type: string; source: any; label?: string }> =
+    {};
   const savingFiles = [];
   const saveJson = (file: string, contents: any) => {
     savingFiles.push(Bun.write(file, JSON.stringify(contents, null, 2)));
@@ -72,6 +75,12 @@ export async function emit(
       id: manifest.id,
       type: manifest.type,
     });
+
+    siteMap[manifest.slug] = {
+      type: manifest.type,
+      source: manifest.source,
+      label: getValue(resource.label),
+    };
 
     let thumbnail = resource.thumbnail
       ? null
@@ -180,5 +189,6 @@ export async function emit(
     indexCollection,
     storeCollections,
     manifestCollection,
+    siteMap,
   };
 }

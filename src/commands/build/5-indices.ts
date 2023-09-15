@@ -130,8 +130,18 @@ export async function indices(
     );
   }
 
-  // This needs to work with compile.
+  // const files = macro();
+  // // This needs to work with compile.
   // if (options.client) {
+  //   await Bun.write(join(buildDir, "client.js"), files.client);
+  // }
+  //
+  // if (options.html) {
+  //   await Bun.write(join(buildDir, "index.html"), files.indexProd);
+  //   await Bun.write(join(buildDir, "explorer.html"), files.explorer);
+  //   await Bun.write(join(buildDir, "clover.html"), files.clover);
+  // }
+
   //   const bundle = await Bun.build({
   //     entrypoints: ["./src/lib/client.ts"],
   //     sourcemap: "none",

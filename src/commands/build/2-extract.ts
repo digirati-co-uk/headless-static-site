@@ -29,10 +29,6 @@ export async function extract(
     return {};
   }
 
-  // Return types.
-  const siteMap: Record<string, { type: string; source: any; label?: string }> =
-    {};
-
   // Caches.
   let savingFiles = [];
 
@@ -54,12 +50,6 @@ export async function extract(
     manifest.vault = new Vault();
     manifest.vault.getStore().setState(await vaultData);
     const resource = manifest.vault.getObject(manifest.id);
-
-    siteMap[manifest.slug] = {
-      type: manifest.type,
-      source: manifest.source,
-      label: getValue(resource.label),
-    };
 
     const extractions =
       manifest.type === "Manifest"
@@ -130,7 +120,5 @@ export async function extract(
   log("Saving " + savingFiles.length + " files");
   await Promise.all(savingFiles);
 
-  return {
-    siteMap,
-  };
+  return {};
 }

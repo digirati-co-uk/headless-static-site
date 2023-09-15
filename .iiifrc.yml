@@ -13,6 +13,11 @@ stores:
     destination: manifests
     base: ./content
 
+  delft:
+    type: iiif-json
+    path: ./delft
+    pattern: "**/*.json"
+
   bridges:
     type: iiif-remote
     url: https://view.nls.uk/collections/7446/74466699.json

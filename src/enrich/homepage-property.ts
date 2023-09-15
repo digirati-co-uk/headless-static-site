@@ -1,31 +1,37 @@
-import { Enrichment } from '../util/enrich';
+import { Enrichment } from "../util/enrich";
 
 export const homepageProperty: Enrichment = {
-  name: 'Homepage property',
-  types: ['Manifest'],
+  name: "Homepage property",
+  types: ["Manifest"],
   async invalidate(resource, api) {
-    if (resource.id && resource.type === 'Manifest') {
-      const homepage = api.config.server?.url + '/' + resource.slug;
-      const existingHomepage = api.resource.homepage.find(h => h.id === homepage);
-      if (!existingHomepage) {
-        return true;
-      }
+    if (resource.id && resource.type === "Manifest") {
+      const homepage = api.config.server?.url + "/" + resource.slug;
+      const existingHomepage = api.resource.homepage.find(
+        (h: any) => h.id === homepage,
+      );
+      return !existingHomepage;
     }
 
-    return false;
+    return true;
   },
   async handler(resource, api) {
     if (resource.id) {
+      const found = api.builder.vault.get(resource.id);
+      if (!found || found.type !== "Manifest") {
+        return {};
+      }
 
-      api.builder.editManifest(resource.id, (m) => {
-        m.setHomepage({
-          id: api.config.server?.url + '/' + resource.slug,
-        });
+      api.builder.editManifest(resource.id, (m: any) => {
+        if (m.entity.homepage) {
+          m.setHomepage({
+            id: api.config.server?.url + "/" + resource.slug,
+          });
+        }
       });
 
       return { didChange: true };
     }
 
     return {};
-  }
-}
+  },
+};

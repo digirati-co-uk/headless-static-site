@@ -78,6 +78,7 @@ export async function enrich(
         resource,
         files: filesDir,
       });
+
       if (result.meta) {
         Object.assign(newMeta, result.meta);
       }
@@ -95,7 +96,18 @@ export async function enrich(
       allEnrichments.push(runEnrichment(enrichment));
     }
 
-    await Promise.all(allEnrichments);
+    const results = await Promise.allSettled(allEnrichments);
+    const errors = results.filter((r) => r.status === "rejected");
+    if (errors.length > 0) {
+      throw new Error(
+        "Enrichment failed for " +
+          errors.length +
+          " manifest(s): \n \n" +
+          errors
+            .map((e, n) => `  ${n + 1}) ` + (e as any)?.reason?.message)
+            .join(", "),
+      );
+    }
 
     if (didChange && manifest.vault) {
       saveJson(files["vault.json"], manifest.vault.getStore().getState());
