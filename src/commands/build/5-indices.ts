@@ -1,6 +1,7 @@
 import { BuildConfig } from "../build.ts";
 import { join } from "node:path";
 import { mkdirp } from "mkdirp";
+import { macro } from "../../macro.ts";
 
 export async function indices(
   {
@@ -130,17 +131,17 @@ export async function indices(
     );
   }
 
-  // const files = macro();
+  const files = await macro();
   // // This needs to work with compile.
-  // if (options.client) {
-  //   await Bun.write(join(buildDir, "client.js"), files.client);
-  // }
-  //
-  // if (options.html) {
-  //   await Bun.write(join(buildDir, "index.html"), files.indexProd);
-  //   await Bun.write(join(buildDir, "explorer.html"), files.explorer);
-  //   await Bun.write(join(buildDir, "clover.html"), files.clover);
-  // }
+  if (options.client) {
+    await Bun.write(join(buildDir, "client.js"), files.client);
+  }
+
+  if (options.html) {
+    await Bun.write(join(buildDir, "index.html"), files.indexProd);
+    await Bun.write(join(buildDir, "explorer.html"), files.explorer);
+    await Bun.write(join(buildDir, "clover.html"), files.clover);
+  }
 
   //   const bundle = await Bun.build({
   //     entrypoints: ["./src/lib/client.ts"],
