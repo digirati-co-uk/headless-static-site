@@ -1,7 +1,7 @@
 import { BuildConfig } from "../build.ts";
 import { join } from "node:path";
 import { mkdirp } from "mkdirp";
-import { macro } from "../../macro.ts";
+import { macro } from "../../macro.ts" assert { type: "macro" };
 
 export async function indices(
   {
