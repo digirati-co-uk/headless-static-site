@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import "../bun.ts";
 import { Command } from "commander";
 import { argv } from "process";
@@ -23,6 +25,7 @@ program
   .option("--no-enrich", "Disable enrichment")
   .option("--no-client", "Disable client.js building")
   .option("--html", "Include HTML in build")
+  .option("--python", "Allow python scripts")
   .action(build);
 
 program

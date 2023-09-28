@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { getConfig } from "../util/get-config";
 import { IIIFJSONStore } from "../stores/iiif-json";
 import { mkdirp } from "mkdirp";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { existsSync } from "fs";
 import { extractLabelString } from "../extract/extract-label-string";
 import { homepageProperty } from "../enrich/homepage-property";
@@ -24,6 +24,7 @@ import { createStoreRequestCache } from "../util/store-request-cache.ts";
 // @ts-ignore
 import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
 import chalk from "chalk";
+import { pythonExtract } from "../util/python-api.ts";
 
 export type BuildOptions = {
   config?: string;
@@ -41,6 +42,7 @@ export type BuildOptions = {
   skipFirstBuild?: boolean;
   client?: boolean;
   html?: boolean;
+  python?: boolean;
 
   // Programmatic only
   onBuild?: () => void | Promise<void>;
@@ -167,17 +169,35 @@ export async function getBuildConfig(options: BuildOptions) {
   // Load external configs / scripts.
   if (options.scripts) {
     const scriptsPath = join(cwd(), options.scripts);
+    let loaded = 0;
     if (existsSync(scriptsPath)) {
-      const allFiles = Array.from(readAllFiles(scriptsPath));
+      const allFiles = Array.from(readAllFiles(scriptsPath)).filter(
+        (s) => !s.endsWith("/hss.py"),
+      );
       log(`Loading ${allFiles.length} script(s)`);
       for (const file of allFiles) {
-        console.log(" => ", relative(cwd(), file));
+        if (file.endsWith("extract.py")) {
+          if (options.python) {
+            loaded++;
+            await pythonExtract(file, options.debug);
+          }
+          // wrap enrichments in a function
+          continue;
+        }
+        if (file.endsWith(".py")) {
+          continue;
+        }
+
         try {
           await import(file);
+          loaded++;
         } catch (e) {
           console.log(chalk.red(e));
           process.exit(1);
         }
+      }
+      if (loaded !== allFiles.length) {
+        log(chalk.yellow(`Loaded ${loaded} of ${allFiles.length} scripts`));
       }
     }
   }

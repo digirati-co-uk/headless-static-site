@@ -68,6 +68,8 @@ export async function extract(
         continue;
       }
 
+      log("Running extract: " + extraction.name + " for " + manifest.slug);
+
       const result = await extraction.handler(manifest, {
         resource,
         meta,

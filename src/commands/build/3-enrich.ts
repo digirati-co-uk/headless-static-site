@@ -69,6 +69,8 @@ export async function enrich(
         return;
       }
 
+      log("Running enrichment: " + enrichment.name + " for " + manifest.slug);
+
       const result = await enrichment.handler(manifest, {
         meta,
         indicies,

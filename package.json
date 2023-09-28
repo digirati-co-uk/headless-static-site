@@ -1,28 +1,48 @@
 {
   "name": "iiif-hss",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "IIIF Headless Static Site",
   "type": "module",
   "keywords": [],
   "files": [
+    "src",
     "build",
     "lib"
   ],
   "module": "lib/scripts.js",
-  "bin": "build/hss",
+  "bin": "build/hss.js",
   "author": "Stephen Fraser <stephen.fraser@digirati.com>",
   "license": "MIT",
   "typings": "lib/scripts.d.ts",
   "scripts": {
-    "prepack": "bun build ./src/index.ts --compile --outfile build/hss"
+    "prepack": "bun build ./src/index.ts --target bun --outfile build/hss.js && bun build ./src/dev/client.ts --target browser --outfile build/client.js --minify && bunx --bun dts-bundle-generator ./src/dev/client.ts -o ./build/client.d.ts"
   },
   "exports": {
     ".": {
       "import": "./lib/scripts.js"
     },
+    "./client": {
+      "import": "./build/client.js"
+    },
+    "./build/client.d.ts": {
+      "import": "./build/client.d.ts"
+    },
     "./lib/scripts.d.ts": {
       "import": "./lib/scripts.d.ts"
     }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "lib/scripts.d.ts"
+      ],
+      "client": [
+        "build/client.d.ts"
+      ]
+    }
+  },
+  "optionalDependencies": {
+    "@iiif/presentation-3": "^2.0.5"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.1",
@@ -33,6 +53,7 @@
     "bun-plugin-yaml": "^0.0.1",
     "bun-types": "^1.0.1",
     "commander": "^11.0.0",
+    "detect-python-interpreter": "^1.0.0",
     "object-hash": "^3.0.0",
     "prettier": "^3.0.3",
     "threads": "^1.7.0",
