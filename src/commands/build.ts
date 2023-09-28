@@ -25,6 +25,7 @@ import { createStoreRequestCache } from "../util/store-request-cache.ts";
 import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
 import chalk from "chalk";
 import { pythonExtract } from "../util/python-api.ts";
+import { env } from "bun";
 
 export type BuildOptions = {
   config?: string;
@@ -222,7 +223,9 @@ export async function getBuildConfig(options: BuildOptions) {
   );
   const requestCacheDir = join(cacheDir, "_requests");
 
-  const server = options.dev ? { url: "http://localhost:7111" } : config.server;
+  const server = options.dev
+    ? { url: env.DEV_SERVER || "http://localhost:7111" }
+    : config.server;
 
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
