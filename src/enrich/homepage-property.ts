@@ -1,6 +1,7 @@
 import { Enrichment } from "../util/enrich";
 
 export const homepageProperty: Enrichment = {
+  id: "homepage-property",
   name: "Homepage property",
   types: ["Manifest"],
   async invalidate(resource, api) {

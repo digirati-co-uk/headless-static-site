@@ -26,6 +26,16 @@ import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
 import chalk from "chalk";
 import { pythonExtract } from "../util/python-api.ts";
 import { env } from "bun";
+import { extractCanvasDims } from "../extract/extract-canvas-dims.ts";
+import { canvasThumbnail } from "../enrich/canvas-thumbnail.ts";
+import { translateMetadata } from "../enrich/translate-metadata.ts";
+import { manifestSqlite } from "../enrich/manifest-sqlite.ts";
+import { Extraction } from "../util/extract.ts";
+import { Enrichment } from "../util/enrich.ts";
+import { extractThumbnail } from "../extract/extract-thumbnail.ts";
+import { extractTopics } from "../extract/extract-topics.ts";
+import { extractMetadataAnalysis } from "../extract/extract-metadata-analysis.ts";
+// import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
   config?: string;
@@ -44,6 +54,8 @@ export type BuildOptions = {
   client?: boolean;
   html?: boolean;
   python?: boolean;
+  topics?: boolean;
+  out?: string;
 
   // Programmatic only
   onBuild?: () => void | Promise<void>;
@@ -53,16 +65,51 @@ const defaultCacheDir = ".iiif/cache";
 const defaultBuildDir = ".iiif/build";
 const devCache = ".iiif/dev/cache";
 const devBuild = ".iiif/dev/build";
+const topicFolder = "content/topics";
 
-const builtInExtractions = [extractLabelString, extractSlugSource];
-const buildInEnrichments = [homepageProperty /*, translateMetadata , pdiiif*/];
+const defaultRun = [
+  extractLabelString.id,
+  extractSlugSource.id,
+  // extractCanvasDims.id,
+  homepageProperty.id,
+  extractMetadataAnalysis.id,
+];
+
+const builtInExtractions: Extraction[] = [
+  extractLabelString,
+  extractSlugSource,
+  extractCanvasDims,
+  extractThumbnail,
+  extractTopics,
+  extractMetadataAnalysis,
+];
+const buildInEnrichments: Enrichment[] = [
+  homepageProperty,
+  canvasThumbnail,
+  translateMetadata,
+  manifestSqlite,
+  // pdiiif
+];
+
+const builtInEnrichmentsMap = {
+  [homepageProperty.id]: homepageProperty,
+  [canvasThumbnail.id]: canvasThumbnail,
+  [translateMetadata.id]: translateMetadata,
+  // [pdiiif.id]: pdiiif,
+};
+
+const builtInExtractionsMap = {
+  [extractLabelString.id]: extractLabelString,
+  [extractSlugSource.id]: extractSlugSource,
+  [extractCanvasDims.id]: extractCanvasDims,
+};
 
 const storeTypes = {
   "iiif-json": IIIFJSONStore,
   "iiif-remote": IIIFRemoteStore,
 };
 
-export async function build(options: BuildOptions, command: Command) {
+export async function build(options: BuildOptions, command?: Command) {
   const buildConfig = await getBuildConfig(options);
   const config = await getConfig();
   const { log, time } = buildConfig;
@@ -100,9 +147,10 @@ export async function build(options: BuildOptions, command: Command) {
       );
 
     await time(
-      "Building indicies",
+      "Building indices",
       indices(
         {
+          allResources,
           storeCollections,
           manifestCollection,
           indexCollection,
@@ -139,11 +187,12 @@ export async function build(options: BuildOptions, command: Command) {
 export async function getBuildConfig(options: BuildOptions) {
   const config = await getConfig();
 
-  const extractions = [...builtInExtractions];
-  const enrichments = [...buildInEnrichments];
+  const allExtractions = [...builtInExtractions];
+  const allEnrichments = [...buildInEnrichments];
 
   const cacheDir = options.dev ? devCache : defaultCacheDir;
-  const buildDir = options.dev ? devBuild : defaultBuildDir;
+  const buildDir = options.dev ? devBuild : options.out || defaultBuildDir;
+  const filesDir = join(cacheDir, "files");
 
   const slugs = Object.fromEntries(
     Object.entries(config.slugs || {}).map(([key, value]) => {
@@ -163,8 +212,18 @@ export async function getBuildConfig(options: BuildOptions) {
     throw new Error("No stores defined in config");
   }
 
+  const defaultLogger = (...msg: any[]) => console.log(...msg);
+  let internalLogger = defaultLogger;
   const log = (...args: any[]) => {
-    options.debug && console.log(...args);
+    options.debug && internalLogger(...args);
+  };
+
+  const setLogger = (logger: (...args: any[]) => void) => {
+    internalLogger = logger;
+  };
+
+  const clearLogger = () => {
+    internalLogger = defaultLogger;
   };
 
   // Load external configs / scripts.
@@ -205,14 +264,25 @@ export async function getBuildConfig(options: BuildOptions) {
 
   const globals = getNodeGlobals();
 
-  extractions.push(...globals.extractions);
-  enrichments.push(...globals.enrichments);
+  allExtractions.push(...globals.extractions);
+  allEnrichments.push(...globals.enrichments);
+
+  log("Available extractions:", allExtractions.map((e) => e.id).join(", "));
+  log("Available enrichments:", allEnrichments.map((e) => e.id).join(", "));
+
+  // We manually skip some.
+  const toRun = config.run || defaultRun;
+  const extractions = allExtractions.filter((e) => toRun.includes(e.id));
+  const enrichments = allEnrichments.filter((e) => toRun.includes(e.id));
 
   const manifestExtractions = extractions.filter((e) =>
     e.types.includes("Manifest"),
   );
   const collectionExtractions = extractions.filter((e) =>
     e.types.includes("Collection"),
+  );
+  const canvasExtractions = extractions.filter((e) =>
+    e.types.includes("Canvas"),
   );
 
   const manifestEnrichment = enrichments.filter((e) =>
@@ -221,6 +291,10 @@ export async function getBuildConfig(options: BuildOptions) {
   const collectionEnrichment = enrichments.filter((e) =>
     e.types.includes("Collection"),
   );
+  const canvasEnrichment = enrichments.filter((e) =>
+    e.types.includes("Canvas"),
+  );
+
   const requestCacheDir = join(cacheDir, "_requests");
 
   const server = options.dev
@@ -230,7 +304,9 @@ export async function getBuildConfig(options: BuildOptions) {
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
     const resp = await promise.catch((e) => {
+      console.log("");
       console.log(chalk.red(e));
+      console.log(e);
       process.exit(1);
     });
     log(chalk.blue(label) + chalk.grey(` (${Date.now() - startTime}ms)`));
@@ -244,23 +320,33 @@ export async function getBuildConfig(options: BuildOptions) {
     }
   })();
 
+  const topicsDir = join(cwd(), topicFolder);
+
   return {
     options,
     server,
     config,
     extractions,
+    allExtractions,
+    allEnrichments,
+    canvasExtractions,
     manifestExtractions,
     collectionExtractions,
     enrichments,
+    canvasEnrichment,
     manifestEnrichment,
     collectionEnrichment,
     requestCacheDir,
+    topicsDir,
     cacheDir,
     buildDir,
+    filesDir,
     stores,
     // Helpers based on config.
     time,
     log,
+    setLogger,
+    clearLogger,
     slugs,
     imageServiceLoader,
     // Currently hard-coded.

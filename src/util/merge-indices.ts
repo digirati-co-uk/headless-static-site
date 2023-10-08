@@ -1,15 +1,18 @@
-export function mergeIndices(newIndicies: Record<string, string[]>, indicies: Record<string, string[]>) {
-  const keys = Object.keys(indicies);
+export function mergeIndices(
+  newindices: Record<string, string[]>,
+  indices: Record<string, string[]>,
+) {
+  const keys = Object.keys(indices);
   for (const key of keys) {
-    if (!newIndicies[key]) {
-      newIndicies[key] = [];
+    if (!newindices[key]) {
+      newindices[key] = [];
     }
-    for (const item of indicies[key]) {
-      if (!newIndicies[key].includes(item)) {
-        newIndicies[key].push(item);
+    for (const item of indices[key]) {
+      if (!newindices[key].includes(item)) {
+        newindices[key].push(item);
       }
     }
   }
 
-  return newIndicies;
+  return newindices;
 }

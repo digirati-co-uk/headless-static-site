@@ -7,7 +7,7 @@ import {
 import chalk from "chalk";
 
 interface ValidateOptions {}
-export async function validate(options: ValidateOptions, command: Command) {
+export async function validate(options: ValidateOptions, command?: Command) {
   let didError = false;
   const config = await getConfig();
   if (config.slugs) {

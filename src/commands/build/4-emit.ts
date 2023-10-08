@@ -1,17 +1,16 @@
 import { BuildConfig } from "../build.ts";
 import { loadJson } from "../../util/load-json.ts";
 import { join } from "node:path";
-// @ts-ignore
-import { Vault } from "@iiif/vault";
-// @ts-ignore
-import { createThumbnailHelper } from "@iiif/vault-helpers";
+import { Vault, createThumbnailHelper } from "@iiif/helpers";
 import { mkdirp } from "mkdirp";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { isEmpty } from "../../util/is-empty.ts";
 import { copy } from "fs-extra/esm";
 import { ActiveResourceJson } from "../../util/store.ts";
 import { getValue } from "../../extract/extract-label-string.ts";
+import { makeProgressBar } from "../../util/make-progress-bar.ts";
+import { Collection, Manifest } from "@iiif/presentation-3";
 
 export async function emit(
   {
@@ -27,15 +26,36 @@ export async function emit(
     return {};
   }
 
-  const siteMap: Record<string, { type: string; source: any; label?: string }> =
-    {};
+  const siteMap: Record<
+    string,
+    {
+      type: string;
+      source: any;
+      label?: string;
+      canvases?: number;
+      hasCanvasData?: boolean;
+    }
+  > = {};
   const savingFiles = [];
+  let totalResources = allResources.length;
+  for (const resource of allResources) {
+    totalResources += resource.subResources || 0;
+  }
+
+  const progress = makeProgressBar("Saving output", totalResources);
+
   const saveJson = (file: string, contents: any) => {
     savingFiles.push(Bun.write(file, JSON.stringify(contents, null, 2)));
   };
 
+  const filesDir = join(cacheDir, "files");
+  if (existsSync(filesDir) && !isEmpty(filesDir)) {
+    savingFiles.push(copy(filesDir, buildDir, { overwrite: true }));
+  }
+
   const configUrl = server?.url;
-  const indexCollection: any[] = [];
+  const indexCollection: Record<string, any> = {};
+  const indexCollectionMap: Record<string, any> = {};
   const storeCollections: Record<string, Array<any>> = {};
   const manifestCollection: any[] = [];
 
@@ -50,6 +70,7 @@ export async function emit(
     const cache = {
       "vault.json": join(manifestCacheDirectory, "vault.json"),
       "meta.json": join(manifestCacheDirectory, "meta.json"),
+      "indices.json": join(manifestCacheDirectory, "indices.json"),
     };
 
     // const folderPath = allPaths[manifest.path];
@@ -71,16 +92,20 @@ export async function emit(
     // };
 
     const helper = createThumbnailHelper(vault, { imageServiceLoader });
-    const resource = vault.toPresentation3({
-      id: manifest.id,
-      type: manifest.type,
-    });
+    const ref = vault.get(manifest.id);
+    const resource = vault.toPresentation3<Manifest | Collection>(ref);
+
+    if (!resource) continue;
 
     siteMap[manifest.slug] = {
       type: manifest.type,
       source: manifest.source,
       label: getValue(resource.label),
     };
+
+    if (manifest.type === "Manifest") {
+      siteMap[manifest.slug].canvases = resource.items?.length;
+    }
 
     let thumbnail = resource.thumbnail
       ? null
@@ -108,6 +133,7 @@ export async function emit(
       id: url,
       type: manifest.type,
       label: resource.label,
+      "hss:slug": manifest.slug,
       thumbnail:
         resource.thumbnail ||
         (thumbnail && thumbnail.best
@@ -130,7 +156,7 @@ export async function emit(
     }
 
     // Index collection.
-    indexCollection.push(snippet);
+    indexCollection[manifest.slug] = snippet;
 
     if (manifest.type === "Manifest") {
       manifestCollection.push(snippet);
@@ -155,14 +181,16 @@ export async function emit(
           continue;
         }
 
-        resource.items = resource.items.map((item: any) => {
-          if (item.type === "Manifest") {
-            item.id = `${configUrl}/${allPaths[item.path]}/manifest.json`;
-          } else {
-            item.id = `${configUrl}/${allPaths[item.path]}/collection.json`;
-          }
-          return item;
-        });
+        if (resource.items) {
+          resource.items = resource.items.map((item: any) => {
+            if (item.type === "Manifest") {
+              item.id = `${configUrl}/${allPaths[item.path]}/manifest.json`;
+            } else {
+              item.id = `${configUrl}/${allPaths[item.path]}/collection.json`;
+            }
+            return item;
+          });
+        }
       }
 
       saveJson(join(manifestBuildDirectory, fileName), resource);
@@ -174,6 +202,13 @@ export async function emit(
       Bun.write(join(manifestBuildDirectory, "meta.json"), meta),
     );
 
+    const indices = await readFile(
+      join(cacheDir, manifest.slug, "indices.json"),
+    );
+    savingFiles.push(
+      Bun.write(join(manifestBuildDirectory, "indices.json"), indices),
+    );
+
     // 4. Copy the contents of `files/`
     const filesDir = join(cacheDir, manifest.slug, "files");
     if (existsSync(filesDir) && !isEmpty(filesDir)) {
@@ -181,9 +216,46 @@ export async function emit(
         copy(filesDir, manifestBuildDirectory, { overwrite: true }),
       );
     }
+
+    await Promise.all(savingFiles);
+    progress.increment();
+
+    // Canvases.
+    const canvasesDir = join(cacheDir, manifest.slug, "canvases");
+    if (existsSync(canvasesDir)) {
+      siteMap[manifest.slug].hasCanvasData = true;
+      const canvasList = readdirSync(canvasesDir);
+      for (const canvasIndex of canvasList) {
+        const canvasDir = join(canvasesDir, canvasIndex);
+        const metaFile = join(canvasDir, "meta.json");
+        const canvasBuildDirectory = join(
+          manifestBuildDirectory,
+          "canvases",
+          canvasIndex,
+        );
+        await mkdirp(canvasBuildDirectory);
+        if (existsSync(metaFile)) {
+          const meta = await readFile(join(canvasDir, "meta.json"));
+          savingFiles.push(
+            Bun.write(join(canvasBuildDirectory, "meta.json"), meta),
+          );
+        }
+        const filesDir = join(canvasesDir, canvasIndex, "files");
+        if (existsSync(filesDir) && !isEmpty(filesDir)) {
+          savingFiles.push(
+            copy(filesDir, canvasBuildDirectory, { overwrite: true }),
+          );
+        }
+
+        progress.increment();
+      }
+    } else {
+      progress.increment(manifest.subResources || 0);
+    }
   }
 
   await Promise.all(savingFiles);
+  progress.stop();
 
   return {
     indexCollection,

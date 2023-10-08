@@ -2,7 +2,8 @@ import { enrich } from "../lib/scripts";
 
 enrich(
   {
-    name: "delft-labels",
+    id: "delft-labels",
+    name: "Delft labels",
     types: ["Manifest"],
     invalidate: async () => {
       return true;
@@ -11,6 +12,12 @@ enrich(
   async (resource, api) => {
     let didChange = false;
     api.builder.editManifest(resource.id, (manifest) => {
+      // const label = manifest.entity.label || {};
+      // if (label.en[0] === "") {
+      //   const { en, ...restOfLabel } = label;
+      //   manifest.setLabel(restOfLabel);
+      // }
+
       const keys = Object.keys(manifest.entity.label || {});
       if (keys.length === 0) {
         const metadata = manifest.entity.metadata || [];

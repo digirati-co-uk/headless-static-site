@@ -4,26 +4,42 @@ import {
   ProtoResourceDirectory,
   Store,
 } from "../util/store";
-// @ts-ignore
-import { Vault } from "@iiif/vault";
+import { Vault } from "@iiif/helpers";
 import { join } from "node:path";
 import { existsSync } from "fs";
 import { cwd } from "process";
 import { stat } from "node:fs/promises";
 import { copy, pathExists } from "fs-extra/esm";
 import { isEmpty } from "../util/is-empty";
+import { Manifest } from "@iiif/presentation-3";
 
-interface IIIFRemoteStore {
+export interface IIIFRemoteStore {
   type: "iiif-remote";
-  url: string;
+  url?: string;
+  urls?: string[];
   overrides?: string;
   saveManifests?: boolean;
 }
 
 export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
   async parse(store, api) {
-    const collection = await api.requestCache.fetch(store.url);
+    if (store.urls) {
+      const toReturn = [];
+      for (const url of store.urls) {
+        toReturn.push(
+          ...(await IIIFRemoteStore.parse(
+            { ...store, url, urls: undefined },
+            api,
+          )),
+        );
+      }
+      return toReturn;
+    }
+    if (!store.url) {
+      return [];
+    }
 
+    const collection = await api.requestCache.fetch(store.url);
     // We support v2 and v3 collections.
     const identifier = collection["@id"] || collection["id"] || "";
     const isCollection =
@@ -34,6 +50,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       collection["type"] === "Manifest";
 
     if ((!isCollection && !isManifest) || !identifier) {
+      console.log("ERROR: Could not parse collection", store.url);
       return [];
     }
 
@@ -134,7 +151,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
     }
 
     const vault = new Vault();
-    await vault.load(id, json);
+    const res = await vault.load<Manifest>(id, json);
 
     // Copy any sub files.
     const caches: any = {};
@@ -168,6 +185,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         slug: resource.slug,
         storeId: api.storeId,
         slugSource: resource.slugSource,
+        subResources: (res?.items || []).length,
         saveToDisk:
           resource.source.type === "disk" || store.saveManifests || false,
         source: resource.source,

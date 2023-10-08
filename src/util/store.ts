@@ -1,5 +1,4 @@
-// @ts-ignore
-import { IIIFStore, Vault } from "@iiif/vault";
+import { IIIFStore, Vault } from "@iiif/helpers";
 import { BuildConfig } from "../commands/build.ts";
 
 export interface StoreApi {
@@ -65,6 +64,10 @@ export interface ProtoResourceDirectory {
      */
     saveToDisk?: boolean;
     /**
+     * Number of sub-resources (only used for estimation)
+     */
+    subResources?: number;
+    /**
      * Where this resource originated from.
      */
     source:
@@ -75,7 +78,7 @@ export interface ProtoResourceDirectory {
   "meta.json": {
     [key: string]: any;
   };
-  "indicies.json": {
+  "indices.json": {
     [key: string]: Array<any>;
   };
   "caches.json": {
@@ -91,6 +94,7 @@ export type ParsedResource = Omit<
   id?: string;
   type: string;
   subFiles?: string[];
+  subResources?: number;
 };
 
 export type ActiveResourceJson = ProtoResourceDirectory["resource.json"] & {
@@ -107,7 +111,7 @@ export function createProtoDirectory(
     "resource.json": resource,
     "vault.json": vault.getStore().getState(),
     "caches.json": caches,
-    "indicies.json": {},
+    "indices.json": {},
     "meta.json": {},
     ...other,
   };

@@ -7,8 +7,7 @@ import {
 } from "../util/store";
 import { readAllFiles } from "../util/read-all-files";
 import { readFile, stat } from "node:fs/promises";
-// @ts-ignore
-import { Vault } from "@iiif/vault";
+import { Vault } from "@iiif/helpers";
 import { existsSync } from "fs";
 import { join, relative } from "node:path";
 import { cwd } from "process";
@@ -17,8 +16,9 @@ import { isEmpty } from "../util/is-empty";
 import objectHash from "object-hash";
 import { rewritePath } from "../util/rewrite-path.ts";
 import { readFilteredFiles } from "../util/read-filtered-files.ts";
+import { Manifest } from "@iiif/presentation-3";
 
-interface IIIFJSONStore {
+export interface IIIFJSONStore {
   type: "iiif-json";
   path: string;
   pattern?: string;
@@ -153,7 +153,10 @@ async function load(
     }
   }
 
-  await vault.load(id, json);
+  const res = await vault.load<Manifest>(id, json);
+  if (!res) {
+    throw new Error("Failed to load resource: " + id);
+  }
 
   return createProtoDirectory(
     {
@@ -162,6 +165,7 @@ async function load(
       path: resource.path,
       slug: resource.slug,
       storeId: resource.storeId,
+      subResources: (res.items || []).length,
       saveToDisk: true,
       source: { type: "disk", path: resource.path },
     },

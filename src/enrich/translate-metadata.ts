@@ -1,6 +1,5 @@
 import { Enrichment } from "../util/enrich";
-// @ts-ignore
-import { buildLocaleString } from "@iiif/vault-helpers";
+import { buildLocaleString } from "@iiif/helpers";
 import translate from "translate";
 import fetch from "node-fetch";
 
@@ -10,6 +9,7 @@ global.fetch = global.fetch || (fetch as any);
 // const langs = ['fr', 'uk', 'de'];
 const langs: string[] = []; // empty to speed things up..
 export const translateMetadata: Enrichment = {
+  id: "translate-metadata",
   name: "Translate metadata",
   types: ["Manifest"],
   async invalidate(resource, api) {

@@ -6,6 +6,7 @@ import { argv } from "process";
 import { build } from "./commands/build";
 import { serve } from "./commands/serve.ts";
 import { validate } from "./commands/validate.ts";
+import { init } from "./commands/init.ts";
 
 const program = new Command();
 
@@ -26,6 +27,8 @@ program
   .option("--no-client", "Disable client.js building")
   .option("--html", "Include HTML in build")
   .option("--python", "Allow python scripts")
+  .option("--topics", "Flush topic data to /topics folder")
+  .option("-o, --out <path>", "Output path")
   .action(build);
 
 program
@@ -40,5 +43,11 @@ program
   .command("validate")
   .description("Validate config")
   .action(validate);
+
+program
+  //
+  .command("init")
+  .description("Initialize config")
+  .action(init);
 
 program.parse(argv);

@@ -6,9 +6,13 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Headless static site</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/0.3.2/js/sql.js"></script>
 </head>
 <body class="p-5">
     <h1 class="text-3xl  mb-5 pb-5 border-b-2">Headless static site</h1>
+
+    <input type="text" id="search" class="w-full p-2 rounded border border-slate-300 mb-5" placeholder="Search for a manifest..."/>
+    <div id="search_results"></div>
 
     <section class="my-5 rounded">
         <h3 class="text-xl mb-4">Links</h3>
@@ -89,6 +93,38 @@
             $list.innerHTML = '';
             $list.appendChild($ul);
         }
+    </script>
+
+    <script>
+        const $search = document.getElementById('search');
+        const $results = document.getElementById('search_results');
+        fetch('/manifests.db').then(async r => {
+            const database = new SQL.Database(new Uint8Array(await r.arrayBuffer()));
+            window.DB = database;
+
+            $search.addEventListener('keyup', e => {
+                const q = e.target.value;
+                $results.innerHTML = '';
+                if (q) {
+                    const results = database.exec(`
+                      SELECT id, label, slug, thumbnail FROM manifests WHERE label LIKE '%${q}%' LIMIT 10
+                    `);
+                    for (const result of results[0].values) {
+                        const [id, label, url, thumbnail] = result;
+                        const $li = document.createElement('li');
+                        $li.className = 'mb-1 p-1 hover:bg-slate-100 flex items-center gap-3'
+                        $li.innerHTML = `
+                        ${thumbnail ? `<img src="${thumbnail}" class="w-8" />` : ''}
+                        <a class="text-blue-800 font-bold hover:underline" href="/clover/${url}">${label}</a>
+                    `;
+                        $results.appendChild($li);
+                    }
+                }
+            });
+
+
+
+        });
     </script>
 
 </body>

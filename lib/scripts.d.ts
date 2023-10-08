@@ -8,11 +8,11 @@ declare global {
   }
 }
 
-export function extract(
-  config: Omit<Extraction, "handler" | "invalidate"> & {
-    invalidate?: Extraction["invalidate"];
+export function extract<Config = any, Temp = any>(
+  config: Omit<Extraction<Config, Temp>, "handler" | "invalidate"> & {
+    invalidate?: Extraction<Config, Temp>["invalidate"];
   },
-  handler: Extraction["handler"],
+  handler: Extraction<Config, Temp>["handler"],
 ): void;
 
 export function enrich(

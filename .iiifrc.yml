@@ -1,6 +1,14 @@
 server:
   url: http://localhost:7111
 
+# Run these everywhere.
+run:
+  - extract-slug-source
+  - extract-label-string
+  - extract-thumbnail
+  - manifest-sqlite
+  - metadata-analysis
+
 stores:
   manifests:
     type: iiif-json
@@ -9,6 +17,7 @@ stores:
     ignore:
       - content/objects/**/*
       - content/manifests/*
+      - content/topics/**/*
     pattern: "**/*.json"
     destination: manifests
     base: ./content
@@ -17,6 +26,16 @@ stores:
     type: iiif-json
     path: ./delft
     pattern: "**/*.json"
+    run:
+      - delft-labels
+      - extract-thumbnail
+      - manifest-sqlite
+      - extract-topics
+    config:
+      extract-topics:
+        commaSeparated: ['material']
+        topicTypes:
+          material: [ 'Materiaal', 'Material' ]
 
   bridges:
     type: iiif-remote
@@ -26,6 +45,17 @@ stores:
     slugTemplates:
       - nls-manifests
       - nls-collections
+
+    # Skip these for this store.
+    skip:
+      - extract-canvas-dims
+
+    # But additionally run these.
+    run:
+      - canvas-thumbnail
+      - extract-thumbnail
+      - manifest-sqlite
+
 
   hutton:
     type: iiif-remote
@@ -41,6 +71,21 @@ stores:
     slugTemplates:
       - wellcome-manifest
       - wellcome-collection
+      - wellcome-paged-collection
+    run:
+      - extract-topics
+    config:
+      extract-topics:
+        topicTypes:
+          technique: ['Type/technique']
+          subjects: ['Subjects']
+
+config:
+  extract-label-string:
+    language: en
+
+  manifest-sqlite:
+    enableTopics: true
 
 slugs:
   wellcome-manifest:
@@ -58,6 +103,14 @@ slugs:
     slugTemplate: wellcome/collections/:a/:b?
     examples:
       - https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings
+
+  wellcome-paged-collection:
+    type: Collection
+    prefix: https://iiif.wellcomecollection.org/
+    pattern: /presentation/collections/:a/:b/paged/:c
+    slugTemplate: wellcome/collections/:a/:b/:c
+    examples:
+      - https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings/paged/1-100
 
   nls-manifests:
     type: Manifest

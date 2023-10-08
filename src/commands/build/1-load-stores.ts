@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { existsSync } from "fs";
 import { loadJson } from "../../util/load-json.ts";
 import { mkdirp } from "mkdirp";
+import { SingleBar } from "cli-progress";
+import { makeProgressBar } from "../../util/make-progress-bar.ts";
 
 export async function loadStores(
   { storeResources }: { storeResources: Record<string, ParsedResource[]> },
@@ -18,6 +20,8 @@ export async function loadStores(
     storeTypes,
     requestCacheDir,
     log,
+    canvasExtractions,
+    canvasEnrichment,
   } = buildConfig;
 
   const allResources: Array<ActiveResourceJson> = [];
@@ -28,8 +32,11 @@ export async function loadStores(
     const storeConfig = config.stores[store];
     const resources = storeResources[store];
 
+    const progress = makeProgressBar("Loading store", resources.length);
+
     for (const resource of resources) {
       if (options.exact && resource.slug !== options.exact) {
+        progress.increment();
         continue;
       }
 
@@ -76,15 +83,17 @@ export async function loadStores(
             JSON.stringify(data["caches.json"], null, 2),
           ),
           Bun.write(
-            join(resourceDir, "indicies.json"),
-            JSON.stringify(data["indicies.json"], null, 2),
+            join(resourceDir, "indices.json"),
+            JSON.stringify(data["indices.json"], null, 2),
           ),
         ]);
       } else {
         const resourceJson = await loadJson(join(resourceDir, "resource.json"));
         allResources.push(resourceJson);
       }
+      progress.increment();
     }
+    progress.stop();
   }
 
   return { allResources, editable };

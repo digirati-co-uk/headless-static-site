@@ -6,6 +6,7 @@ export interface IIIFRC {
   server?: {
     url: string;
   };
+  run?: string[];
   stores: Record<string, GenericStore>;
   slugs?: Record<
     string,
@@ -18,6 +19,7 @@ export interface IIIFRC {
       examples?: string[];
     }
   >;
+  config?: Record<string, any>;
 }
 
 export interface GenericStore {
@@ -30,6 +32,10 @@ export interface GenericStore {
     description?: string;
   };
   slugTemplates?: string[];
+  // Step options
+  skip?: string[];
+  run?: string[];
+  config?: Record<string, any>;
 }
 
 const DEFAULT_CONFIG: IIIFRC = {
@@ -44,16 +50,20 @@ const DEFAULT_CONFIG: IIIFRC = {
 
 let config: IIIFRC | null = null;
 
+export const supportedConfigFiles = [
+  ".iiifrc.yml",
+  ".iiifrc.yaml",
+  "iiif.config.js",
+  "iiif.config.ts",
+];
+
 export async function getConfig() {
   if (!config) {
-    if (existsSync(join(cwd(), ".iiifrc.yml"))) {
-      config = await import(join(cwd(), ".iiifrc.yml"));
-    } else if (existsSync(join(cwd(), ".iiifrc.yaml"))) {
-      config = await import(join(cwd(), ".iiifrc.yaml"));
-    } else if (existsSync(join(cwd(), "iiif.config.js"))) {
-      config = await import(join(cwd(), "iiif.config.js"));
-    } else if (existsSync(join(cwd(), "iiif.config.ts"))) {
-      config = await import(join(cwd(), "iiif.config.ts"));
+    for (const configFileName of supportedConfigFiles) {
+      if (existsSync(join(cwd(), configFileName))) {
+        config = await import(join(cwd(), configFileName));
+        break;
+      }
     }
   }
 

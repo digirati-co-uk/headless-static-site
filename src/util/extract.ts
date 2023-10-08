@@ -4,31 +4,50 @@ import { BuildConfig } from "../commands/build.ts";
 import { IIIFRC } from "./get-config.ts";
 
 export interface ExtractionInvalidateApi {
-  caches: LazyValue<Record<string, string>>;
+  caches: LazyValue<Record<string, any>>;
   resource: any;
   build: BuildConfig;
 }
 
-export interface Extraction {
+interface ExtractionSetupApi {
+  build: BuildConfig;
+  config: IIIFRC;
+}
+
+export interface Extraction<Config = any, Temp = any> {
+  id: string;
   name: string;
   types: string[];
+  close?: (config: Config) => Promise<void>;
+  collect?: (
+    temp: Record<string, Temp>,
+    api: ExtractionSetupApi,
+    config: Partial<Config>,
+  ) => Promise<void>;
+  configure?: (
+    api: ExtractionSetupApi,
+    config: Partial<Config>,
+  ) => Promise<Config>;
   invalidate: (
     resource: ActiveResourceJson,
     api: ExtractionInvalidateApi,
+    config: Config,
   ) => Promise<boolean>;
   handler: (
     resource: ActiveResourceJson,
     api: {
       resource: any;
       meta: LazyValue<any>;
-      indicies: LazyValue<Record<string, string[]>>;
+      indices: LazyValue<Record<string, string[]>>;
       caches: LazyValue<Record<string, any>>;
       config: IIIFRC;
       build: BuildConfig;
     },
+    config: Config,
   ) => Promise<{
-    caches?: Record<string, string>;
+    temp?: Temp;
+    caches?: Record<string, any>;
     meta?: any;
-    indicies?: Record<string, string[]>;
+    indices?: Record<string, string[]>;
   }>;
 }
