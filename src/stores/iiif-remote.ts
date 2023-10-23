@@ -60,16 +60,12 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
     });
 
     let override = store.overrides
-      ? `${store.overrides}/${slug}.json`
+      ? `${store.overrides}/${
+          slug.startsWith(isManifest ? "manifests/" : "collections/")
+            ? slug.slice((isManifest ? "manifests/" : "collections/").length)
+            : slug
+        }.json`
       : undefined;
-
-    if (override && override.startsWith("manifests/manifests/")) {
-      override = override.replace("manifests/manifests/", "manifests/");
-    }
-
-    if (override && override.startsWith("collections/collections/")) {
-      override = override.replace("collections/collections/", "collections/");
-    }
 
     if (isManifest) {
       let source: ParsedResource["source"] = {
