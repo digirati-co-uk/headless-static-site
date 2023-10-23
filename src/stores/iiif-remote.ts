@@ -59,9 +59,17 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       type: isManifest ? "Manifest" : "Collection",
     });
 
-    const override = store.overrides
+    let override = store.overrides
       ? `${store.overrides}/${slug}.json`
       : undefined;
+
+    if (override && override.startsWith("manifests/manifests/")) {
+      override = override.replace("manifests/manifests/", "manifests/");
+    }
+
+    if (override && override.startsWith("collections/collections/")) {
+      override = override.replace("collections/collections/", "collections/");
+    }
 
     if (isManifest) {
       let source: ParsedResource["source"] = {
