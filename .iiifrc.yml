@@ -71,7 +71,6 @@ stores:
     slugTemplates:
       - wellcome-manifest
       - wellcome-collection
-      - wellcome-paged-collection
     run:
       - extract-topics
     config:
@@ -90,41 +89,36 @@ config:
 slugs:
   wellcome-manifest:
     type: Manifest
-    prefix: https://iiif.wellcomecollection.org/
-    pattern: /presentation/:id
-    slugTemplate: wellcome/manifests/:id
+    domain: iiif.wellcomecollection.org
+    prefix: /presentation/
+    addedPrefix: wellcome-
     examples:
       - https://iiif.wellcomecollection.org/presentation/b30496974
 
   wellcome-collection:
     type: Collection
-    prefix: https://iiif.wellcomecollection.org/
-    pattern: /presentation/collections/:a/:b?
-    slugTemplate: wellcome/collections/:a/:b?
+    domain: iiif.wellcomecollection.org
+    prefix: /presentation/collections/
+    addedPrefix: wellcome-
     examples:
       - https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings
 
-  wellcome-paged-collection:
-    type: Collection
-    prefix: https://iiif.wellcomecollection.org/
-    pattern: /presentation/collections/:a/:b/paged/:c
-    slugTemplate: wellcome/collections/:a/:b/:c
-    examples:
-      - https://iiif.wellcomecollection.org/presentation/collections/digitalcollections/digpaintings/paged/1-100
-
   nls-manifests:
     type: Manifest
-    prefix: https://view.nls.uk/manifest/
-    pattern: /:id1/:id2/manifest.json
-    slugTemplate: manifests/nls-:id1-:id2
+    domain: view.nls.uk
+    prefix: /manifest/
+    suffix: /manifest.json
+    addedPrefix: nls-
     examples:
       - https://view.nls.uk/manifest/7446/74464117/manifest.json
+    pathSeparator: '-'
 
   nls-collections:
     type: Collection
-    prefix: https://view.nls.uk/collections/
-    pattern: /:id1/:id2.json
-    slugTemplate: collections/nls-:id1-:id2
+    domain: view.nls.uk
+    prefix: /collections/
+    suffix: .json
+    addedPrefix: nls-
     examples:
       - https://view.nls.uk/collections/7446/74466699.json
 

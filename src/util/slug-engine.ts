@@ -1,68 +1,116 @@
-import { pathToRegexp, compile } from 'path-to-regexp';
 export interface SlugConfig {
-  type: 'Manifest' | 'Collection';
-  prefix: string;
-  pattern: string;
-  slugTemplate: string;
-  parseOptions?: any;
+  type: "Manifest" | "Collection";
+  domain: string;
+  prefix?: string;
+  suffix?: string;
   examples?: string[];
+  protocol?: string;
+  pathSeparator?: string;
+  addedPrefix?: string;
 }
 
-export type CompiledSlugConfig  = (url: string) => (readonly [string, Record<string, string>] | readonly [null, null]);
+export type CompiledSlugConfig = (
+  url: string,
+) => readonly [string, Record<string, string>] | readonly [null, null];
 
+const NO_MATCH = [null, null] as const;
 export function compileSlugConfig(config: SlugConfig): CompiledSlugConfig {
-  const keys: any[] = [];
-  const options: any = {};
-  if (config.prefix.endsWith('/')) {
-    config.prefix = config.prefix.slice(0, -1);
+  if ((config as any).pattern) {
+    throw new Error(`config.pattern is no longer supported.`);
   }
-  options.prefixes = [config.prefix];
-  const pattern = pathToRegexp(config.pattern, keys, options);
-  const slugTemplate = compile(config.slugTemplate);
 
-  function getSlug(url: string) {
-    const trimmed = config.prefix ? url.replace(config.prefix, '') : url;
-    const result = pattern.exec(trimmed);
-    if (!result) return [null, null] as const;
-    const params: Record<string, string> = {};
-    for (let i = 0; i < keys.length; i++) {
-      params[keys[i].name] = result[i + 1];
+  return (slug: string) => {
+    const slugUrl = new URL(slug);
+    if (slugUrl.hostname !== config.domain) {
+      return NO_MATCH;
     }
-    return [slugTemplate(params), params] as const;
-  }
 
-  return getSlug;
+    const path = slugUrl.pathname;
+    if (config.prefix && !path.startsWith(config.prefix)) {
+      return NO_MATCH;
+    }
+
+    if (config.suffix && !path.endsWith(config.suffix)) {
+      return NO_MATCH;
+    }
+
+    const pathWithoutPrefix = config.prefix
+      ? path.slice(config.prefix.length)
+      : path;
+
+    let pathWithoutSuffix = config.suffix
+      ? pathWithoutPrefix.slice(0, -config.suffix.length)
+      : pathWithoutPrefix;
+
+    if (pathWithoutSuffix.startsWith("/")) {
+      pathWithoutSuffix = pathWithoutSuffix.slice(1);
+    }
+
+    if (config.pathSeparator) {
+      pathWithoutSuffix = pathWithoutSuffix.replaceAll(
+        "/",
+        config.pathSeparator,
+      );
+    }
+
+    if (config.addedPrefix) {
+      pathWithoutSuffix = config.addedPrefix + pathWithoutSuffix;
+    }
+
+    return [pathWithoutSuffix, { path: pathWithoutSuffix }] as const;
+  };
 }
 
-export function compileReverseSlugConfig(config: SlugConfig): CompiledSlugConfig {
-  const keys: any[] = [];
-  const options: any = {};
-  if (config.prefix.endsWith('/')) {
-    config.prefix = config.prefix.slice(0, -1);
+function removeTrailingSlash(str: string) {
+  if (str.endsWith("/")) {
+    return str.slice(0, -1);
   }
-  const pattern = pathToRegexp(config.slugTemplate, keys, options);
-  const slugTemplate = compile(config.pattern);
+  return str;
+}
 
-  function getSlug(path: string) {
-    if (path.startsWith('/') && !config.slugTemplate.startsWith('/')) {
+export function compileReverseSlugConfig(
+  config: SlugConfig,
+): CompiledSlugConfig {
+  const pathSeparator = config.pathSeparator
+    ? new RegExp(config.pathSeparator, "g")
+    : null;
+  return (targetPath: string) => {
+    const domain = removeTrailingSlash(config.domain);
+    let path = removeTrailingSlash(targetPath);
+    const prefix = config.prefix || "";
+    const suffix = config.suffix || "";
+
+    if (path.startsWith("/")) {
       path = path.slice(1);
-    } else if (!path.startsWith('/') && config.slugTemplate.startsWith('/')) {
-      path = '/' + path;
     }
 
-    const trimmed = config.prefix ? path.replace(config.prefix, '') : path;
-    const result = pattern.exec(trimmed);
-    if (!result) return [null, null] as const;
-    const params: Record<string, string> = {};
-    for (let i = 0; i < keys.length; i++) {
-      params[keys[i].name] = result[i + 1];
+    if (path.startsWith("manifests/")) {
+      path = path.slice("manifests/".length);
     }
-    let url = slugTemplate(params);
-    if (!url.startsWith('/')) {
-      url = '/' + url;
+    if (path.startsWith("collections/")) {
+      path = path.slice("collections/".length);
     }
-    return [config.prefix + url, params] as const;
-  }
 
-  return getSlug;
+    if (config.addedPrefix) {
+      if (!path.startsWith(config.addedPrefix)) {
+        return NO_MATCH;
+      }
+      path = path.slice(config.addedPrefix.length);
+    }
+
+    const parts = [`${config.protocol || "https"}://${domain}`];
+    if (prefix) {
+      parts.push(prefix);
+    }
+    if (pathSeparator) {
+      parts.push(path.replace(pathSeparator, "/"));
+    } else {
+      parts.push(path);
+    }
+    if (suffix) {
+      parts.push(suffix);
+    }
+
+    return [parts.join(""), { path }] as const;
+  };
 }

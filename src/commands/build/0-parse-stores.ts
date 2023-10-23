@@ -2,27 +2,7 @@ import { createStoreRequestCache } from "../../util/store-request-cache.ts";
 import { ParsedResource, Store } from "../../util/store.ts";
 import { BuildConfig } from "../build.ts";
 import { mkdirp } from "mkdirp";
-import { GenericStore } from "../../util/get-config.ts";
-
-function makeGetSlugHelper(store: GenericStore, slugs: BuildConfig["slugs"]) {
-  if (store.slugTemplates) {
-    return (resource: { id: string; type: string }) => {
-      for (const slugTemplate of store.slugTemplates || []) {
-        const compiled = slugs[slugTemplate];
-        if (compiled && compiled.info.type === resource.type) {
-          const [slug] = compiled.compile(resource.id);
-          if (slug) {
-            return [slug, slugTemplate] as const;
-          }
-        }
-      }
-      return [resource.id, "@none"] as const;
-    };
-  }
-  return (resource: { id: string; type: string }) => {
-    return [resource.id, "@none"] as const;
-  };
-}
+import { makeGetSlugHelper } from "../../util/make-slug-helper.ts";
 
 export async function parseStores(buildConfig: BuildConfig) {
   const {

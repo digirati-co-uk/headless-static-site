@@ -50,11 +50,11 @@ export async function serve({ dev, scripts }: ServeOptions) {
       skipFirstBuild: true,
       async onBuild() {
         editable = await Bun.file(
-          join(cwd(), ".iiif/dev/build", "/editable.json"),
+          join(cwd(), ".iiif/dev/build", "/meta/editable.json"),
         ).json();
 
         siteMap = await Bun.file(
-          join(cwd(), ".iiif/dev/build", "/sitemap.json"),
+          join(cwd(), ".iiif/dev/build", "/meta/sitemap.json"),
         ).json();
       },
       ...options,
@@ -69,11 +69,11 @@ export async function serve({ dev, scripts }: ServeOptions) {
   };
 
   let editable = await Bun.file(
-    join(cwd(), ".iiif/dev/build", "/editable.json"),
+    join(cwd(), ".iiif/dev/build", "/meta/editable.json"),
   ).json();
 
   let siteMap = await Bun.file(
-    join(cwd(), ".iiif/dev/build", "/sitemap.json"),
+    join(cwd(), ".iiif/dev/build", "/meta/sitemap.json"),
   ).json();
 
   console.log("Serving on http://localhost:7111");

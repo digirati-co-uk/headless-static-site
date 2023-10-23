@@ -14,7 +14,7 @@ export const manifestSqlite: Enrichment<{
   types: ["Manifest"],
   configure: async (api, config = {}) => {
     await mkdirp(api.build.filesDir);
-    const dbFile = join(api.build.filesDir, "manifests.db");
+    const dbFile = join(api.build.filesDir, "meta", "manifests.db");
     const db = new Database(dbFile, { create: true });
 
     db.query(
@@ -86,10 +86,10 @@ export const manifestSqlite: Enrichment<{
       }
 
       if (config.enableTopics) {
-        const indicies = await api.indices.value;
-        const topicTypes = Object.keys(indicies);
+        const indices = await api.indices.value;
+        const topicTypes = Object.keys(indices);
         for (const topicTypeKey of topicTypes) {
-          const topicType = indicies[topicTypeKey];
+          const topicType = indices[topicTypeKey];
           for (const topic of topicType) {
             const topicId = slug(topic);
             const topicLabel = topic;

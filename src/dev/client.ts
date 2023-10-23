@@ -1,19 +1,16 @@
 import { IIIFRC } from "../util/get-config.ts";
 import { Collection } from "@iiif/presentation-3";
-import {
-  compileReverseSlugConfig,
-  compileSlugConfig,
-} from "../util/slug-engine.ts";
+import { resolveFromSlug } from "../util/resolve-from-slug.ts";
 
 export function create(url: string) {
   const endpoints = {
     slugs: `${url}/config/slugs.json`,
     stores: `${url}/config/stores.json`,
-    manifests: `${url}/manifests.json`,
-    top: `${url}/top.json`,
-    sitemap: `${url}/sitemap.json`,
-    editable: `${url}/editable.json`,
-    overrides: `${url}/overrides.json`,
+    manifests: `${url}/manifests/collection.json`,
+    top: `${url}/collections/collection.json`,
+    sitemap: `${url}/meta/sitemap.json`,
+    editable: `${url}/meta/editable.json`,
+    overrides: `${url}/meta/overrides.json`,
   };
 
   const cache: Record<string, any> = {};
@@ -50,32 +47,25 @@ export function create(url: string) {
       >
     >(endpoints.sitemap);
 
-  async function resolveFromSlug(slug: string) {
+  async function getFromSlug(slug: string, type: string) {
     const slugs = await getSlugs();
-    const slugFns = Object.fromEntries(
-      Object.entries(slugs || {}).map(([key, value]) => {
-        return [key, { info: value, matches: compileReverseSlugConfig(value) }];
-      }),
-    );
-
-    for (const slugFn of Object.values(slugFns || {})) {
-      const [matches] = slugFn.matches(slug);
-      if (matches) {
-        return matches;
-      }
-    }
+    return resolveFromSlug(slug, type, slugs || {});
   }
 
   async function getManifest(url: string) {
     const overrides = await getOverrides();
     const urlWithoutSlash = url.startsWith("/") ? url.slice(1) : url;
     if (overrides && overrides[urlWithoutSlash]) {
+      console.log("override", urlWithoutSlash, overrides[urlWithoutSlash]);
       return "/" + overrides[urlWithoutSlash];
     }
 
-    const remote = await resolveFromSlug(url);
+    const remote = await getFromSlug(url, "Manifest");
+
+    console.log("remote", url, remote);
+
     if (remote) {
-      return remote;
+      return remote.match;
     }
 
     if (!url.startsWith("/")) {

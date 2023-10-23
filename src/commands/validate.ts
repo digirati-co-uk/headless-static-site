@@ -5,6 +5,10 @@ import {
   compileSlugConfig,
 } from "../util/slug-engine.ts";
 import chalk from "chalk";
+import { cwd } from "node:process";
+import { join } from "node:path";
+import { existsSync } from "fs";
+import { resolveFromSlug } from "../util/resolve-from-slug.ts";
 
 interface ValidateOptions {}
 export async function validate(options: ValidateOptions, command?: Command) {
@@ -47,6 +51,44 @@ export async function validate(options: ValidateOptions, command?: Command) {
     }
   }
   console.log("");
+
+  const buildMeta = join(cwd(), ".iiif/build/meta/sitemap.json");
+  if (config.slugs && existsSync(buildMeta)) {
+    console.log("Validating built site map");
+    const loaded = await Bun.file(buildMeta).json();
+    const keys = Object.keys(loaded);
+    for (const key of keys) {
+      const item = loaded[key];
+      const resolved = resolveFromSlug(key, item.type, config.slugs, false);
+      if (resolved) {
+        // Good, we found a single match.
+      } else {
+        // This MUST be local.
+        if (item.type === "Manifest") {
+          const expectedPath = join(cwd(), ".iiif/build", key, "manifest.json");
+          if (!existsSync(expectedPath)) {
+            console.log(chalk.red`  - Missing ${key} at ${expectedPath}`);
+          }
+        }
+        if (item.type === "Collection") {
+          const expectedPath = join(
+            cwd(),
+            ".iiif/build",
+            key,
+            "collection.json",
+          );
+          if (!existsSync(expectedPath)) {
+            console.log(chalk.red`  - Missing ${key} at ${expectedPath}`);
+            didError = true;
+          }
+        }
+      }
+    }
+
+    if (!didError) {
+      console.log(chalk.green`✔ `, `Checked ${keys.length} paths`);
+    }
+  }
 
   if (didError) {
     console.log("\n", chalk.red`⨯ Validation failed`);

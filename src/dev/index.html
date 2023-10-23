@@ -98,7 +98,7 @@
     <script>
         const $search = document.getElementById('search');
         const $results = document.getElementById('search_results');
-        fetch('/manifests.db').then(async r => {
+        fetch('/meta/manifests.db').then(async r => {
             const database = new SQL.Database(new Uint8Array(await r.arrayBuffer()));
             window.DB = database;
 

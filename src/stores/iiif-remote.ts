@@ -54,7 +54,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       return [];
     }
 
-    const [slug, slugSource] = api.getSlug({
+    let [slug, slugSource] = api.getSlug({
       id: collection["@id"] || collection["id"] || "",
       type: isManifest ? "Manifest" : "Collection",
     });

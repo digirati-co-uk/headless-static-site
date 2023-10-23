@@ -15,6 +15,7 @@
   "license": "MIT",
   "typings": "lib/scripts.d.ts",
   "scripts": {
+    "dev": "bun run ./src/index.ts serve --scripts=./scripts",
     "build": "bun build ./src/index.ts --target bun --outfile build/hss.js && bun build ./src/dev/node-client.ts --target node --outfile build/node-client.js && bun build ./src/bun.ts --target bun --outfile build/bun.js && bun build ./src/dev/client.ts --target browser --outfile build/client.js --minify ",
     "prepack": "bun run build && bunx --bun dts-bundle-generator ./src/dev/client.ts -o ./build/client.d.ts && bunx --bun dts-bundle-generator ./src/bun.ts -o ./build/bun.d.ts && bunx --bun dts-bundle-generator ./src/dev/node-client.ts -o ./build/node-client.d.ts"
   },

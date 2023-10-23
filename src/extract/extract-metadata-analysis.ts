@@ -115,9 +115,9 @@ export const extractMetadataAnalysis: Extraction<
       }
     }
 
-    await mkdirp(api.build.filesDir);
+    await mkdirp(join(api.build.filesDir, "meta"));
     await Bun.write(
-      join(api.build.filesDir, "metadata-analysis.json"),
+      join(api.build.filesDir, "meta", "metadata-analysis.json"),
       JSON.stringify(analysisFile, null, 2),
     );
   },

@@ -6,6 +6,7 @@ import slug from "slug";
 import { existsSync } from "fs";
 import { Collection } from "@iiif/presentation-3";
 import { dump } from "js-yaml";
+import { createCollection } from "../../util/create-collection.ts";
 // import { macro } from "../../macro.ts" assert { type: "macro" };
 
 export async function indices(
@@ -56,12 +57,15 @@ export async function indices(
   // Now build each collection in the index
 
   if (indexCollection) {
-    const baseTopicTypeCollection: Collection & { "hss:slug": string } = {
-      "@context": "http://iiif.io/api/presentation/3/context.json",
-      id: `${configUrl}/topics/collection.json`,
-      type: "Collection" as const,
-      label: { en: ["Topics"] },
-      "hss:slug": "topics",
+    const baseTopicTypeCollectionSnippet = createCollection({
+      configUrl,
+      slug: "topics",
+      label: "Topics",
+    });
+
+    topLevelCollection.push(baseTopicTypeCollectionSnippet);
+    const baseTopicTypeCollection: Collection = {
+      ...baseTopicTypeCollectionSnippet,
       items: [],
     };
     const topicTypeKeys = Object.keys(indexMap);
@@ -84,13 +88,11 @@ export async function indices(
         baseTopicTypeMeta,
       );
 
-      const topicTypeCollectionSnippet = {
-        "@context": "http://iiif.io/api/presentation/3/context.json",
-        id: `${configUrl}/${topicTypeMeta.slug}/collection.json`,
-        type: "Collection" as const,
-        label: { en: [topicTypeMeta.label] },
-        "hss:slug": topicTypeMeta.slug,
-      };
+      const topicTypeCollectionSnippet = createCollection({
+        configUrl,
+        slug: topicTypeMeta.slug,
+        label: topicTypeMeta.label,
+      });
 
       indexCollection[topicTypeMeta.slug] = topicTypeCollectionSnippet;
       topLevelCollection.push(topicTypeCollectionSnippet);
@@ -123,13 +125,11 @@ export async function indices(
           await Bun.write(topicMetaDisk, dump(topicMeta));
         }
 
-        const topicCollectionSnippet = {
-          "@context": "http://iiif.io/api/presentation/3/context.json",
-          id: `${configUrl}/${topicMeta.slug}/collection.json`,
-          type: "Collection" as const,
-          label: { en: [topicMeta.label] },
-          "hss:slug": topicMeta.slug,
-        };
+        const topicCollectionSnippet = createCollection({
+          configUrl,
+          slug: topicMeta.slug,
+          label: topicMeta.label,
+        });
 
         topicTypeCollection.items.push(topicCollectionSnippet);
 
@@ -189,19 +189,22 @@ export async function indices(
     }
   }
 
+  await mkdirp(join(buildDir, "meta"));
+
   await Bun.write(
-    join(buildDir, "indices.json"),
+    join(buildDir, "meta", "indices.json"),
     JSON.stringify(indexMap, null, 2),
   );
 
   if (indexCollection) {
-    const indexCollectionJson = {
-      "@context": "http://iiif.io/api/presentation/3/context.json",
-      id: `${configUrl}/collection.json`,
-      type: "Collection",
-      label: { en: ["Index"] },
-      items: Object.values(indexCollection),
-    };
+    const indexCollectionJson = createCollection({
+      configUrl,
+      slug: "",
+      label: "Index",
+    }) as Collection;
+
+    indexCollectionJson.items = Object.values(indexCollection);
+
     await Bun.write(
       join(buildDir, "collection.json"),
       JSON.stringify(indexCollectionJson, null, 2),
@@ -209,15 +212,16 @@ export async function indices(
   }
 
   if (manifestCollection) {
-    const manifestCollectionJson = {
-      "@context": "http://iiif.io/api/presentation/3/context.json",
-      id: `${configUrl}/manifests.json`,
-      type: "Collection",
-      label: { en: ["Manifests"] },
-      items: manifestCollection,
-    };
+    const manifestCollectionJson = createCollection({
+      configUrl,
+      slug: "manifests",
+      label: "Manifests",
+    }) as Collection;
+
+    manifestCollectionJson.items = manifestCollection;
+
     await Bun.write(
-      join(buildDir, "manifests.json"),
+      join(buildDir, "manifests", "collection.json"),
       JSON.stringify(manifestCollectionJson, null, 2),
     );
   }
@@ -225,21 +229,22 @@ export async function indices(
   if (storeCollections) {
     await mkdirp(join(buildDir, "stores"));
     const storeCollectionsJson = Object.entries(storeCollections).map(
-      ([storeId, items]) => {
-        topLevelCollection.push({
-          id: `${configUrl}/stores/${storeId}.json`,
-          type: "Collection",
-          label: { en: [storeId] },
-        });
+      async ([storeId, items]) => {
+        const storeCollectionSnippet = createCollection({
+          configUrl,
+          slug: `stores/${storeId}`,
+          label: storeId,
+        }) as Collection;
+
+        topLevelCollection.push(storeCollectionSnippet);
+
+        await mkdirp(join(buildDir, "stores", storeId));
 
         return Bun.write(
-          join(buildDir, "stores", `${storeId}.json`),
+          join(buildDir, "stores", `${storeId}/collection.json`),
           JSON.stringify(
             {
-              "@context": "http://iiif.io/api/presentation/3/context.json",
-              id: `${configUrl}/stores/${storeId}.json`,
-              type: "Collection",
-              label: { en: [storeId] },
+              ...storeCollectionSnippet,
               items,
             },
             null,
@@ -249,15 +254,15 @@ export async function indices(
       },
     );
 
-    const topLevelCollectionJson = {
-      "@context": "http://iiif.io/api/presentation/3/context.json",
-      id: `${configUrl}/top.json`,
-      type: "Collection",
-      label: { en: ["Top"] },
-      items: topLevelCollection,
-    };
+    const topLevelCollectionJson = createCollection({
+      configUrl,
+      slug: "collections",
+      label: "Collections",
+    }) as Collection;
+    topLevelCollectionJson.items = topLevelCollection;
+    await mkdirp(join(buildDir, "collections"));
     await Bun.write(
-      join(buildDir, "top.json"),
+      join(buildDir, "collections/collection.json"),
       JSON.stringify(topLevelCollectionJson, null, 2),
     );
 
@@ -278,21 +283,21 @@ export async function indices(
 
   if (siteMap) {
     await Bun.write(
-      join(buildDir, "sitemap.json"),
+      join(buildDir, "meta/sitemap.json"),
       JSON.stringify(siteMap, null, 2),
     );
   }
 
   if (editable) {
     await Bun.write(
-      join(buildDir, "editable.json"),
+      join(buildDir, "meta/editable.json"),
       JSON.stringify(editable, null, 2),
     );
   }
 
   if (overrides) {
     await Bun.write(
-      join(buildDir, "overrides.json"),
+      join(buildDir, "meta/overrides.json"),
       JSON.stringify(overrides, null, 2),
     );
   }

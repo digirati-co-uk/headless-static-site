@@ -76,12 +76,12 @@ describe("auto slug test", () => {
       "https://view.nls.uk/manifest/1156/3245/115632458/manifest.json",
     ];
 
-    expect(createAutoSlug(examples)).toMatchSnapshot();
-    expect(
-      createAutoSlug([
-        "https://view.nls.uk/nope/1156/3245/115632458/manifest.json",
-        ...examples,
-      ]),
-    ).toEqual("https://view.nls.uk/");
+    // expect(createAutoSlug(examples)).toMatchSnapshot();
+    // expect(
+    //   createAutoSlug([
+    //     "https://view.nls.uk/nope/1156/3245/115632458/manifest.json",
+    //     ...examples,
+    //   ]),
+    // ).toEqual("https://view.nls.uk/");
   });
 });

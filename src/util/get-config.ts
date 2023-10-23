@@ -1,6 +1,7 @@
 import { cwd } from "process";
 import { existsSync } from "fs";
 import { join } from "node:path";
+import { SlugConfig } from "./slug-engine.ts";
 
 export interface IIIFRC {
   server?: {
@@ -8,17 +9,7 @@ export interface IIIFRC {
   };
   run?: string[];
   stores: Record<string, GenericStore>;
-  slugs?: Record<
-    string,
-    {
-      type: "Manifest" | "Collection";
-      prefix: string;
-      pattern: string;
-      slugTemplate: string;
-      parseOptions?: any;
-      examples?: string[];
-    }
-  >;
+  slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
 }
 

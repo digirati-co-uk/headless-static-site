@@ -9,13 +9,13 @@ export function create(folderPath: string) {
     slugs: join(folderPath, "config/slugs.json"),
     stores: join(folderPath, "config/stores.json"),
     collection: join(folderPath, "collection.json"),
-    editable: join(folderPath, "editable.json"),
-    indices: join(folderPath, "indices.json"),
-    "manifests.db": join(folderPath, "manifests.db"),
-    manifests: join(folderPath, "manifests.json"),
-    overrides: join(folderPath, "overrides.json"),
-    sitemap: join(folderPath, "sitemap.json"),
-    top: join(folderPath, "top.json"),
+    editable: join(folderPath, "meta", "editable.json"),
+    indices: join(folderPath, "meta", "indices.json"),
+    "manifests.db": join(folderPath, "meta", "manifests.db"),
+    manifests: join(folderPath, "manifests/collection.json"),
+    overrides: join(folderPath, "meta", "overrides.json"),
+    sitemap: join(folderPath, "meta", "sitemap.json"),
+    top: join(folderPath, "collections", "collection.json"),
     topics: join(folderPath, "topics/collection.json"),
   };
   const cache: Record<string, any> = {};
@@ -51,12 +51,20 @@ export function create(folderPath: string) {
       >
     >(endpoints.sitemap);
 
-  async function resolveFromSlug(slug: string) {
+  async function resolveFromSlug(slug: string, type?: string) {
     const slugs = await getSlugs();
     const slugFns = Object.fromEntries(
-      Object.entries(slugs || {}).map(([key, value]) => {
-        return [key, { info: value, matches: compileReverseSlugConfig(value) }];
-      }),
+      Object.entries(slugs || {})
+        .map(([key, value]) => {
+          if (type && value.type !== type) {
+            return null as any;
+          }
+          return [
+            key,
+            { info: value, matches: compileReverseSlugConfig(value) },
+          ];
+        })
+        .filter((t) => t !== null),
     );
 
     for (const slugFn of Object.values(slugFns || {})) {
@@ -91,7 +99,7 @@ export function create(folderPath: string) {
       url = "/" + overrides[urlWithoutSlash].replace("manifest.json", "");
     }
 
-    const remote = await resolveFromSlug(url);
+    const remote = await resolveFromSlug(url, "Manifest");
     if (remote) {
       return {
         id: remote,
