@@ -116,12 +116,38 @@ export function create(folderPath: string) {
       manifest: join(folderPath, url, "manifest.json"),
     };
   }
+  async function loadCollection(url: string) {
+    const overrides = await getOverrides();
+    const urlWithoutSlash = url.startsWith("/") ? url.slice(1) : url;
+    if (overrides && overrides[urlWithoutSlash]) {
+      url = "/" + overrides[urlWithoutSlash].replace("collection.json", "");
+    }
+
+    const remote = await resolveFromSlug(url, "Collection");
+    if (remote) {
+      return {
+        id: remote,
+        meta: join(folderPath, url, "meta.json"),
+      };
+    }
+
+    if (!url.startsWith("/")) {
+      url = `/${url}`;
+    }
+
+    return {
+      id: `${url}/collection.json`,
+      meta: join(folderPath, url, "meta.json"),
+      collection: join(folderPath, url, "collection.json"),
+    };
+  }
 
   return {
     endpoints,
     getSlugs,
     getStores,
     getManifests,
+    loadCollection,
     getTop,
     getEditable,
     getOverrides,
