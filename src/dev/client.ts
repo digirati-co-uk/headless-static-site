@@ -1,5 +1,4 @@
 import { IIIFRC } from "../util/get-config.ts";
-import { Collection } from "@iiif/presentation-3";
 import { resolveFromSlug } from "../util/resolve-from-slug.ts";
 
 export function create(url: string) {
@@ -27,8 +26,8 @@ export function create(url: string) {
 
   const getSlugs = () => cachedGet<IIIFRC["slugs"]>(endpoints.slugs);
   const getStores = () => cachedGet<IIIFRC["stores"]>(endpoints.stores);
-  const getManifests = () => cachedGet<Collection>(endpoints.manifests);
-  const getTop = () => cachedGet<Collection>(endpoints.top);
+  const getManifests = () => cachedGet<any>(endpoints.manifests);
+  const getTop = () => cachedGet<any>(endpoints.top);
   const getEditable = () =>
     cachedGet<Record<string, string>>(endpoints.editable);
 
