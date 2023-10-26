@@ -1,7 +1,10 @@
 import { IIIFRC } from "../util/get-config.ts";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import { compileReverseSlugConfig } from "../util/slug-engine.ts";
+import {
+  compileReverseSlugConfig,
+  compileSlugConfig,
+} from "../util/slug-engine.ts";
 
 export function create(folderPath: string) {
   const endpoints = {
@@ -68,6 +71,27 @@ export function create(folderPath: string) {
 
     for (const slugFn of Object.values(slugFns || {})) {
       const [matches] = slugFn.matches(slug);
+      if (matches) {
+        return matches;
+      }
+    }
+  }
+
+  async function urlToSlug(url: string, type?: string) {
+    const slugs = await getSlugs();
+    const slugFns = Object.fromEntries(
+      Object.entries(slugs || {})
+        .map(([key, value]) => {
+          if (type && value.type !== type) {
+            return null as any;
+          }
+          return [key, { info: value, matches: compileSlugConfig(value) }];
+        })
+        .filter((t) => t !== null),
+    );
+
+    for (const slugFn of Object.values(slugFns || {})) {
+      const [matches] = slugFn.matches(url);
       if (matches) {
         return matches;
       }
@@ -155,5 +179,8 @@ export function create(folderPath: string) {
     loadManifest,
     loadTopicType,
     loadTopic,
+    // Helpers.
+    urlToSlug,
+    resolveFromSlug,
   };
 }
