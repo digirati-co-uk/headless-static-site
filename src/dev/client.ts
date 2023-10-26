@@ -56,14 +56,10 @@ export function create(url: string) {
     const overrides = await getOverrides();
     const urlWithoutSlash = url.startsWith("/") ? url.slice(1) : url;
     if (overrides && overrides[urlWithoutSlash]) {
-      console.log("override", urlWithoutSlash, overrides[urlWithoutSlash]);
       return "/" + overrides[urlWithoutSlash];
     }
 
     const remote = await getFromSlug(url, "Manifest");
-
-    console.log("remote", url, remote);
-
     if (remote) {
       return remote.match;
     }
@@ -73,6 +69,25 @@ export function create(url: string) {
     }
 
     return `${url}/manifest.json`;
+  }
+
+  async function getCollection(url: string) {
+    const overrides = await getOverrides();
+    const urlWithoutSlash = url.startsWith("/") ? url.slice(1) : url;
+    if (overrides && overrides[urlWithoutSlash]) {
+      return "/" + overrides[urlWithoutSlash];
+    }
+
+    const remote = await getFromSlug(url, "Collection");
+    if (remote) {
+      return remote.match;
+    }
+
+    if (!url.startsWith("/")) {
+      url = `/${url}`;
+    }
+
+    return `${url}/collection.json`;
   }
 
   return {
@@ -85,5 +100,6 @@ export function create(url: string) {
     resolveFromSlug,
     getEditable,
     getManifest,
+    getCollection,
   };
 }
