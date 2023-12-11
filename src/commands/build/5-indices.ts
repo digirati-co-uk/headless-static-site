@@ -34,7 +34,7 @@ export async function indices(
   }
 
   const topLevelCollection: any[] = [];
-  const configUrl = server?.url;
+  const configUrl = typeof server === "string" ? server : server?.url;
 
   const indexMap: Record<string, Record<string, string[]>> = {};
   for (const resource of allResources) {
