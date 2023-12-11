@@ -72,10 +72,16 @@ async function parse(
 
   const manifests: ParsedResource[] = [];
   for (const [file, fileWithoutExtension] of newAllFiles) {
+    const fileType = await api.build.fileTypeCache.getFileType(file);
+    if (!fileType) {
+      api.build.log(
+        'Warning: Could not determine file type for "' + file + '"',
+      );
+    }
     manifests.push({
       path: file,
       slug: fileWithoutExtension,
-      type: "Manifest",
+      type: fileType || "Manifest",
       storeId: api.storeId,
       subFiles: subFileMap[fileWithoutExtension],
       source: { type: "disk", path: file },
@@ -161,7 +167,7 @@ async function load(
   return createProtoDirectory(
     {
       id,
-      type: "Manifest",
+      type: resource.type,
       path: resource.path,
       slug: resource.slug,
       storeId: resource.storeId,

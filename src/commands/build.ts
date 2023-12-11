@@ -35,6 +35,7 @@ import { Enrichment } from "../util/enrich.ts";
 import { extractThumbnail } from "../extract/extract-thumbnail.ts";
 import { extractTopics } from "../extract/extract-topics.ts";
 import { extractMetadataAnalysis } from "../extract/extract-metadata-analysis.ts";
+import { createFiletypeCache } from "../util/file-type-cache.ts";
 // import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
@@ -166,6 +167,8 @@ export async function build(options: BuildOptions, command?: Command) {
     console.log("Done in " + (Date.now() - startTime) + "ms");
   }
 
+  await buildConfig.fileTypeCache.save();
+
   if (options.watch) {
     const watcher = watch(join(cwd(), "content"), { recursive: true });
     const { watch: _watch, scripts, cache, ...nonWatchOptions } = options;
@@ -225,6 +228,8 @@ export async function getBuildConfig(options: BuildOptions) {
   const clearLogger = () => {
     internalLogger = defaultLogger;
   };
+
+  const fileTypeCache = createFiletypeCache(join(cacheDir, "file-types.json"));
 
   // Load external configs / scripts.
   if (options.scripts) {
@@ -299,7 +304,7 @@ export async function getBuildConfig(options: BuildOptions) {
 
   const server = options.dev
     ? { url: env.DEV_SERVER || "http://localhost:7111" }
-    : config.server;
+    : env.SERVER_URL || config.server;
 
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
@@ -349,6 +354,7 @@ export async function getBuildConfig(options: BuildOptions) {
     clearLogger,
     slugs,
     imageServiceLoader,
+    fileTypeCache,
     // Currently hard-coded.
     storeTypes,
   };
