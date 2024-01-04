@@ -24,7 +24,6 @@ import { createStoreRequestCache } from "../util/store-request-cache.ts";
 // @ts-ignore
 import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
 import chalk from "chalk";
-import { pythonExtract } from "../util/python-api.ts";
 import { env } from "bun";
 import { extractCanvasDims } from "../extract/extract-canvas-dims.ts";
 import { canvasThumbnail } from "../enrich/canvas-thumbnail.ts";
@@ -36,6 +35,7 @@ import { extractThumbnail } from "../extract/extract-thumbnail.ts";
 import { extractTopics } from "../extract/extract-topics.ts";
 import { extractMetadataAnalysis } from "../extract/extract-metadata-analysis.ts";
 import { createFiletypeCache } from "../util/file-type-cache.ts";
+import { loadScripts } from "../util/load-scripts.ts";
 // import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
@@ -231,42 +231,7 @@ export async function getBuildConfig(options: BuildOptions) {
 
   const fileTypeCache = createFiletypeCache(join(cacheDir, "file-types.json"));
 
-  // Load external configs / scripts.
-  if (options.scripts) {
-    const scriptsPath = join(cwd(), options.scripts);
-    let loaded = 0;
-    if (existsSync(scriptsPath)) {
-      const allFiles = Array.from(readAllFiles(scriptsPath)).filter(
-        (s) => !s.endsWith("/hss.py"),
-      );
-      log(`Loading ${allFiles.length} script(s)`);
-      for (const file of allFiles) {
-        if (file.endsWith("extract.py")) {
-          if (options.python) {
-            loaded++;
-            await pythonExtract(file, options.debug);
-          }
-          // wrap enrichments in a function
-          continue;
-        }
-        if (file.endsWith(".py")) {
-          continue;
-        }
-
-        try {
-          await import(file);
-          loaded++;
-        } catch (e) {
-          console.log(chalk.red(e));
-          process.exit(1);
-        }
-      }
-      if (loaded !== allFiles.length) {
-        log(chalk.yellow(`Loaded ${loaded} of ${allFiles.length} scripts`));
-      }
-    }
-  }
-
+  await loadScripts(options, log);
   const globals = getNodeGlobals();
 
   allExtractions.push(...globals.extractions);
