@@ -15,6 +15,8 @@ export async function serve({ dev, scripts }: ServeOptions) {
     enrich: true,
     extract: true,
     emit: true,
+    generate: true,
+    cache: true,
     scripts,
   };
 

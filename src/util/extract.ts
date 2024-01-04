@@ -14,6 +14,14 @@ interface ExtractionSetupApi {
   config: IIIFRC;
 }
 
+export interface ExtractionReturn {
+  temp?: any;
+  caches?: Record<string, any>;
+  meta?: any;
+  indices?: Record<string, string[]>;
+  collections?: string[];
+}
+
 export interface Extraction<Config = any, Temp = any> {
   id: string;
   name: string;
@@ -44,10 +52,5 @@ export interface Extraction<Config = any, Temp = any> {
       build: BuildConfig;
     },
     config: Config,
-  ) => Promise<{
-    temp?: Temp;
-    caches?: Record<string, any>;
-    meta?: any;
-    indices?: Record<string, string[]>;
-  }>;
+  ) => Promise<ExtractionReturn>;
 }

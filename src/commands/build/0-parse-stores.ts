@@ -3,25 +3,42 @@ import { ParsedResource, Store } from "../../util/store.ts";
 import { BuildConfig } from "../build.ts";
 import { mkdirp } from "mkdirp";
 import { makeGetSlugHelper } from "../../util/make-slug-helper.ts";
+import { join } from "node:path";
+import { cwd } from "node:process";
+import { defaultCacheDir } from "../generate.ts";
 
 export async function parseStores(buildConfig: BuildConfig) {
   const {
     //
-    options,
     config,
     stores,
     requestCacheDir,
     storeTypes,
-    log,
     slugs,
+    manifestRewrites,
+    collectionRewrites,
   } = buildConfig;
 
   await mkdirp(requestCacheDir);
 
-  const uniqueSlugs: string[] = [];
-  const allPaths: Record<string, string> = {};
   const storeResources: Record<string, ParsedResource[]> = {};
-  const overrides: Record<string, string> = {};
+  const filesToWatch: string[] = [];
+
+  // If there are generated stores, add them.
+  if (config.generators) {
+    const keys = Object.keys(config.generators);
+    for (const key of keys) {
+      const generator = config.generators[key];
+      // Skip if there is a configured output. This is for the user to deal with.
+      if (generator.output) continue;
+
+      stores.push(key);
+      config.stores[key] = {
+        type: "iiif-json",
+        path: "./" + join(defaultCacheDir, key, "build"),
+      };
+    }
+  }
 
   for (const storeId of stores) {
     const requestCache = createStoreRequestCache(storeId, requestCacheDir);
@@ -45,41 +62,35 @@ export async function parseStores(buildConfig: BuildConfig) {
 
     // Loop through the resources.
     for (const resource of resources) {
-      allPaths[resource.path] = resource.slug;
-      if (resource.source.type === "disk" && resource.source.alias) {
-        overrides[resource.source.alias] = resource.slug + "/manifest.json";
-      }
-      if (resource.source.type === "remote" && resource.saveToDisk) {
-        overrides[resource.slug] = resource.slug + "/manifest.json";
-      }
-
-      if (resource.subFiles) {
-        for (const subFile of resource.subFiles) {
-          allPaths[subFile] = resource.slug;
+      // Rewrite the slug.
+      if (resource.type === "Manifest") {
+        for (const rewrite of manifestRewrites) {
+          if (rewrite.rewrite) {
+            let newSlug = await rewrite.rewrite(resource.slug, resource);
+            if (newSlug && typeof newSlug === "string") {
+              resource.slug = newSlug;
+            }
+          }
         }
       }
-      const slug = resource.slug;
-      if (uniqueSlugs.includes(slug)) {
-        log(
-          "WARNING: Duplicate slug found: " +
-            slug +
-            " in resource: " +
-            resource.path,
-        );
-        continue;
+      if (resource.type === "Collection") {
+        for (const rewrite of collectionRewrites) {
+          if (rewrite.rewrite) {
+            let newSlug = await rewrite.rewrite(resource.slug, resource);
+            if (newSlug && typeof newSlug === "string") {
+              resource.slug = newSlug;
+            }
+          }
+        }
       }
-      if (options.exact && slug !== options.exact) {
-        continue;
-      }
-      uniqueSlugs.push(slug);
+
+      filesToWatch.push(resource.path);
       storeResources[storeId].push(resource);
     }
-    storeResources[storeId] = resources;
   }
 
   return {
-    allPaths,
     storeResources,
-    overrides,
+    filesToWatch,
   };
 }

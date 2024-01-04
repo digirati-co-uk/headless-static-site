@@ -3,11 +3,28 @@ server:
 
 # Run these everywhere.
 run:
+  - flat-manifests
+  - extract-remote-source
   - extract-slug-source
   - extract-label-string
   - extract-thumbnail
   - manifest-sqlite
   - metadata-analysis
+  - folder-collections
+
+generators:
+  sts-shuttles:
+    type: nasa-generator
+    config:
+      label: STS Shuttles
+      query: "sts orbit"
+      maxResults: 50
+  curiosity:
+    type: nasa-generator
+    config:
+      label: Curiosity
+      query: "curiosity rover"
+      maxResults: 10
 
 stores:
   manifests:

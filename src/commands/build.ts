@@ -3,12 +3,9 @@ import { getConfig } from "../util/get-config";
 import { IIIFJSONStore } from "../stores/iiif-json";
 import { mkdirp } from "mkdirp";
 import { join } from "node:path";
-import { existsSync } from "fs";
 import { extractLabelString } from "../extract/extract-label-string";
 import { homepageProperty } from "../enrich/homepage-property";
-import { watch } from "fs/promises";
 import { cwd } from "process";
-import { readAllFiles } from "../util/read-all-files";
 import { IIIFRemoteStore } from "../stores/iiif-remote";
 import { getNodeGlobals } from "../util/get-node-globals";
 import { compileSlugConfig } from "../util/slug-engine";
@@ -35,7 +32,12 @@ import { extractThumbnail } from "../extract/extract-thumbnail.ts";
 import { extractTopics } from "../extract/extract-topics.ts";
 import { extractMetadataAnalysis } from "../extract/extract-metadata-analysis.ts";
 import { createFiletypeCache } from "../util/file-type-cache.ts";
+import { Rewrite } from "../util/rewrite.ts";
+import { flatManifests } from "../rewrite/flat-manifests.ts";
+import { extractRemoteSource } from "../extract/extract-remote-source.ts";
 import { loadScripts } from "../util/load-scripts.ts";
+import { generate } from "./generate.ts";
+import { extractFolderCollections } from "../extract/extract-folder-collections.ts";
 // import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
@@ -45,6 +47,7 @@ export type BuildOptions = {
   watch?: boolean;
   debug?: boolean;
   scripts?: string;
+  generate?: boolean;
   stores?: string[];
   dev?: boolean;
   validate?: boolean;
@@ -69,11 +72,17 @@ const devBuild = ".iiif/dev/build";
 const topicFolder = "content/topics";
 
 const defaultRun = [
+  extractRemoteSource.id,
   extractLabelString.id,
   extractSlugSource.id,
-  // extractCanvasDims.id,
   homepageProperty.id,
   extractMetadataAnalysis.id,
+  extractFolderCollections.id,
+];
+
+const buildInRewrites: Rewrite[] = [
+  //
+  flatManifests,
 ];
 
 const builtInExtractions: Extraction[] = [
@@ -83,6 +92,8 @@ const builtInExtractions: Extraction[] = [
   extractThumbnail,
   extractTopics,
   extractMetadataAnalysis,
+  extractRemoteSource,
+  extractFolderCollections,
 ];
 const buildInEnrichments: Enrichment[] = [
   homepageProperty,
@@ -119,25 +130,39 @@ export async function build(options: BuildOptions, command?: Command) {
   if (options.validate) {
     await validate({}, command);
   }
+  if (options.generate) {
+    await generate(
+      { cache: options.cache, debug: options.debug, scripts: options.scripts },
+      command,
+    );
+  }
 
   await mkdirp(buildConfig.cacheDir);
   await mkdirp(buildConfig.buildDir);
   await mkdirp(buildConfig.requestCacheDir);
 
-  const {
-    //
-    allPaths,
-    storeResources,
-    overrides,
-  } = await time("Parsed stores", parseStores(buildConfig));
+  const { storeResources, filesToWatch } = await time(
+    "Parsed stores",
+    parseStores(buildConfig),
+  );
 
   if (!options.skipFirstBuild) {
-    const { allResources, editable } = await time(
+    const {
+      //
+      allResources,
+      editable,
+      allPaths,
+      overrides,
+      rewrites,
+    } = await time(
       "Loaded stores",
       loadStores({ storeResources }, buildConfig),
     );
 
-    await time("Extracting resources", extract({ allResources }, buildConfig));
+    const { collections } = await time(
+      "Extracting resources",
+      extract({ allResources }, buildConfig),
+    );
 
     await time("Enriching resources", enrich({ allResources }, buildConfig));
 
@@ -157,6 +182,7 @@ export async function build(options: BuildOptions, command?: Command) {
           indexCollection,
           editable,
           overrides,
+          collections,
           siteMap,
         },
         buildConfig,
@@ -170,26 +196,28 @@ export async function build(options: BuildOptions, command?: Command) {
   await buildConfig.fileTypeCache.save();
 
   if (options.watch) {
-    const watcher = watch(join(cwd(), "content"), { recursive: true });
-    const { watch: _watch, scripts, cache, ...nonWatchOptions } = options;
-    for await (const event of watcher) {
-      if (event.eventType === "change" && event.filename) {
-        const file = join("content", event.filename);
-        console.log(
-          `Detected ${event.eventType} in ${event.filename} (${allPaths[file]})`,
-        );
-        await build({ ...nonWatchOptions, exact: allPaths[file] }, command);
-        if (options.onBuild) {
-          await options.onBuild();
-        }
-      }
-    }
+    // @todo This needs reworked to listen to the correct stores, not just the "content" directory.
+    // const watcher = watch(join(cwd(), "content"), { recursive: true });
+    // const { watch: _watch, scripts, cache, ...nonWatchOptions } = options;
+    // for await (const event of watcher) {
+    //   if (event.eventType === "change" && event.filename) {
+    //     const file = join("content", event.filename);
+    //     console.log(
+    //       `Detected ${event.eventType} in ${event.filename} (${allPaths[file]})`,
+    //     );
+    //     await build({ ...nonWatchOptions, exact: allPaths[file] }, command);
+    //     if (options.onBuild) {
+    //       await options.onBuild();
+    //     }
+    //   }
+    // }
   }
 }
 
 export async function getBuildConfig(options: BuildOptions) {
   const config = await getConfig();
 
+  const allRewrites = [...buildInRewrites];
   const allExtractions = [...builtInExtractions];
   const allEnrichments = [...buildInEnrichments];
 
@@ -236,15 +264,22 @@ export async function getBuildConfig(options: BuildOptions) {
 
   allExtractions.push(...globals.extractions);
   allEnrichments.push(...globals.enrichments);
+  allRewrites.push(...globals.rewrites);
 
   log("Available extractions:", allExtractions.map((e) => e.id).join(", "));
   log("Available enrichments:", allEnrichments.map((e) => e.id).join(", "));
+  log("Available rewrites:", allRewrites.map((e) => e.id).join(", "));
 
   // We manually skip some.
   const toRun = config.run || defaultRun;
+  const rewrites = allRewrites.filter((e) => toRun.includes(e.id));
   const extractions = allExtractions.filter((e) => toRun.includes(e.id));
   const enrichments = allEnrichments.filter((e) => toRun.includes(e.id));
 
+  const manifestRewrites = rewrites.filter((e) => e.types.includes("Manifest"));
+  const collectionRewrites = rewrites.filter((e) =>
+    e.types.includes("Collection"),
+  );
   const manifestExtractions = extractions.filter((e) =>
     e.types.includes("Manifest"),
   );
@@ -297,11 +332,14 @@ export async function getBuildConfig(options: BuildOptions) {
     server,
     config,
     extractions,
+    allRewrites,
     allExtractions,
     allEnrichments,
     canvasExtractions,
     manifestExtractions,
     collectionExtractions,
+    manifestRewrites,
+    collectionRewrites,
     enrichments,
     canvasEnrichment,
     manifestEnrichment,

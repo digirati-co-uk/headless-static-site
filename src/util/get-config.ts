@@ -8,6 +8,7 @@ export interface IIIFRC {
     url: string;
   };
   run?: string[];
+  generators?: Record<string, GeneratorConfig>;
   stores: Record<string, GenericStore>;
   slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
@@ -26,6 +27,12 @@ export interface GenericStore {
   // Step options
   skip?: string[];
   run?: string[];
+  config?: Record<string, any>;
+}
+
+interface GeneratorConfig {
+  type: string;
+  output?: string;
   config?: Record<string, any>;
 }
 

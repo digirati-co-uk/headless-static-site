@@ -71,7 +71,7 @@ export interface ProtoResourceDirectory {
      * Where this resource originated from.
      */
     source:
-      | { type: "disk"; path: string; alias?: string }
+      | { type: "disk"; path: string; alias?: string; relativePath?: string }
       | { type: "remote"; url: string; overrides?: string };
   };
   "vault.json": IIIFStore;

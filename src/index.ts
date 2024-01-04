@@ -7,6 +7,7 @@ import { build } from "./commands/build";
 import { serve } from "./commands/serve.ts";
 import { validate } from "./commands/validate.ts";
 import { init } from "./commands/init.ts";
+import { generate } from "./commands/generate.ts";
 
 const program = new Command();
 
@@ -25,6 +26,7 @@ program
   .option("--no-extract", "Disable extraction")
   .option("--no-enrich", "Disable enrichment")
   .option("--no-client", "Disable client.js building")
+  .option("--no-generate", "Disable IIIF generator")
   .option("--html", "Include HTML in build")
   .option("--python", "Allow python scripts")
   .option("--topics", "Flush topic data to /topics folder")
@@ -37,6 +39,13 @@ program
   .option("-d, --dev", "Development mode")
   .option("-s, --scripts <path>", "Build scripts")
   .action(serve);
+
+program
+  //
+  .command("generate")
+  .description("Run IIIF generators")
+  .option("--no-cache", "Disable caching")
+  .action(generate);
 
 program
   //
