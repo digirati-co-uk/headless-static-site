@@ -5,6 +5,7 @@ import {
   compileReverseSlugConfig,
   compileSlugConfig,
 } from "../util/slug-engine.ts";
+import { makeGetSlugHelper } from "../util/make-slug-helper.ts";
 
 export function create(folderPath: string) {
   const endpoints = {
@@ -77,25 +78,26 @@ export function create(folderPath: string) {
     }
   }
 
-  async function urlToSlug(url: string, type?: string) {
-    const slugs = await getSlugs();
-    const slugFns = Object.fromEntries(
-      Object.entries(slugs || {})
-        .map(([key, value]) => {
-          if (type && value.type !== type) {
-            return null as any;
-          }
-          return [key, { info: value, matches: compileSlugConfig(value) }];
-        })
-        .filter((t) => t !== null),
-    );
-
-    for (const slugFn of Object.values(slugFns || {})) {
-      const [matches] = slugFn.matches(url);
-      if (matches) {
-        return matches;
-      }
+  let slugHelperCache = { slugHelper: null } as {
+    slugHelper: null | ReturnType<typeof makeGetSlugHelper>;
+  };
+  async function getSlugHelper() {
+    if (slugHelperCache.slugHelper) {
+      const slugs = await getSlugs();
+      slugHelperCache.slugHelper = makeGetSlugHelper(
+        { slugTemplates: Object.keys(slugs || {}) } as any,
+        (slugs || {}) as any,
+      );
     }
+    return slugHelperCache.slugHelper;
+  }
+
+  async function urlToSlug(url: string, type?: string) {
+    const helper = await getSlugHelper();
+    if (!helper) {
+      return null;
+    }
+    return helper({ id: url, type: type || "Manifest" });
   }
 
   async function loadTopicType(name: string) {

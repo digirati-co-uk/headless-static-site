@@ -18,6 +18,7 @@ export async function indices(
     siteMap,
     editable,
     overrides,
+    collections,
   }: {
     allResources: Array<ActiveResourceJson>;
     indexCollection?: Record<string, any>;
@@ -26,6 +27,7 @@ export async function indices(
     siteMap?: Record<string, { type: string; source: any; label?: string }>;
     editable?: Record<string, string>;
     overrides?: Record<string, string>;
+    collections?: Record<string, string[]>;
   },
   { options, server, buildDir, config, cacheDir, topicsDir }: BuildConfig,
 ) {
@@ -34,7 +36,39 @@ export async function indices(
   }
 
   const topLevelCollection: any[] = [];
-  const configUrl = server?.url;
+  const configUrl = typeof server === "string" ? server : server?.url;
+
+  if (collections && indexCollection) {
+    const collectionSlugs = Object.keys(collections);
+    for (let collectionSlug of collectionSlugs) {
+      const manifestSlugs = collections[collectionSlug];
+      if (!collectionSlug.startsWith("collections/")) {
+        collectionSlug = `collections/${collectionSlug}`;
+      }
+
+      const collectionSnippet = createCollection({
+        configUrl,
+        slug: collectionSlug,
+        label: collectionSlug,
+      });
+      const collection = {
+        ...collectionSnippet,
+        items: manifestSlugs
+          .map((slug) => {
+            return indexCollection[slug];
+          })
+          .filter(Boolean),
+      };
+
+      (collectionSnippet as any)["hss:totalItems"] = collection["items"].length;
+      await Bun.write(
+        join(buildDir, collectionSlug, "collection.json"),
+        JSON.stringify(collection, null, 2),
+      );
+
+      topLevelCollection.push(collectionSnippet);
+    }
+  }
 
   const indexMap: Record<string, Record<string, string[]>> = {};
   for (const resource of allResources) {

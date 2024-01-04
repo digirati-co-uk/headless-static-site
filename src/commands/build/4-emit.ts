@@ -53,7 +53,7 @@ export async function emit(
     savingFiles.push(copy(filesDir, buildDir, { overwrite: true }));
   }
 
-  const configUrl = server?.url;
+  const configUrl = typeof server === "string" ? server : server?.url;
   const indexCollection: Record<string, any> = {};
   const indexCollectionMap: Record<string, any> = {};
   const storeCollections: Record<string, Array<any>> = {};
@@ -183,10 +183,12 @@ export async function emit(
 
         if (resource.items) {
           resource.items = resource.items.map((item: any) => {
-            if (item.type === "Manifest") {
-              item.id = `${configUrl}/${allPaths[item.path]}/manifest.json`;
-            } else {
-              item.id = `${configUrl}/${allPaths[item.path]}/collection.json`;
+            if (allPaths[item.path]) {
+              if (item.type === "Manifest") {
+                item.id = `${configUrl}/${allPaths[item.path]}/manifest.json`;
+              } else {
+                item.id = `${configUrl}/${allPaths[item.path]}/collection.json`;
+              }
             }
             return item;
           });

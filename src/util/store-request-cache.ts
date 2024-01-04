@@ -1,11 +1,16 @@
 import { createHash } from "crypto";
 import { join } from "node:path";
-import { pathExists, readJson } from "fs-extra/esm";
+import { pathExists } from "fs-extra/esm";
 import { writeFile } from "fs/promises";
 import { mkdirp } from "mkdirp";
 import objectHash from "object-hash";
+import { readFile } from "node:fs/promises";
 
-export function createStoreRequestCache(storeKey: string, cacheDir: string) {
+export function createStoreRequestCache(
+  storeKey: string,
+  cacheDir: string,
+  noCache = false,
+) {
   const cache = new Map<string, string>();
   const didChangeCache = new Map<string, string>();
 
@@ -16,7 +21,7 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
       }
       return null;
     },
-    async didChange(url: string) {
+    async didChange(url: string, options?: FetchRequestInit) {
       let data = null;
 
       if (cache.has(url)) {
@@ -28,14 +33,21 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
       }
 
       if (!data && (await pathExists(url))) {
-        data = await readJson(url);
+        try {
+          const rawData = await readFile(url);
+          if (rawData.length) {
+            data = JSON.parse(rawData.toString("utf-8"));
+          }
+        } catch (e) {
+          // ignore.
+        }
       }
 
       if (!data) {
         return true;
       }
 
-      const freshData = await fetch(url).then((r) => r.json());
+      const freshData = await fetch(url, options).then((r) => r.json());
 
       const didChange = objectHash(data) !== objectHash(freshData as any);
 
@@ -45,7 +57,7 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
 
       return didChange;
     },
-    async fetch(url: string) {
+    async fetch(url: string, options?: FetchRequestInit) {
       const hash = createHash("sha256").update(url).digest("hex");
       const dir = join(cacheDir, storeKey);
       const cachePath = join(cacheDir, `${storeKey}/${hash}.json`);
@@ -66,13 +78,20 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string) {
         return cache.get(cachePath);
       }
 
-      if (await pathExists(cachePath)) {
-        const data = await readJson(cachePath);
-        cache.set(url, data);
-        return data;
+      if ((await pathExists(cachePath)) && !noCache) {
+        const rawData = (await readFile(cachePath)).toString("utf-8");
+        if (rawData.length) {
+          try {
+            const data = JSON.parse(rawData);
+            cache.set(url, data);
+            return data;
+          } catch (e) {
+            // ignore.
+          }
+        }
       }
 
-      const resp = await fetch(url);
+      const resp = await fetch(url, options);
       const data = await resp.json();
       const cachedData = { ...data, _cached: true };
       cache.set(url, cachedData as any);

@@ -17,6 +17,7 @@ import objectHash from "object-hash";
 import { rewritePath } from "../util/rewrite-path.ts";
 import { readFilteredFiles } from "../util/read-filtered-files.ts";
 import { Manifest } from "@iiif/presentation-3";
+import { dirname } from "path/posix";
 
 export interface IIIFJSONStore {
   type: "iiif-json";
@@ -72,13 +73,30 @@ async function parse(
 
   const manifests: ParsedResource[] = [];
   for (const [file, fileWithoutExtension] of newAllFiles) {
+    const fileType = await api.build.fileTypeCache.getFileType(file);
+    if (!fileType) {
+      api.build.log(
+        'Warning: Could not determine file type for "' + file + '"',
+      );
+    }
+    let source: ProtoResourceDirectory["resource.json"]["source"] = {
+      type: "disk",
+      path: store.path,
+    };
+
+    if (store.path) {
+      const dir = dirname(file);
+      if (dir) {
+        source.relativePath = relative(store.path, dir);
+      }
+    }
     manifests.push({
       path: file,
       slug: fileWithoutExtension,
-      type: "Manifest",
+      type: fileType || "Manifest",
       storeId: api.storeId,
       subFiles: subFileMap[fileWithoutExtension],
-      source: { type: "disk", path: file },
+      source: source,
       saveToDisk: true,
     });
   }
@@ -94,9 +112,10 @@ export async function getKey(
   const key = file.mtime + "-" + file.ctime + "-" + file.size;
 
   if (store.subFiles) {
-    const subFilesFolder = existsSync(resource.slug);
+    const subFilesFolderPath = resource.path.replace(".json", "");
+    const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {
-      const allFiles = readAllFiles(resource.slug);
+      const allFiles = readAllFiles(subFilesFolderPath);
       const keys = [];
       for (const fileName of allFiles) {
         const file = await stat(fileName);
@@ -107,6 +126,7 @@ export async function getKey(
       return key + "_dir: " + dirHash;
     }
   }
+
   return key;
 }
 
@@ -140,15 +160,16 @@ async function load(
   }
 
   if (store.subFiles) {
-    const subFilesFolder = existsSync(resource.slug);
+    const subFilesFolderPath = resource.path.replace(".json", "");
+    const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {
       if (
         subFilesFolder &&
-        (await pathExists(resource.slug)) &&
-        !isEmpty(resource.slug)
+        (await pathExists(subFilesFolderPath)) &&
+        !isEmpty(subFilesFolderPath)
       ) {
         const destination = join(cwd(), directory, "files");
-        await copy(resource.slug, destination, { overwrite: true });
+        await copy(subFilesFolderPath, destination, { overwrite: true });
       }
     }
   }
@@ -161,13 +182,13 @@ async function load(
   return createProtoDirectory(
     {
       id,
-      type: "Manifest",
+      type: resource.type,
       path: resource.path,
       slug: resource.slug,
       storeId: resource.storeId,
       subResources: (res.items || []).length,
       saveToDisk: true,
-      source: { type: "disk", path: resource.path },
+      source: resource.source,
     },
     vault,
     { load: cacheKey },

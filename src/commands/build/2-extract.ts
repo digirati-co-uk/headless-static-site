@@ -54,6 +54,9 @@ export async function extract(
     totalResources += resource.subResources || 0;
   }
 
+  // Found Collections
+  const collections: Record<string, string[]> = {};
+
   const progress = makeProgressBar("Extraction", totalResources);
 
   for (const manifest of allResources) {
@@ -147,6 +150,12 @@ export async function extract(
         }
         if (result.indices) {
           mergeIndices(newindices, result.indices);
+        }
+        if (result.collections) {
+          result.collections.forEach((collectionSlug) => {
+            collections[collectionSlug] = collections[collectionSlug] || [];
+            collections[collectionSlug].push(manifest.slug);
+          });
         }
       }
 
@@ -347,5 +356,5 @@ export async function extract(
 
   progress.stop();
 
-  return {};
+  return { collections };
 }

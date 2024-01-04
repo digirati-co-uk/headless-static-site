@@ -25,7 +25,11 @@ export async function loadStores(
   } = buildConfig;
 
   const allResources: Array<ActiveResourceJson> = [];
+  const allPaths: Record<string, string> = {};
+  const overrides: Record<string, string> = {};
+  const rewrites: Record<string, string> = {};
   const editable: Record<string, string> = {};
+  const uniqueSlugs: string[] = [];
 
   for (const store of stores) {
     const requestCache = createStoreRequestCache(store, requestCacheDir);
@@ -35,14 +39,25 @@ export async function loadStores(
     const progress = makeProgressBar("Loading store", resources.length);
 
     for (const resource of resources) {
-      if (options.exact && resource.slug !== options.exact) {
+      if (
+        options.exact &&
+        (resource.slug !== options.exact || resource.path !== options.exact)
+      ) {
         progress.increment();
         continue;
       }
 
-      if (resource.source && resource.source.type === "disk") {
-        editable[resource.slug] = resource.source.path;
+      // Unique slug check. (NEEDS TO HAPPEN AFTER REWRITE)
+      if (uniqueSlugs.includes(resource.slug)) {
+        log(
+          "WARNING: Duplicate slug found: " +
+            resource.slug +
+            " in resource: " +
+            resource.path,
+        );
+        continue;
       }
+      uniqueSlugs.push(resource.slug);
 
       // Here we need to actually load the existing folder from the cache if possible.
       const resourceDir = join(cacheDir, resource.slug);
@@ -91,10 +106,29 @@ export async function loadStores(
         const resourceJson = await loadJson(join(resourceDir, "resource.json"));
         allResources.push(resourceJson);
       }
+
+      // Record all paths at the end, the rewrite should have happened by now.
+      if (resource.source && resource.source.type === "disk") {
+        editable[resource.slug] = resource.source.path;
+      }
+      if (resource.source.type === "disk" && resource.source.alias) {
+        overrides[resource.source.alias] = resource.slug + "/manifest.json";
+      }
+      if (resource.source.type === "remote" && resource.saveToDisk) {
+        overrides[resource.slug] = resource.slug + "/manifest.json";
+      }
+
+      allPaths[resource.path] = resource.slug;
+      if (resource.subFiles) {
+        for (const subFile of resource.subFiles) {
+          allPaths[subFile] = resource.slug;
+        }
+      }
+
       progress.increment();
     }
     progress.stop();
   }
 
-  return { allResources, editable };
+  return { allResources, editable, allPaths, overrides, rewrites };
 }
