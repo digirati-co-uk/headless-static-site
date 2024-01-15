@@ -29,6 +29,7 @@ export async function loadStores(
   const overrides: Record<string, string> = {};
   const rewrites: Record<string, string> = {};
   const editable: Record<string, string> = {};
+  const idsToSlugs: Record<string, { slug: string; type: string }> = {};
   const uniqueSlugs: string[] = [];
 
   for (const store of stores) {
@@ -78,6 +79,13 @@ export async function loadStores(
           { requestCache, storeId: resource.storeId, build: buildConfig },
         );
 
+        if (data["resource.json"].id && data["resource.json"].saveToDisk) {
+          idsToSlugs[data["resource.json"].id] = {
+            slug: resource.slug,
+            type: resource.type,
+          };
+        }
+
         allResources.push(data["resource.json"]);
 
         await Promise.all([
@@ -103,8 +111,15 @@ export async function loadStores(
           ),
         ]);
       } else {
-        const resourceJson = await loadJson(join(resourceDir, "resource.json"));
-        allResources.push(resourceJson);
+        const data = await loadJson(join(resourceDir, "resource.json"));
+
+        if (data.id && data.saveToDisk) {
+          idsToSlugs[data.id] = {
+            slug: resource.slug,
+            type: resource.type,
+          };
+        }
+        allResources.push(data);
       }
 
       // Record all paths at the end, the rewrite should have happened by now.
@@ -130,5 +145,5 @@ export async function loadStores(
     progress.stop();
   }
 
-  return { allResources, editable, allPaths, overrides, rewrites };
+  return { allResources, editable, allPaths, overrides, rewrites, idsToSlugs };
 }

@@ -6,6 +6,6 @@ export interface Rewrite {
   types: string[];
   rewrite?: (
     slug: string,
-    resource: ParsedResource,
+    resource: { id: string; type: string },
   ) => string | Promise<string>;
 }

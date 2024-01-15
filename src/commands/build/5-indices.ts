@@ -29,7 +29,15 @@ export async function indices(
     overrides?: Record<string, string>;
     collections?: Record<string, string[]>;
   },
-  { options, server, buildDir, config, cacheDir, topicsDir }: BuildConfig,
+  {
+    options,
+    server,
+    buildDir,
+    config,
+    cacheDir,
+    topicsDir,
+    collectionRewrites,
+  }: BuildConfig,
 ) {
   if (options.exact || options.stores) {
     return;
@@ -40,10 +48,23 @@ export async function indices(
 
   if (collections && indexCollection) {
     const collectionSlugs = Object.keys(collections);
-    for (let collectionSlug of collectionSlugs) {
-      const manifestSlugs = collections[collectionSlug];
+    for (let originalCollectionSlug of collectionSlugs) {
+      const manifestSlugs = collections[originalCollectionSlug];
+      let collectionSlug = originalCollectionSlug; // @todo rewrite
       if (!collectionSlug.startsWith("collections/")) {
         collectionSlug = `collections/${collectionSlug}`;
+      }
+
+      for (const rewrite of collectionRewrites) {
+        if (rewrite.rewrite) {
+          const newSlug = await rewrite.rewrite(collectionSlug, {
+            id: collectionSlug,
+            type: "Collection",
+          });
+          if (newSlug) {
+            collectionSlug = newSlug;
+          }
+        }
       }
 
       const collectionSnippet = createCollection({

@@ -154,6 +154,7 @@ export async function build(options: BuildOptions, command?: Command) {
       allPaths,
       overrides,
       rewrites,
+      idsToSlugs,
     } = await time(
       "Loaded stores",
       loadStores({ storeResources }, buildConfig),
@@ -169,7 +170,7 @@ export async function build(options: BuildOptions, command?: Command) {
     const { storeCollections, manifestCollection, indexCollection, siteMap } =
       await time(
         "Emitting files",
-        emit({ allResources, allPaths }, buildConfig),
+        emit({ allResources, allPaths, idsToSlugs }, buildConfig),
       );
 
     await time(

@@ -16,9 +16,11 @@ export async function emit(
   {
     allResources,
     allPaths,
+    idsToSlugs,
   }: {
     allResources: Array<ActiveResourceJson>;
     allPaths?: Record<string, string>;
+    idsToSlugs?: Record<string, { slug: string; type: string }>;
   },
   { options, server, cacheDir, buildDir, log, imageServiceLoader }: BuildConfig,
 ) {
@@ -43,6 +45,20 @@ export async function emit(
   }
 
   const progress = makeProgressBar("Saving output", totalResources);
+
+  const resolveFullId = (id: string) => {
+    if (idsToSlugs && idsToSlugs[id]) {
+      const { slug, type } = idsToSlugs[id];
+
+      if (type === "Manifest") {
+        return `${configUrl}/${slug}/manifest.json`;
+      }
+      if (type === "Collection") {
+        return `${configUrl}/${slug}/collection.json`;
+      }
+    }
+    return id;
+  };
 
   const saveJson = (file: string, contents: any) => {
     savingFiles.push(Bun.write(file, JSON.stringify(contents, null, 2)));
@@ -190,6 +206,12 @@ export async function emit(
                 item.id = `${configUrl}/${allPaths[item.path]}/collection.json`;
               }
             }
+
+            const newId = resolveFullId(item.id);
+            if (newId) {
+              item.id = newId;
+            }
+
             return item;
           });
         }
