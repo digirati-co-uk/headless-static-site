@@ -1,7 +1,8 @@
-import { LazyValue } from "./lazy-value";
-import { ActiveResourceJson } from "./store";
-import { BuildConfig } from "../commands/build.ts";
-import { IIIFRC } from "./get-config.ts";
+import { LazyValue } from './lazy-value';
+import { ActiveResourceJson } from './store';
+import { BuildConfig } from '../commands/build.ts';
+import { IIIFRC } from './get-config.ts';
+import { createStoreRequestCache } from './store-request-cache.ts';
 
 export interface ExtractionInvalidateApi {
   caches: LazyValue<Record<string, any>>;
@@ -14,8 +15,8 @@ interface ExtractionSetupApi {
   config: IIIFRC;
 }
 
-export interface ExtractionReturn {
-  temp?: any;
+export interface ExtractionReturn<Temp = any> {
+  temp?: Temp;
   caches?: Record<string, any>;
   meta?: any;
   indices?: Record<string, string[]>;
@@ -27,20 +28,15 @@ export interface Extraction<Config = any, Temp = any> {
   name: string;
   types: string[];
   close?: (config: Config) => Promise<void>;
-  collect?: (
+  collect?: (temp: Record<string, Temp>, api: ExtractionSetupApi, config: Partial<Config>) => Promise<void>;
+  collectManifest?: (
+    resource: ActiveResourceJson,
     temp: Record<string, Temp>,
     api: ExtractionSetupApi,
-    config: Partial<Config>,
+    config: Partial<Config>
   ) => Promise<void>;
-  configure?: (
-    api: ExtractionSetupApi,
-    config: Partial<Config>,
-  ) => Promise<Config>;
-  invalidate: (
-    resource: ActiveResourceJson,
-    api: ExtractionInvalidateApi,
-    config: Config,
-  ) => Promise<boolean>;
+  configure?: (api: ExtractionSetupApi, config: Partial<Config>) => Promise<Config>;
+  invalidate: (resource: ActiveResourceJson, api: ExtractionInvalidateApi, config: Config) => Promise<boolean>;
   handler: (
     resource: ActiveResourceJson,
     api: {
@@ -50,7 +46,8 @@ export interface Extraction<Config = any, Temp = any> {
       caches: LazyValue<Record<string, any>>;
       config: IIIFRC;
       build: BuildConfig;
+      requestCache: ReturnType<typeof createStoreRequestCache>;
     },
-    config: Config,
-  ) => Promise<ExtractionReturn>;
+    config: Config
+  ) => Promise<ExtractionReturn<Temp>>;
 }

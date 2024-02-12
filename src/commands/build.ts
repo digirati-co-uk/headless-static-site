@@ -1,43 +1,46 @@
-import { Command } from "commander";
-import { getConfig } from "../util/get-config";
-import { IIIFJSONStore } from "../stores/iiif-json";
-import { mkdirp } from "mkdirp";
-import { join } from "node:path";
-import { extractLabelString } from "../extract/extract-label-string";
-import { homepageProperty } from "../enrich/homepage-property";
-import { cwd } from "process";
-import { IIIFRemoteStore } from "../stores/iiif-remote";
-import { getNodeGlobals } from "../util/get-node-globals";
-import { compileSlugConfig } from "../util/slug-engine";
-import { extractSlugSource } from "../extract/extract-slug-source";
-import { validate } from "./validate.ts";
-import { parseStores } from "./build/0-parse-stores.ts";
-import { loadStores } from "./build/1-load-stores.ts";
-import { extract } from "./build/2-extract.ts";
-import { enrich } from "./build/3-enrich.ts";
-import { emit } from "./build/4-emit.ts";
-import { indices } from "./build/5-indices.ts";
-import { createStoreRequestCache } from "../util/store-request-cache.ts";
+import { Command } from 'commander';
+import { getConfig } from '../util/get-config';
+import { IIIFJSONStore } from '../stores/iiif-json';
+import { mkdirp } from 'mkdirp';
+import { join } from 'node:path';
+import { extractLabelString } from '../extract/extract-label-string';
+import { homepageProperty } from '../enrich/homepage-property';
+import { cwd } from 'process';
+import { IIIFRemoteStore } from '../stores/iiif-remote';
+import { getNodeGlobals } from '../util/get-node-globals';
+import { compileSlugConfig } from '../util/slug-engine';
+import { extractSlugSource } from '../extract/extract-slug-source';
+import { validate } from './validate.ts';
+import { parseStores } from './build/0-parse-stores.ts';
+import { loadStores } from './build/1-load-stores.ts';
+import { extract } from './build/2-extract.ts';
+import { enrich } from './build/3-enrich.ts';
+import { emit } from './build/4-emit.ts';
+import { indices } from './build/5-indices.ts';
+import { createStoreRequestCache } from '../util/store-request-cache.ts';
 // @ts-ignore
-import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
-import chalk from "chalk";
-import { env } from "bun";
-import { extractCanvasDims } from "../extract/extract-canvas-dims.ts";
-import { canvasThumbnail } from "../enrich/canvas-thumbnail.ts";
-import { translateMetadata } from "../enrich/translate-metadata.ts";
-import { manifestSqlite } from "../enrich/manifest-sqlite.ts";
-import { Extraction } from "../util/extract.ts";
-import { Enrichment } from "../util/enrich.ts";
-import { extractThumbnail } from "../extract/extract-thumbnail.ts";
-import { extractTopics } from "../extract/extract-topics.ts";
-import { extractMetadataAnalysis } from "../extract/extract-metadata-analysis.ts";
-import { createFiletypeCache } from "../util/file-type-cache.ts";
-import { Rewrite } from "../util/rewrite.ts";
-import { flatManifests } from "../rewrite/flat-manifests.ts";
-import { extractRemoteSource } from "../extract/extract-remote-source.ts";
-import { loadScripts } from "../util/load-scripts.ts";
-import { generate } from "./generate.ts";
-import { extractFolderCollections } from "../extract/extract-folder-collections.ts";
+import { ImageServiceLoader } from '@atlas-viewer/iiif-image-api';
+import chalk from 'chalk';
+import { env } from 'bun';
+import { extractCanvasDims } from '../extract/extract-canvas-dims.ts';
+import { canvasThumbnail } from '../enrich/canvas-thumbnail.ts';
+import { translateMetadata } from '../enrich/translate-metadata.ts';
+import { manifestSqlite } from '../enrich/manifest-sqlite.ts';
+import { Extraction } from '../util/extract.ts';
+import { Enrichment } from '../util/enrich.ts';
+import { extractThumbnail } from '../extract/extract-thumbnail.ts';
+import { extractTopics } from '../extract/extract-topics.ts';
+import { extractMetadataAnalysis } from '../extract/extract-metadata-analysis.ts';
+import { createFiletypeCache } from '../util/file-type-cache.ts';
+import { Rewrite } from '../util/rewrite.ts';
+import { flatManifests } from '../rewrite/flat-manifests.ts';
+import { extractRemoteSource } from '../extract/extract-remote-source.ts';
+import { loadScripts } from '../util/load-scripts.ts';
+import { generate } from './generate.ts';
+import { extractFolderCollections } from '../extract/extract-folder-collections.ts';
+import { enrichTypesense } from '../enrich/typesense-manifests.ts';
+import { extractPlaintext } from '../extract/extract-plaintext.ts';
+import { typesensePlaintext } from '../enrich/typesense-plaintext.ts';
 // import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
@@ -65,11 +68,11 @@ export type BuildOptions = {
   onBuild?: () => void | Promise<void>;
 };
 
-const defaultCacheDir = ".iiif/cache";
-const defaultBuildDir = ".iiif/build";
-const devCache = ".iiif/dev/cache";
-const devBuild = ".iiif/dev/build";
-const topicFolder = "content/topics";
+const defaultCacheDir = '.iiif/cache';
+const defaultBuildDir = '.iiif/build';
+const devCache = '.iiif/dev/cache';
+const devBuild = '.iiif/dev/build';
+const topicFolder = 'content/topics';
 
 const defaultRun = [
   extractRemoteSource.id,
@@ -94,12 +97,15 @@ const builtInExtractions: Extraction[] = [
   extractMetadataAnalysis,
   extractRemoteSource,
   extractFolderCollections,
+  extractPlaintext,
 ];
 const buildInEnrichments: Enrichment[] = [
   homepageProperty,
   canvasThumbnail,
   translateMetadata,
   manifestSqlite,
+  enrichTypesense,
+  typesensePlaintext,
   // pdiiif
 ];
 
@@ -117,8 +123,8 @@ const builtInExtractionsMap = {
 };
 
 const storeTypes = {
-  "iiif-json": IIIFJSONStore,
-  "iiif-remote": IIIFRemoteStore,
+  'iiif-json': IIIFJSONStore,
+  'iiif-remote': IIIFRemoteStore,
 };
 
 export async function build(options: BuildOptions, command?: Command) {
@@ -131,20 +137,14 @@ export async function build(options: BuildOptions, command?: Command) {
     await validate({}, command);
   }
   if (options.generate) {
-    await generate(
-      { cache: options.cache, debug: options.debug, scripts: options.scripts },
-      command,
-    );
+    await generate({ cache: options.cache, debug: options.debug, scripts: options.scripts }, command);
   }
 
   await mkdirp(buildConfig.cacheDir);
   await mkdirp(buildConfig.buildDir);
   await mkdirp(buildConfig.requestCacheDir);
 
-  const { storeResources, filesToWatch } = await time(
-    "Parsed stores",
-    parseStores(buildConfig),
-  );
+  const { storeResources, filesToWatch } = await time('Parsed stores', parseStores(buildConfig));
 
   if (!options.skipFirstBuild) {
     const {
@@ -155,26 +155,19 @@ export async function build(options: BuildOptions, command?: Command) {
       overrides,
       rewrites,
       idsToSlugs,
-    } = await time(
-      "Loaded stores",
-      loadStores({ storeResources }, buildConfig),
+    } = await time('Loaded stores', loadStores({ storeResources }, buildConfig));
+
+    const { collections } = await time('Extracting resources', extract({ allResources }, buildConfig));
+
+    await time('Enriching resources', enrich({ allResources }, buildConfig));
+
+    const { storeCollections, manifestCollection, indexCollection, siteMap } = await time(
+      'Emitting files',
+      emit({ allResources, allPaths, idsToSlugs }, buildConfig)
     );
-
-    const { collections } = await time(
-      "Extracting resources",
-      extract({ allResources }, buildConfig),
-    );
-
-    await time("Enriching resources", enrich({ allResources }, buildConfig));
-
-    const { storeCollections, manifestCollection, indexCollection, siteMap } =
-      await time(
-        "Emitting files",
-        emit({ allResources, allPaths, idsToSlugs }, buildConfig),
-      );
 
     await time(
-      "Building indices",
+      'Building indices',
       indices(
         {
           allResources,
@@ -186,12 +179,12 @@ export async function build(options: BuildOptions, command?: Command) {
           collections,
           siteMap,
         },
-        buildConfig,
-      ),
+        buildConfig
+      )
     );
 
-    log("");
-    console.log("Done in " + (Date.now() - startTime) + "ms");
+    log('');
+    console.log('Done in ' + (Date.now() - startTime) + 'ms');
   }
 
   await buildConfig.fileTypeCache.save();
@@ -224,12 +217,12 @@ export async function getBuildConfig(options: BuildOptions) {
 
   const cacheDir = options.dev ? devCache : defaultCacheDir;
   const buildDir = options.dev ? devBuild : options.out || defaultBuildDir;
-  const filesDir = join(cacheDir, "files");
+  const filesDir = join(cacheDir, 'files');
 
   const slugs = Object.fromEntries(
     Object.entries(config.slugs || {}).map(([key, value]) => {
       return [key, { info: value, compile: compileSlugConfig(value) }];
-    }),
+    })
   );
 
   const stores = Object.keys(config.stores).filter((s) => {
@@ -239,9 +232,9 @@ export async function getBuildConfig(options: BuildOptions) {
 
   if (stores.length === 0) {
     if (options.stores && options.stores.length > 0) {
-      throw new Error("No stores found matching: " + options.stores.join(", "));
+      throw new Error('No stores found matching: ' + options.stores.join(', '));
     }
-    throw new Error("No stores defined in config");
+    throw new Error('No stores defined in config');
   }
 
   const defaultLogger = (...msg: any[]) => console.log(...msg);
@@ -258,7 +251,7 @@ export async function getBuildConfig(options: BuildOptions) {
     internalLogger = defaultLogger;
   };
 
-  const fileTypeCache = createFiletypeCache(join(cacheDir, "file-types.json"));
+  const fileTypeCache = createFiletypeCache(join(cacheDir, 'file-types.json'));
 
   await loadScripts(options, log);
   const globals = getNodeGlobals();
@@ -267,9 +260,9 @@ export async function getBuildConfig(options: BuildOptions) {
   allEnrichments.push(...globals.enrichments);
   allRewrites.push(...globals.rewrites);
 
-  log("Available extractions:", allExtractions.map((e) => e.id).join(", "));
-  log("Available enrichments:", allEnrichments.map((e) => e.id).join(", "));
-  log("Available rewrites:", allRewrites.map((e) => e.id).join(", "));
+  log('Available extractions:', allExtractions.map((e) => e.id).join(', '));
+  log('Available enrichments:', allEnrichments.map((e) => e.id).join(', '));
+  log('Available rewrites:', allRewrites.map((e) => e.id).join(', '));
 
   // We manually skip some.
   const toRun = config.run || defaultRun;
@@ -277,40 +270,24 @@ export async function getBuildConfig(options: BuildOptions) {
   const extractions = allExtractions.filter((e) => toRun.includes(e.id));
   const enrichments = allEnrichments.filter((e) => toRun.includes(e.id));
 
-  const manifestRewrites = rewrites.filter((e) => e.types.includes("Manifest"));
-  const collectionRewrites = rewrites.filter((e) =>
-    e.types.includes("Collection"),
-  );
-  const manifestExtractions = extractions.filter((e) =>
-    e.types.includes("Manifest"),
-  );
-  const collectionExtractions = extractions.filter((e) =>
-    e.types.includes("Collection"),
-  );
-  const canvasExtractions = extractions.filter((e) =>
-    e.types.includes("Canvas"),
-  );
+  const manifestRewrites = rewrites.filter((e) => e.types.includes('Manifest'));
+  const collectionRewrites = rewrites.filter((e) => e.types.includes('Collection'));
+  const manifestExtractions = extractions.filter((e) => e.types.includes('Manifest'));
+  const collectionExtractions = extractions.filter((e) => e.types.includes('Collection'));
+  const canvasExtractions = extractions.filter((e) => e.types.includes('Canvas'));
 
-  const manifestEnrichment = enrichments.filter((e) =>
-    e.types.includes("Manifest"),
-  );
-  const collectionEnrichment = enrichments.filter((e) =>
-    e.types.includes("Collection"),
-  );
-  const canvasEnrichment = enrichments.filter((e) =>
-    e.types.includes("Canvas"),
-  );
+  const manifestEnrichment = enrichments.filter((e) => e.types.includes('Manifest'));
+  const collectionEnrichment = enrichments.filter((e) => e.types.includes('Collection'));
+  const canvasEnrichment = enrichments.filter((e) => e.types.includes('Canvas'));
 
-  const requestCacheDir = join(cacheDir, "_requests");
+  const requestCacheDir = join(cacheDir, '_requests');
 
-  const server = options.dev
-    ? { url: env.DEV_SERVER || "http://localhost:7111" }
-    : env.SERVER_URL || config.server;
+  const server = options.dev ? { url: env.DEV_SERVER || 'http://localhost:7111' } : env.SERVER_URL || config.server;
 
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
     const resp = await promise.catch((e) => {
-      console.log("");
+      console.log('');
       console.log(chalk.red(e));
       console.log(e);
       process.exit(1);
@@ -319,7 +296,7 @@ export async function getBuildConfig(options: BuildOptions) {
     return resp;
   };
 
-  const requestCache = createStoreRequestCache("_thumbs", requestCacheDir);
+  const requestCache = createStoreRequestCache('_thumbs', requestCacheDir);
   const imageServiceLoader = new (class extends ImageServiceLoader {
     fetchService(serviceId: string): Promise<any & { real: boolean }> {
       return requestCache.fetch(serviceId);
