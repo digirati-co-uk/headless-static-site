@@ -1,18 +1,15 @@
-import { BuildConfig } from "../build.ts";
-import { lazyLoadJson, lazyLoadOptionalJson } from "../../util/load-json.ts";
-import { join } from "node:path";
-//@ts-ignore
-import { IIIFBuilder } from "iiif-builder";
-import { mergeIndices } from "../../util/merge-indices.ts";
-import { ActiveResourceJson } from "../../util/store.ts";
-import { Enrichment } from "../../util/enrich.ts";
-import { mkdirp } from "mkdirp";
-import { makeProgressBar } from "../../util/make-progress-bar.ts";
+import { BuildConfig } from '../build.ts';
+import { lazyLoadJson, lazyLoadOptionalJson } from '../../util/load-json.ts';
+import { join } from 'node:path';
+import { IIIFBuilder } from '@iiif/builder';
+import { mergeIndices } from '../../util/merge-indices.ts';
+import { ActiveResourceJson } from '../../util/store.ts';
+import { Enrichment } from '../../util/enrich.ts';
+import { mkdirp } from 'mkdirp';
+import { makeProgressBar } from '../../util/make-progress-bar.ts';
+import { createStoreRequestCache } from '../../util/store-request-cache.ts';
 
-export async function enrich(
-  { allResources }: { allResources: Array<ActiveResourceJson> },
-  buildConfig: BuildConfig,
-) {
+export async function enrich({ allResources }: { allResources: Array<ActiveResourceJson> }, buildConfig: BuildConfig) {
   const {
     options,
     config,
@@ -22,6 +19,7 @@ export async function enrich(
     manifestEnrichment,
     collectionEnrichment,
     allEnrichments,
+    requestCacheDir,
   } = buildConfig;
 
   if (!options.enrich) {
@@ -29,13 +27,11 @@ export async function enrich(
   }
 
   const enrichmentConfigs: Record<string, any> = {};
+  const temp: Record<string, Record<string, any>> = {};
   for (const enrichment of allEnrichments) {
     if (enrichment.configure) {
       const enrichmentConfig = (config.config || {})[enrichment.id];
-      enrichmentConfigs[enrichment.id] = await enrichment.configure(
-        { config, build: buildConfig },
-        enrichmentConfig,
-      );
+      enrichmentConfigs[enrichment.id] = await enrichment.configure({ config, build: buildConfig }, enrichmentConfig);
     } else {
       enrichmentConfigs[enrichment.id] = (config.config || {})[enrichment.id];
     }
@@ -51,7 +47,8 @@ export async function enrich(
     totalResources += resource.subResources || 0;
   }
 
-  const progress = makeProgressBar("Enrichment", totalResources);
+  const progress = makeProgressBar('Enrichment', totalResources);
+  const requestCache = createStoreRequestCache('_enrich', requestCacheDir);
 
   const processManifest = async (manifest: ActiveResourceJson) => {
     if (!manifest.vault) {
@@ -62,19 +59,19 @@ export async function enrich(
     const runSteps = config.stores[manifest.storeId]?.run;
 
     // Lazy files.
-    const caches = lazyLoadJson(cacheDir, manifest.slug, "caches.json");
-    const meta = lazyLoadJson(cacheDir, manifest.slug, "meta.json");
-    const indices = lazyLoadJson(cacheDir, manifest.slug, "indices.json");
+    const caches = lazyLoadJson(cacheDir, manifest.slug, 'caches.json');
+    const meta = lazyLoadJson(cacheDir, manifest.slug, 'meta.json');
+    const indices = lazyLoadJson(cacheDir, manifest.slug, 'indices.json');
 
     // Output files.
     const files = {
-      "meta.json": join(cacheDir, manifest.slug, "meta.json"),
-      "indices.json": join(cacheDir, manifest.slug, "indices.json"),
-      "caches.json": join(cacheDir, manifest.slug, "caches.json"),
-      "vault.json": join(cacheDir, manifest.slug, "vault.json"),
+      'meta.json': join(cacheDir, manifest.slug, 'meta.json'),
+      'indices.json': join(cacheDir, manifest.slug, 'indices.json'),
+      'caches.json': join(cacheDir, manifest.slug, 'caches.json'),
+      'vault.json': join(cacheDir, manifest.slug, 'vault.json'),
     };
 
-    const builder = new IIIFBuilder(manifest.vault);
+    const builder = new IIIFBuilder(manifest.vault as any);
     const resource = manifest.vault.getObject(manifest.id);
 
     const newMeta = {};
@@ -82,8 +79,7 @@ export async function enrich(
     const newindices = {};
     let didChange = false;
 
-    let enrichmentList =
-      manifest.type === "Manifest" ? manifestEnrichment : collectionEnrichment;
+    let enrichmentList = manifest.type === 'Manifest' ? manifestEnrichment : collectionEnrichment;
 
     // Add extra steps that might not be in already.
     if (runSteps) {
@@ -91,11 +87,7 @@ export async function enrich(
       enrichmentList = [...enrichmentList];
       for (const step of runSteps) {
         const found = allEnrichments.find((e) => e.id === step);
-        if (
-          found &&
-          found.types.includes(manifest.type) &&
-          !enrichmentList.includes(found)
-        ) {
+        if (found && found.types.includes(manifest.type) && !enrichmentList.includes(found)) {
           enrichmentList.push(found);
         }
       }
@@ -118,12 +110,12 @@ export async function enrich(
     }
 
     const runEnrichment = async (enrichment: Enrichment) => {
-      const filesDir = join(cacheDir, manifest.slug, "files");
+      const filesDir = join(cacheDir, manifest.slug, 'files');
       const storeConfig = enrichmentConfigs[enrichment.id] || {};
       const enrichmentConfig = Object.assign(
         {},
         storeConfig,
-        (config.stores[manifest.storeId].config || {})[enrichment.id] || {},
+        (config.stores[manifest.storeId].config || {})[enrichment.id] || {}
       );
 
       const valid =
@@ -136,7 +128,7 @@ export async function enrich(
             config,
             files: filesDir,
           },
-          enrichmentConfig,
+          enrichmentConfig
         ));
       if (!valid) {
         // console.log('Skipping "' + enrichment.name + '" for "' + manifest.slug + '" because it is not modified');
@@ -153,10 +145,14 @@ export async function enrich(
           builder,
           resource,
           files: filesDir,
+          requestCache,
         },
-        enrichmentConfig,
+        enrichmentConfig
       );
-
+      if (result.temp) {
+        temp[enrichment.id] = temp[enrichment.id] || {};
+        temp[enrichment.id][manifest.slug] = result.temp;
+      }
       if (result.meta) {
         Object.assign(newMeta, result.meta);
       }
@@ -178,75 +174,58 @@ export async function enrich(
     }
 
     const results = await Promise.allSettled(processedEnrichments);
-    const errors = results.filter((r) => r.status === "rejected");
+    const errors = results.filter((r) => r.status === 'rejected');
     if (errors.length > 0) {
       throw new Error(
-        "Enrichment failed for " +
+        'Enrichment failed for ' +
           errors.length +
-          " manifest(s): \n \n" +
-          errors
-            .map((e, n) => `  ${n + 1}) ` + (e as any)?.reason?.message)
-            .join(", "),
+          ' manifest(s): \n \n' +
+          errors.map((e, n) => `  ${n + 1}) ` + (e as any)?.reason?.message).join(', ')
       );
     }
 
     if (Object.keys(newMeta).length > 0) {
       const metaValue = await meta.value;
-      saveJson(files["meta.json"], Object.assign({}, metaValue, newMeta));
+      saveJson(files['meta.json'], Object.assign({}, metaValue, newMeta));
     }
 
     if (Object.keys(newindices).length > 0) {
-      saveJson(
-        files["indices.json"],
-        mergeIndices(await indices.value, newindices),
-      );
+      saveJson(files['indices.json'], mergeIndices(await indices.value, newindices));
     }
 
     if (Object.keys(newCaches).length > 0) {
-      saveJson(
-        files["caches.json"],
-        Object.assign(await caches.value, newCaches),
-      );
+      saveJson(files['caches.json'], Object.assign(await caches.value, newCaches));
     }
 
     progress.increment();
 
     let canvasEnrichmentSteps = canvasEnrichment;
-    if (manifest.type === "Manifest" && runSteps) {
+    if (manifest.type === 'Manifest' && runSteps) {
       // Need to make a copy in this case.
       canvasEnrichmentSteps = [...canvasEnrichmentSteps];
       for (const step of runSteps) {
         const found = allEnrichments.find((e) => e.id === step);
-        if (
-          found &&
-          found.types.includes("Canvas") &&
-          !canvasEnrichmentSteps.includes(found)
-        ) {
+        if (found && found.types.includes('Canvas') && !canvasEnrichmentSteps.includes(found)) {
           canvasEnrichmentSteps.push(found);
         }
       }
     }
 
     // Canvases.
-    if (manifest.type === "Manifest" && canvasEnrichmentSteps.length) {
+    if (manifest.type === 'Manifest' && canvasEnrichmentSteps.length) {
       const canvases = resource.items || [];
       for (let canvasIndex = 0; canvasIndex < canvases.length; canvasIndex++) {
         const canvas = canvases[canvasIndex];
-        const canvasDir = join(
-          cacheDir,
-          manifest.slug,
-          "canvases",
-          canvasIndex.toString(),
-        );
-        const filesDir = join(canvasDir, "files");
+        const canvasDir = join(cacheDir, manifest.slug, 'canvases', canvasIndex.toString());
+        const filesDir = join(canvasDir, 'files');
         const files = {
-          "meta.json": join(canvasDir, "meta.json"),
-          "indices.json": join(canvasDir, "indices.json"),
-          "caches.json": join(canvasDir, "caches.json"),
+          'meta.json': join(canvasDir, 'meta.json'),
+          'indices.json': join(canvasDir, 'indices.json'),
+          'caches.json': join(canvasDir, 'caches.json'),
         };
-        const caches = lazyLoadOptionalJson(files["caches.json"]);
-        const meta = lazyLoadOptionalJson(files["meta.json"]);
-        const indices = lazyLoadOptionalJson(files["indices.json"]);
+        const caches = lazyLoadOptionalJson(files['caches.json']);
+        const meta = lazyLoadOptionalJson(files['meta.json']);
+        const indices = lazyLoadOptionalJson(files['indices.json']);
         const newMeta = {};
         const newCaches = {};
         const newindices = {};
@@ -256,7 +235,7 @@ export async function enrich(
           const enrichmentConfig = Object.assign(
             {},
             storeConfig,
-            (config.stores[manifest.storeId].config || {})[enrichment.id] || {},
+            (config.stores[manifest.storeId].config || {})[enrichment.id] || {}
           );
           const valid =
             !options.cache ||
@@ -268,13 +247,13 @@ export async function enrich(
                 config,
                 files: filesDir,
               },
-              enrichmentConfig,
+              enrichmentConfig
             ));
           const canvasResource: ActiveResourceJson = {
             id: canvas.id,
-            type: "Canvas",
-            path: manifest.path + "/canvases/" + canvasIndex,
-            slug: manifest.slug + "/canvases/" + canvasIndex,
+            type: 'Canvas',
+            path: manifest.path + '/canvases/' + canvasIndex,
+            slug: manifest.slug + '/canvases/' + canvasIndex,
             storeId: manifest.storeId,
             slugSource: manifest.slugSource,
             saveToDisk: false, // ?
@@ -295,8 +274,9 @@ export async function enrich(
               builder,
               resource: canvas,
               files: filesDir,
+              requestCache,
             },
-            enrichmentConfig,
+            enrichmentConfig
           );
 
           if (result.meta) {
@@ -320,15 +300,13 @@ export async function enrich(
         }
 
         const results = await Promise.allSettled(processedEnrichments);
-        const errors = results.filter((r) => r.status === "rejected");
+        const errors = results.filter((r) => r.status === 'rejected');
         if (errors.length > 0) {
           throw new Error(
-            "Enrichment failed for " +
+            'Enrichment failed for ' +
               errors.length +
-              " manifest(s): \n \n" +
-              errors
-                .map((e, n) => `  ${n + 1}) ` + (e as any)?.reason?.message)
-                .join(", "),
+              ' manifest(s): \n \n' +
+              errors.map((e, n) => `  ${n + 1}) ` + (e as any)?.reason?.message).join(', ')
           );
         }
 
@@ -342,21 +320,15 @@ export async function enrich(
 
         if (Object.keys(newMeta).length > 0) {
           const metaValue = await meta.value;
-          saveJson(files["meta.json"], Object.assign({}, metaValue, newMeta));
+          saveJson(files['meta.json'], Object.assign({}, metaValue, newMeta));
         }
 
         if (Object.keys(newindices).length > 0) {
-          saveJson(
-            files["indices.json"],
-            mergeIndices(await indices.value, newindices),
-          );
+          saveJson(files['indices.json'], mergeIndices(await indices.value, newindices));
         }
 
         if (Object.keys(newCaches).length > 0) {
-          saveJson(
-            files["caches.json"],
-            Object.assign(await caches.value, newCaches),
-          );
+          saveJson(files['caches.json'], Object.assign(await caches.value, newCaches));
         }
 
         progress.increment();
@@ -367,7 +339,7 @@ export async function enrich(
 
     // Finally save the vault.
     if (didChange && manifest.vault) {
-      saveJson(files["vault.json"], manifest.vault.getStore().getState());
+      saveJson(files['vault.json'], manifest.vault.getStore().getState());
     }
   };
 
@@ -382,11 +354,15 @@ export async function enrich(
       const extractionConfig = enrichmentConfigs[extraction.id] || {};
       await extraction.close(extractionConfig);
     }
+    if (extraction.collect) {
+      const extractionConfig = enrichmentConfigs[extraction.id] || {};
+      await extraction.collect(temp[extraction.id], { config, build: buildConfig }, extractionConfig);
+    }
   }
 
   progress.stop();
 
-  log("Saving " + savingFiles.length + " files");
+  log('Saving ' + savingFiles.length + ' files');
   await Promise.all(savingFiles);
   savingFiles = [];
 }

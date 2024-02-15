@@ -11,19 +11,20 @@ run:
   - manifest-sqlite
   - metadata-analysis
   - folder-collections
+  - typesense-manifests
 
 generators:
   sts-shuttles:
     type: nasa-generator
     config:
       label: STS Shuttles
-      query: "sts orbit"
+      query: 'sts orbit'
       maxResults: 50
   curiosity:
     type: nasa-generator
     config:
       label: Curiosity
-      query: "curiosity rover"
+      query: 'curiosity rover'
       maxResults: 10
 
 stores:
@@ -35,14 +36,14 @@ stores:
       - content/objects/**/*
       - content/manifests/*
       - content/topics/**/*
-    pattern: "**/*.json"
+    pattern: '**/*.json'
     destination: manifests
     base: ./content
 
   delft:
     type: iiif-json
     path: ./delft
-    pattern: "**/*.json"
+    pattern: '**/*.json'
     run:
       - delft-labels
       - extract-thumbnail
@@ -52,7 +53,10 @@ stores:
       extract-topics:
         commaSeparated: ['material']
         topicTypes:
-          material: [ 'Materiaal', 'Material' ]
+          material: ['Materiaal', 'Material']
+          date: ['Date', 'Datering']
+          Maker: ['Maker']
+          Publisher: ['Publisher']
 
   bridges:
     type: iiif-remote
@@ -72,7 +76,6 @@ stores:
       - canvas-thumbnail
       - extract-thumbnail
       - manifest-sqlite
-
 
   hutton:
     type: iiif-remote
@@ -95,6 +98,14 @@ stores:
         topicTypes:
           technique: ['Type/technique']
           subjects: ['Subjects']
+
+  wellcomeBookVolume:
+    type: iiif-remote
+    url: https://iiif.wellcomecollection.org/presentation/b18031511_0001
+    # url: https://iiif.wellcomecollection.org/presentation/b18031511
+    slugTemplates:
+      - wellcome-collection
+      - wellcome-manifest
 
 config:
   extract-label-string:
@@ -138,4 +149,3 @@ slugs:
     addedPrefix: nls-
     examples:
       - https://view.nls.uk/collections/7446/74466699.json
-
