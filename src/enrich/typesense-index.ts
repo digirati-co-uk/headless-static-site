@@ -3,38 +3,35 @@ import { Enrichment } from '../util/enrich';
 import { getValue } from '@iiif/helpers';
 import { InternationalString } from '@iiif/presentation-3';
 import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
-
-// Schema:
-// - label
-// - summary
-// - thumbnail, index: false
-// - .*_topic, facet: true, type: string[], optional: true
-// - collections, type: string[], facet: true
-// - plaintext content
+import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 const schema = {
   name: 'manifests',
+  enable_nested_fields: true,
   fields: [
     { name: 'id', type: 'string' },
+    { name: 'type', type: 'string', facet: true },
     { name: 'label', type: 'string' },
-    { name: 'all_labels', type: 'string[]' },
-    { name: 'summary', type: 'string' },
+    { name: 'full_label', type: 'object', optional: true },
+    { name: 'summary', type: 'string', optional: true },
     { name: 'collections', type: 'string[]', facet: true, optional: true },
     { name: 'plaintext', type: 'string', optional: true },
-    // { name: 'topic_.*', type: 'string[]', facet: true, optional: true },
 
     // other fields
     { name: 'slug', type: 'string' },
+    { name: 'url', type: 'string', optional: true },
+    { name: 'totalItems', type: 'int32', optional: true },
     { name: 'thumbnail', type: 'string', index: false, optional: true },
   ],
 };
 
 type SingleRecord = {
   id: string;
+  type: string;
   slug: string;
   label: string;
-  all_labels: string[];
+  full_label: InternationalString;
   summary: string;
   collections: string[];
   plaintext?: string;
@@ -46,7 +43,7 @@ type TopicRecord = Record<`topic_${string}`, string[]>;
 export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics: string[] }> = {
   id: 'typesense-manifests',
   name: 'Typesense manifest collection',
-  types: ['Manifest'],
+  types: ['Manifest', 'Collection'],
   invalidate: async () => {
     return true;
   },
@@ -58,21 +55,30 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
 
     const extraTopics: TopicRecord = {};
 
-    for (const [k, v] of Object.entries(indices)) {
+    for (const [k, v] of Object.entries(indices || {})) {
       extraTopics[`topic_${k}`] = v;
+    }
+
+    let plaintext = '';
+    const keywordsFile = join(api.files, 'keywords.txt');
+    if (existsSync(keywordsFile)) {
+      plaintext = await readFile(keywordsFile, 'utf-8');
     }
 
     return {
       temp: {
         record: {
           id: btoa(id),
+          type: resource.type,
           slug: resource.slug,
           label: getValue(api.resource.label),
-          all_labels: Object.entries(api.resource.label as InternationalString).map(([_, v]) => (v || []).join(' ')),
+          full_label: api.resource.label,
           summary: getValue(api.resource.summary),
           thumbnail: meta.thumbnail?.id,
+          url: meta.url,
+          totalItems: meta.totalItems,
           collections: [],
-          plaintext: '',
+          plaintext,
           ...extraTopics,
         },
         foundTopics: Object.keys(extraTopics),

@@ -58,6 +58,7 @@
     "@types/object-hash": "^3.0.4",
     "bun-plugin-yaml": "^0.0.1",
     "bun-types": "^1.0.1",
+    "keyword-extractor": "^0.0.28",
     "commander": "^11.0.0",
     "detect-python-interpreter": "^1.0.0",
     "object-hash": "^3.0.0",

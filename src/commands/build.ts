@@ -38,7 +38,7 @@ import { extractRemoteSource } from '../extract/extract-remote-source.ts';
 import { loadScripts } from '../util/load-scripts.ts';
 import { generate } from './generate.ts';
 import { extractFolderCollections } from '../extract/extract-folder-collections.ts';
-import { enrichTypesense } from '../enrich/typesense-manifests.ts';
+import { enrichTypesense } from '../enrich/typesense-index.ts';
 import { extractPlaintext } from '../extract/extract-plaintext.ts';
 import { typesensePlaintext } from '../enrich/typesense-plaintext.ts';
 // import { pdiiif } from "../enrich/pdiiif.ts";
