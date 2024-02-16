@@ -1,4 +1,4 @@
-import { mkdirp } from 'fs-extra';
+import { mkdirp } from 'mkdirp';
 import { Enrichment } from '../util/enrich';
 import { getValue } from '@iiif/helpers';
 import { InternationalString } from '@iiif/presentation-3';

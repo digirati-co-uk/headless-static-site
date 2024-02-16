@@ -1,30 +1,27 @@
+import { readFile } from 'node:fs/promises';
+
+function loadTextFile(path: string) {
+  return readFile(path, 'utf-8');
+}
+
 export async function macro() {
-  const output = await Bun.build({
-    entrypoints: ["./src/dev/client.ts"],
-    sourcemap: "inline",
-    target: "browser",
-  });
+  // const output = await Bun.build({
+  //   entrypoints: ['./src/dev/client.ts'],
+  //   sourcemap: 'inline',
+  //   target: 'browser',
+  // });
 
-  const client = await output.outputs[0].text();
+  // console.log(output.outputs[0]);
 
-  const index = await Bun.file(
-    import.meta.resolveSync("./dev/index.html"),
-  ).text();
-  const indexProd = await Bun.file(
-    import.meta.resolveSync("./dev/index.prod.html"),
-  ).text();
-  const clover = await Bun.file(
-    import.meta.resolveSync("./dev/clover.html"),
-  ).text();
-  const explorer = await Bun.file(
-    import.meta.resolveSync("./dev/explorer.html"),
-  ).text();
-  const editor = await Bun.file(
-    import.meta.resolveSync("./dev/editor.html"),
-  ).text();
+  // const client = await output.outputs[0].text();
+
+  const index = await loadTextFile(import.meta.resolveSync('./dev/index.html'));
+  const indexProd = await loadTextFile(import.meta.resolveSync('./dev/index.prod.html'));
+  const clover = await loadTextFile(import.meta.resolveSync('./dev/clover.html'));
+  const explorer = await loadTextFile(import.meta.resolveSync('./dev/explorer.html'));
+  const editor = await loadTextFile(import.meta.resolveSync('./dev/editor.html'));
 
   return {
-    client,
     index,
     indexProd,
     clover,
