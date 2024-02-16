@@ -87,6 +87,10 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
   },
 
   async collect(temp, api, config) {
+    if (!temp) {
+      return;
+    }
+
     // Write the schema + the jsonl file with all the data.
     const typeSenseDir = join(api.build.filesDir, 'meta', 'typesense');
     const schemaFile = join(typeSenseDir, 'manifests.schema.json');
