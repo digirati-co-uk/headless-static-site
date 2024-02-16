@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { Enrichment } from '../util/enrich';
 import { existsSync } from 'fs';
-import { readdir } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 
 const plaintextSchema = {
   name: 'manifest-plaintext',
@@ -45,7 +45,7 @@ export const typesensePlaintext: Enrichment = {
 
           pages.push({
             id: btoa(resource.id + canvasIndex),
-            plaintext: await Bun.file(join(plaintextPath, file)).text(),
+            plaintext: await readFile(join(plaintextPath, file), 'utf-8'),
             manifest: resource.id,
             canvasIndex,
           });
