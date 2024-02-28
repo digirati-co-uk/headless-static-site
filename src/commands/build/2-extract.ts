@@ -1,13 +1,9 @@
 import { BuildConfig } from '../build.ts';
-import { loadJson } from '../../util/load-json.ts';
 import { join } from 'node:path';
-import { lazyValue } from '../../util/lazy-value.ts';
-import { Vault } from '@iiif/helpers';
-import { mergeIndices } from '../../util/merge-indices.ts';
 import { ActiveResourceJson } from '../../util/store.ts';
-import { mkdirp } from 'mkdirp';
 import { makeProgressBar } from '../../util/make-progress-bar.ts';
 import { createStoreRequestCache } from '../../util/store-request-cache.ts';
+import { createCacheResource } from '../../util/cached-resource.ts';
 
 export async function extract(
   {
@@ -64,17 +60,14 @@ export async function extract(
     const skipSteps = config.stores[manifest.storeId]?.skip || [];
     const runSteps = config.stores[manifest.storeId]?.run;
 
-    const vaultData = loadJson(join(cacheDir, manifest.slug, 'vault.json'));
-    const caches = lazyValue(() => loadJson(join(cacheDir, manifest.slug, 'caches.json')));
-    const meta = lazyValue(() => loadJson(join(cacheDir, manifest.slug, 'meta.json')));
-    const indices = lazyValue(() => loadJson(join(cacheDir, manifest.slug, 'indices.json')));
-    const newMeta = {};
-    const newCaches = {};
-    const newindices = {};
+    const cachedResource = createCacheResource({
+      resource: manifest,
+      temp,
+      resourcePath: join(cacheDir, manifest.slug),
+      collections,
+    });
 
-    manifest.vault = new Vault();
-    manifest.vault.getStore().setState(await vaultData);
-    const resource = manifest.vault.getObject(manifest.id);
+    const resource = await cachedResource.attachVault();
 
     let extractions = manifest.type === 'Manifest' ? manifestExtractions : collectionExtractions;
 
@@ -106,7 +99,7 @@ export async function extract(
         (await extraction.invalidate(
           manifest,
           {
-            caches,
+            caches: cachedResource.caches,
             resource,
             build: buildConfig,
           },
@@ -118,60 +111,20 @@ export async function extract(
           manifest,
           {
             resource,
-            meta,
-            indices,
-            caches,
+            meta: cachedResource.meta,
+            indices: cachedResource.indices,
+            caches: cachedResource.caches,
             config,
             build: buildConfig,
             requestCache,
           },
           extractConfig
         );
-        if (result.temp) {
-          temp[extraction.id] = temp[extraction.id] || {};
-          temp[extraction.id][manifest.slug] = result.temp;
-        }
-        if (result.meta) {
-          Object.assign(newMeta, result.meta);
-        }
-        if (result.caches) {
-          Object.assign(newCaches, result.caches);
-        }
-        if (result.indices) {
-          mergeIndices(newindices, result.indices);
-        }
-        if (result.collections) {
-          result.collections.forEach((collectionSlug) => {
-            collections[collectionSlug] = collections[collectionSlug] || [];
-            collections[collectionSlug].push(manifest.slug);
-          });
-        }
+
+        cachedResource.handleResponse(result, extraction);
       }
 
-      if (Object.keys(newMeta).length > 0) {
-        savingFiles.push(
-          Bun.write(
-            join(cacheDir, manifest.slug, 'meta.json'),
-            JSON.stringify(Object.assign(await meta.value, newMeta), null, 2)
-          )
-        );
-      }
-      if (Object.keys(newindices).length > 0) {
-        savingFiles.push(
-          Bun.write(
-            join(cacheDir, manifest.slug, 'indices.json'),
-            JSON.stringify(mergeIndices(await indices.value, newindices), null, 2)
-          )
-        );
-      }
-      if (Object.keys(newCaches).length > 0) {
-        savingFiles.push(
-          Bun.write(
-            join(cacheDir, manifest.slug, 'caches.json'),
-            JSON.stringify(Object.assign(await caches.value, newCaches), null, 2)
-          )
-        );
-      }
+      savingFiles.push(cachedResource.save());
     }
 
     progress.increment();
@@ -193,24 +146,17 @@ export async function extract(
       const canvases = resource.items || [];
       let canvasIndex = 0;
       for (const canvas of canvases) {
-        const canvasDir = join(cacheDir, manifest.slug, 'canvases', canvasIndex.toString());
-        const caches = lazyValue(() => loadJson(join(canvasDir, 'caches.json'), true));
-        const meta = lazyValue(() => loadJson(join(canvasDir, 'meta.json'), true));
-        const indices = lazyValue(() => loadJson(join(canvasDir, 'indices.json'), true));
-        const newMeta = {};
-        const newCaches = {};
-        const newindices = {};
-        const canvasResource: ActiveResourceJson = {
-          id: canvas.id,
-          type: 'Canvas',
-          path: manifest.path + '/canvases/' + canvasIndex,
-          slug: manifest.slug + '/canvases/' + canvasIndex,
-          storeId: manifest.storeId,
-          slugSource: manifest.slugSource,
-          saveToDisk: false, // ?
-          source: manifest.source,
-          vault: manifest.vault,
-        };
+        const canvasCache = createCacheResource({
+          resource: canvas,
+          temp,
+          resourcePath: join(cacheDir, manifest.slug, 'canvases', canvasIndex.toString()),
+          collections,
+          parentManifest: manifest,
+          canvasIndex,
+        });
+
+        const canvasResource = canvasCache.getCanvasResource();
+
         for (const canvasExtraction of canvasExtractions) {
           const storeConfig = extractionConfigs[canvasExtraction.id] || {};
           const extractConfig = Object.assign(
@@ -223,7 +169,7 @@ export async function extract(
             (await canvasExtraction.invalidate(
               canvasResource,
               {
-                caches,
+                caches: canvasCache.caches,
                 resource: canvas,
                 build: buildConfig,
               },
@@ -236,61 +182,20 @@ export async function extract(
             canvasResource,
             {
               resource: canvas,
-              meta,
-              indices,
-              caches,
+              meta: canvasCache.meta,
+              indices: canvasCache.indices,
+              caches: canvasCache.caches,
               config,
               build: buildConfig,
               requestCache,
             },
             extractConfig
           );
-          if (result.temp) {
-            temp[canvasExtraction.id] = temp[canvasExtraction.id] || {};
-            temp[canvasExtraction.id][manifest.slug] = temp[canvasExtraction.id][manifest.slug] || {};
-            temp[canvasExtraction.id][manifest.slug].canvases = temp[canvasExtraction.id][manifest.slug].canvases || {};
-            temp[canvasExtraction.id][manifest.slug].canvases[canvasIndex.toString()] = result.temp;
-          }
-          if (result.meta) {
-            Object.assign(newMeta, result.meta);
-          }
-          if (result.caches) {
-            Object.assign(newCaches, result.caches);
-          }
-          if (result.indices) {
-            mergeIndices(newindices, result.indices);
-          }
+
+          canvasCache.handleResponse(result, canvasExtraction);
         }
 
-        if (
-          Object.keys(newMeta).length > 0 ||
-          Object.keys(newindices).length > 0 ||
-          Object.keys(newCaches).length > 0
-        ) {
-          await mkdirp(canvasDir);
-        }
-
-        if (Object.keys(newMeta).length > 0) {
-          savingFiles.push(
-            Bun.write(join(canvasDir, 'meta.json'), JSON.stringify(Object.assign(await meta.value, newMeta), null, 2))
-          );
-        }
-        if (Object.keys(newindices).length > 0) {
-          savingFiles.push(
-            Bun.write(
-              join(canvasDir, 'indices.json'),
-              JSON.stringify(mergeIndices(await indices.value, newindices), null, 2)
-            )
-          );
-        }
-        if (Object.keys(newCaches).length > 0) {
-          savingFiles.push(
-            Bun.write(
-              join(canvasDir, 'caches.json'),
-              JSON.stringify(Object.assign(await caches.value, newCaches), null, 2)
-            )
-          );
-        }
+        savingFiles.push(canvasCache.save());
 
         progress.increment();
         canvasIndex++;
@@ -322,7 +227,30 @@ export async function extract(
     }
     if (extraction.collect && temp[extraction.id]) {
       const extractionConfig = extractionConfigs[extraction.id] || {};
-      await extraction.collect(temp[extraction.id], { config, build: buildConfig }, extractionConfig);
+      const resp = await extraction.collect(temp[extraction.id], { config, build: buildConfig }, extractionConfig);
+      if (extraction.injectManifest && resp && resp.temp) {
+        for (const manifestSlug of Object.keys(resp.temp)) {
+          const extractionConfig = extractionConfigs[extraction.id] || {};
+          const foundManifest = allResources.find((r) => r.slug === manifestSlug);
+          if (!foundManifest) {
+            continue;
+          }
+          const manifestCache = createCacheResource({
+            resource: foundManifest,
+            temp,
+            resourcePath: join(cacheDir, manifestSlug),
+            collections,
+          });
+          const manifestInjected = await extraction.injectManifest(
+            foundManifest,
+            resp.temp[manifestSlug],
+            { config, build: buildConfig },
+            extractionConfig
+          );
+          manifestCache.handleResponse(manifestInjected, extraction);
+          await manifestCache.save();
+        }
+      }
     }
   }
 

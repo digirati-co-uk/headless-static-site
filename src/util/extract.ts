@@ -21,20 +21,31 @@ export interface ExtractionReturn<Temp = any> {
   meta?: any;
   indices?: Record<string, string[]>;
   collections?: string[];
+  didChange?: never;
 }
 
-export interface Extraction<Config = any, Temp = any> {
+export interface Extraction<Config = any, Temp = any, TempInject = any> {
   id: string;
   name: string;
   types: string[];
   close?: (config: Config) => Promise<void>;
-  collect?: (temp: Record<string, Temp>, api: ExtractionSetupApi, config: Partial<Config>) => Promise<void>;
+  collect?: (
+    temp: Record<string, Temp>,
+    api: ExtractionSetupApi,
+    config: Partial<Config>
+  ) => Promise<void | { temp: TempInject }>;
   collectManifest?: (
     resource: ActiveResourceJson,
     temp: Record<string, Temp>,
     api: ExtractionSetupApi,
     config: Partial<Config>
   ) => Promise<void>;
+  injectManifest?: (
+    resource: ActiveResourceJson,
+    temp: TempInject,
+    api: ExtractionSetupApi,
+    config: Partial<Config>
+  ) => Promise<ExtractionReturn<Temp>>;
   configure?: (api: ExtractionSetupApi, config: Partial<Config>) => Promise<Config>;
   invalidate: (resource: ActiveResourceJson, api: ExtractionInvalidateApi, config: Config) => Promise<boolean>;
   handler: (

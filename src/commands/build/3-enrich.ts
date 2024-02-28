@@ -1,13 +1,10 @@
 import { BuildConfig } from '../build.ts';
-import { lazyLoadJson, lazyLoadOptionalJson } from '../../util/load-json.ts';
 import { join } from 'node:path';
-import { IIIFBuilder } from '@iiif/builder';
-import { mergeIndices } from '../../util/merge-indices.ts';
 import { ActiveResourceJson } from '../../util/store.ts';
 import { Enrichment } from '../../util/enrich.ts';
-import { mkdirp } from 'mkdirp';
 import { makeProgressBar } from '../../util/make-progress-bar.ts';
 import { createStoreRequestCache } from '../../util/store-request-cache.ts';
+import { createCacheResource } from '../../util/cached-resource.ts';
 
 export async function enrich({ allResources }: { allResources: Array<ActiveResourceJson> }, buildConfig: BuildConfig) {
   const {
@@ -38,10 +35,6 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
   }
 
   let savingFiles: Promise<any>[] = [];
-  const saveJson = (file: string, contents: any) => {
-    savingFiles.push(Bun.write(file, JSON.stringify(contents, null, 2)));
-  };
-
   let totalResources = allResources.length;
   for (const resource of allResources) {
     totalResources += resource.subResources || 0;
@@ -58,26 +51,15 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
     const skipSteps = config.stores[manifest.storeId]?.skip || [];
     const runSteps = config.stores[manifest.storeId]?.run;
 
-    // Lazy files.
-    const caches = lazyLoadJson(cacheDir, manifest.slug, 'caches.json');
-    const meta = lazyLoadJson(cacheDir, manifest.slug, 'meta.json');
-    const indices = lazyLoadJson(cacheDir, manifest.slug, 'indices.json');
+    const cachedResource = createCacheResource({
+      resource: manifest,
+      resourcePath: join(cacheDir, manifest.slug),
+      temp,
+      collections: {},
+    });
 
-    // Output files.
-    const files = {
-      'meta.json': join(cacheDir, manifest.slug, 'meta.json'),
-      'indices.json': join(cacheDir, manifest.slug, 'indices.json'),
-      'caches.json': join(cacheDir, manifest.slug, 'caches.json'),
-      'vault.json': join(cacheDir, manifest.slug, 'vault.json'),
-    };
-
-    const builder = new IIIFBuilder(manifest.vault as any);
-    const resource = manifest.vault.getObject(manifest.id);
-
-    const newMeta = {};
-    const newCaches = {};
-    const newindices = {};
-    let didChange = false;
+    const resource = await cachedResource.attachVault();
+    const builder = await cachedResource.getVaultBuilder();
 
     let enrichmentList = manifest.type === 'Manifest' ? manifestEnrichment : collectionEnrichment;
 
@@ -123,7 +105,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
         (await enrichment.invalidate(
           manifest,
           {
-            caches,
+            caches: cachedResource.caches,
             resource,
             config,
             files: filesDir,
@@ -138,9 +120,9 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       const result = await enrichment.handler(
         manifest,
         {
-          meta,
-          indices,
-          caches,
+          meta: cachedResource.meta,
+          indices: cachedResource.indices,
+          caches: cachedResource.caches,
           config,
           builder,
           resource,
@@ -149,20 +131,8 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
         },
         enrichmentConfig
       );
-      if (result.temp) {
-        temp[enrichment.id] = temp[enrichment.id] || {};
-        temp[enrichment.id][manifest.slug] = result.temp;
-      }
-      if (result.meta) {
-        Object.assign(newMeta, result.meta);
-      }
-      if (result.caches) {
-        Object.assign(newCaches, result.caches);
-      }
-      if (result.indices) {
-        mergeIndices(newindices, result.indices);
-      }
-      didChange = didChange || result.didChange || false;
+
+      cachedResource.handleResponse(result, enrichment);
     };
 
     const processedEnrichments = [];
@@ -184,18 +154,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       );
     }
 
-    if (Object.keys(newMeta).length > 0) {
-      const metaValue = await meta.value;
-      saveJson(files['meta.json'], Object.assign({}, metaValue, newMeta));
-    }
-
-    if (Object.keys(newindices).length > 0) {
-      saveJson(files['indices.json'], mergeIndices(await indices.value, newindices));
-    }
-
-    if (Object.keys(newCaches).length > 0) {
-      saveJson(files['caches.json'], Object.assign(await caches.value, newCaches));
-    }
+    savingFiles.push(cachedResource.save());
 
     progress.increment();
 
@@ -216,19 +175,14 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       const canvases = resource.items || [];
       for (let canvasIndex = 0; canvasIndex < canvases.length; canvasIndex++) {
         const canvas = canvases[canvasIndex];
-        const canvasDir = join(cacheDir, manifest.slug, 'canvases', canvasIndex.toString());
-        const filesDir = join(canvasDir, 'files');
-        const files = {
-          'meta.json': join(canvasDir, 'meta.json'),
-          'indices.json': join(canvasDir, 'indices.json'),
-          'caches.json': join(canvasDir, 'caches.json'),
-        };
-        const caches = lazyLoadOptionalJson(files['caches.json']);
-        const meta = lazyLoadOptionalJson(files['meta.json']);
-        const indices = lazyLoadOptionalJson(files['indices.json']);
-        const newMeta = {};
-        const newCaches = {};
-        const newindices = {};
+        const cachedCanvasResource = createCacheResource({
+          resource: canvases[canvasIndex],
+          resourcePath: join(cacheDir, manifest.slug, 'canvases', canvasIndex.toString()),
+          temp,
+          collections: {},
+          canvasIndex,
+          parentManifest: manifest,
+        });
 
         const runEnrichment = async (enrichment: Enrichment) => {
           const storeConfig = enrichmentConfigs[enrichment.id] || {};
@@ -242,10 +196,10 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
             (await enrichment.invalidate(
               manifest,
               {
-                caches,
+                caches: cachedCanvasResource.caches,
                 resource: canvas,
                 config,
-                files: filesDir,
+                files: cachedCanvasResource.filesDir,
               },
               enrichmentConfig
             ));
@@ -267,28 +221,20 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
           const result = await enrichment.handler(
             canvasResource,
             {
-              meta,
-              indices,
-              caches,
-              config,
+              meta: cachedCanvasResource.meta,
+              indices: cachedCanvasResource.indices,
+              caches: cachedCanvasResource.caches,
+              config: config,
               builder,
               resource: canvas,
-              files: filesDir,
+              files: cachedCanvasResource.filesDir,
               requestCache,
             },
             enrichmentConfig
           );
 
-          if (result.meta) {
-            Object.assign(newMeta, result.meta);
-          }
-          if (result.caches) {
-            Object.assign(newCaches, result.caches);
-          }
-          if (result.indices) {
-            mergeIndices(newindices, result.indices);
-          }
-          didChange = didChange || result.didChange || false;
+          cachedCanvasResource.handleResponse(result, enrichment);
+          cachedResource.didChange(result.didChange);
         };
 
         const processedEnrichments = [];
@@ -310,26 +256,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
           );
         }
 
-        if (
-          Object.keys(newMeta).length > 0 ||
-          Object.keys(newindices).length > 0 ||
-          Object.keys(newCaches).length > 0
-        ) {
-          await mkdirp(canvasDir);
-        }
-
-        if (Object.keys(newMeta).length > 0) {
-          const metaValue = await meta.value;
-          saveJson(files['meta.json'], Object.assign({}, metaValue, newMeta));
-        }
-
-        if (Object.keys(newindices).length > 0) {
-          saveJson(files['indices.json'], mergeIndices(await indices.value, newindices));
-        }
-
-        if (Object.keys(newCaches).length > 0) {
-          saveJson(files['caches.json'], Object.assign(await caches.value, newCaches));
-        }
+        savingFiles.push(cachedCanvasResource.save());
 
         progress.increment();
       }
@@ -337,10 +264,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       progress.increment(manifest.subResources || 0);
     }
 
-    // Finally save the vault.
-    if (didChange && manifest.vault) {
-      saveJson(files['vault.json'], manifest.vault.getStore().getState());
-    }
+    await cachedResource.saveVault();
   };
 
   const allManifestProcesses = [];
