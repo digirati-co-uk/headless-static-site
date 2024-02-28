@@ -8,6 +8,7 @@ run:
   - extract-slug-source
   - extract-label-string
   - extract-thumbnail
+  - extract-part-of-collection
   - manifest-sqlite
   - metadata-analysis
   - folder-collections

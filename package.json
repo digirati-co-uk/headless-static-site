@@ -1,6 +1,6 @@
 {
   "name": "iiif-hss",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "IIIF Headless Static Site",
   "type": "module",
   "keywords": [],

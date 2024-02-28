@@ -29,6 +29,7 @@ export interface EnrichmentResult<Temp = any> {
   meta?: Record<string, any>;
   indices?: Record<string, any>;
   caches?: Record<string, any>;
+  collections?: string[];
 }
 
 export interface EnrichmentSetupApi {

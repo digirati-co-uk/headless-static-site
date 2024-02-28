@@ -41,6 +41,7 @@ import { extractFolderCollections } from '../extract/extract-folder-collections.
 import { enrichTypesense } from '../enrich/typesense-index.ts';
 import { extractPlaintext } from '../extract/extract-plaintext.ts';
 import { typesensePlaintext } from '../enrich/typesense-plaintext.ts';
+import { extractPartOfCollection } from '../extract/extract-part-of-collection.ts';
 // import { pdiiif } from "../enrich/pdiiif.ts";
 
 export type BuildOptions = {
@@ -98,6 +99,7 @@ const builtInExtractions: Extraction[] = [
   extractRemoteSource,
   extractFolderCollections,
   extractPlaintext,
+  extractPartOfCollection,
 ];
 const buildInEnrichments: Enrichment[] = [
   homepageProperty,

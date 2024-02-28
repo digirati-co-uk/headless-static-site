@@ -64,6 +64,7 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
     if (existsSync(keywordsFile)) {
       plaintext = await readFile(keywordsFile, 'utf-8');
     }
+    const collections = meta.partOfCollections || [];
 
     return {
       temp: {
@@ -77,7 +78,7 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
           thumbnail: meta.thumbnail?.id,
           url: meta.url,
           totalItems: meta.totalItems,
-          collections: [],
+          collections: collections.map((c: any) => c.slug),
           plaintext,
           ...extraTopics,
         },
@@ -87,6 +88,10 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
   },
 
   async collect(temp, api, config) {
+    if (!temp) {
+      return;
+    }
+
     // Write the schema + the jsonl file with all the data.
     const typeSenseDir = join(api.build.filesDir, 'meta', 'typesense');
     const schemaFile = join(typeSenseDir, 'manifests.schema.json');
