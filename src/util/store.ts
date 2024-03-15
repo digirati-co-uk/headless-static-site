@@ -1,12 +1,9 @@
-import { IIIFStore, Vault } from "@iiif/helpers";
-import { BuildConfig } from "../commands/build.ts";
+import { IIIFStore, Vault } from '@iiif/helpers';
+import { BuildConfig } from '../commands/build.ts';
 
 export interface StoreApi {
   storeId: string;
-  getSlug: (resource: {
-    id: string;
-    type: string;
-  }) => readonly [string, string];
+  getSlug: (resource: { id: string; type: string }) => readonly [string, string];
   requestCache: {
     fetch<T = any>(url: string): Promise<T>;
     didChange(url: string): Promise<boolean>;
@@ -19,22 +16,18 @@ export interface StoreApi {
 export interface Store<T> {
   parse(store: T, api: StoreApi): Promise<ParsedResource[]> | ParsedResource[];
 
-  invalidate(
-    store: T,
-    resource: ParsedResource,
-    caches: ProtoResourceDirectory["caches.json"],
-  ): Promise<boolean>;
+  invalidate(store: T, resource: ParsedResource, caches: ProtoResourceDirectory['caches.json']): Promise<boolean>;
 
   load(
     store: T,
     resource: ParsedResource,
     directory: string,
-    api: Omit<StoreApi, "getSlug">,
+    api: Omit<StoreApi, 'getSlug'>
   ): Promise<ProtoResourceDirectory>;
 }
 
 export interface ProtoResourceDirectory {
-  "resource.json": {
+  'resource.json': {
     /**
      * The id of the resource.
      */
@@ -67,52 +60,51 @@ export interface ProtoResourceDirectory {
      * Number of sub-resources (only used for estimation)
      */
     subResources?: number;
+    virtual?: boolean;
     /**
      * Where this resource originated from.
      */
     source:
-      | { type: "disk"; path: string; alias?: string; relativePath?: string }
-      | { type: "remote"; url: string; overrides?: string };
+      | { type: 'disk'; path: string; alias?: string; relativePath?: string }
+      | { type: 'remote'; url: string; overrides?: string };
   };
-  "vault.json": IIIFStore;
-  "meta.json": {
+  'vault.json': IIIFStore;
+  'meta.json': {
     [key: string]: any;
   };
-  "indices.json": {
+  'indices.json': {
     [key: string]: Array<any>;
   };
-  "caches.json": {
+  'caches.json': {
     [key: string]: string;
   };
   __files?: Array<string>;
 }
 
-export type ParsedResource = Omit<
-  ProtoResourceDirectory["resource.json"],
-  "id" | "type"
-> & {
+export type ParsedResource = Omit<ProtoResourceDirectory['resource.json'], 'id' | 'type'> & {
   id?: string;
   type: string;
   subFiles?: string[];
   subResources?: number;
+  virtual?: boolean;
 };
 
-export type ActiveResourceJson = ProtoResourceDirectory["resource.json"] & {
+export type ActiveResourceJson = ProtoResourceDirectory['resource.json'] & {
   vault?: Vault;
 };
 
 export function createProtoDirectory(
-  resource: ProtoResourceDirectory["resource.json"],
+  resource: ProtoResourceDirectory['resource.json'],
   vault: Vault,
   caches: any = {},
-  other: Partial<ProtoResourceDirectory> = {},
+  other: Partial<ProtoResourceDirectory> = {}
 ): ProtoResourceDirectory {
   return {
-    "resource.json": resource,
-    "vault.json": vault.getStore().getState(),
-    "caches.json": caches,
-    "indices.json": {},
-    "meta.json": {},
+    'resource.json': resource,
+    'vault.json': vault.getStore().getState(),
+    'caches.json': caches,
+    'indices.json': {},
+    'meta.json': {},
     ...other,
   };
 }

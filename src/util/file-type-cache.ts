@@ -1,4 +1,6 @@
-import { existsSync } from "fs";
+import { existsSync } from 'fs';
+import { join } from 'node:path';
+import { cwd } from 'node:process';
 
 export function createFiletypeCache(cacheFile: string) {
   let isLoaded = false;
@@ -22,16 +24,26 @@ export function createFiletypeCache(cacheFile: string) {
       }
 
       if (existsSync(filePath)) {
-        const jsonResource = await Bun.file(filePath).json();
+        if (filePath.endsWith('/_collection.yml') || filePath.endsWith('/_collection.yaml')) {
+          fileTypeCache[filePath] = 'Collection';
+          didChange = true;
+          return fileTypeCache[filePath];
+        }
 
-        let type = jsonResource.type || jsonResource["@type"];
+        let jsonResource = await import(join(cwd(), filePath));
+
+        if (jsonResource.default) {
+          jsonResource = jsonResource.default;
+        }
+
+        let type = jsonResource.type || jsonResource['@type'];
 
         switch (type) {
-          case "sc:Manifest":
-            type = "Manifest";
+          case 'sc:Manifest':
+            type = 'Manifest';
             break;
-          case "sc:Collection":
-            type = "Collection";
+          case 'sc:Collection':
+            type = 'Collection';
             break;
         }
 

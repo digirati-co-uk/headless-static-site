@@ -283,6 +283,7 @@ export async function getBuildConfig(options: BuildOptions) {
   const canvasEnrichment = enrichments.filter((e) => e.types.includes('Canvas'));
 
   const requestCacheDir = join(cacheDir, '_requests');
+  const virtualCacheDir = join(cacheDir, '_virtual');
 
   const server = options.dev ? { url: env.DEV_SERVER || 'http://localhost:7111' } : env.SERVER_URL || config.server;
 
@@ -325,6 +326,7 @@ export async function getBuildConfig(options: BuildOptions) {
     manifestEnrichment,
     collectionEnrichment,
     requestCacheDir,
+    virtualCacheDir,
     topicsDir,
     cacheDir,
     buildDir,

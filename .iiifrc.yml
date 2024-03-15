@@ -44,7 +44,7 @@ stores:
   delft:
     type: iiif-json
     path: ./delft
-    pattern: '**/*.json'
+    pattern: '**/*.{json,yml}'
     run:
       - delft-labels
       - extract-thumbnail

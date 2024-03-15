@@ -1,26 +1,21 @@
-import {
-  createProtoDirectory,
-  ParsedResource,
-  ProtoResourceDirectory,
-  Store,
-  StoreApi,
-} from "../util/store";
-import { readAllFiles } from "../util/read-all-files";
-import { readFile, stat } from "node:fs/promises";
-import { Vault } from "@iiif/helpers";
-import { existsSync } from "fs";
-import { join, relative } from "node:path";
-import { cwd } from "process";
-import { copy, pathExists } from "fs-extra/esm";
-import { isEmpty } from "../util/is-empty";
-import objectHash from "object-hash";
-import { rewritePath } from "../util/rewrite-path.ts";
-import { readFilteredFiles } from "../util/read-filtered-files.ts";
-import { Manifest } from "@iiif/presentation-3";
-import { dirname } from "path/posix";
+import { createProtoDirectory, ParsedResource, ProtoResourceDirectory, Store, StoreApi } from '../util/store';
+import { readAllFiles } from '../util/read-all-files';
+import { readFile, stat } from 'node:fs/promises';
+import { Vault } from '@iiif/helpers';
+import { existsSync } from 'fs';
+import { join, relative } from 'node:path';
+import { cwd } from 'process';
+import { copy, pathExists } from 'fs-extra/esm';
+import { isEmpty } from '../util/is-empty';
+import objectHash from 'object-hash';
+import { rewritePath } from '../util/rewrite-path.ts';
+import { readFilteredFiles } from '../util/read-filtered-files.ts';
+import { Manifest } from '@iiif/presentation-3';
+import { dirname } from 'path/posix';
+import { stringToLang } from '../util/string-to-lang.ts';
 
 export interface IIIFJSONStore {
-  type: "iiif-json";
+  type: 'iiif-json';
   path: string;
   pattern?: string;
   ignore?: string | string[];
@@ -29,14 +24,12 @@ export interface IIIFJSONStore {
   destination?: string;
 }
 
-async function parse(
-  store: IIIFJSONStore,
-  api: StoreApi,
-): Promise<ParsedResource[]> {
+async function parse(store: IIIFJSONStore, api: StoreApi): Promise<ParsedResource[]> {
   const allFiles = readFilteredFiles(store);
   const fileNameToPath = rewritePath(store);
   const newAllFiles: Array<[string, string]> = [];
   const subFileMap: Record<string, string[]> = {};
+  const virtualCollectionsPath = join(api.build.virtualCacheDir, api.storeId);
 
   if (store.subFiles) {
     // Check for sub-files.
@@ -75,12 +68,10 @@ async function parse(
   for (const [file, fileWithoutExtension] of newAllFiles) {
     const fileType = await api.build.fileTypeCache.getFileType(file);
     if (!fileType) {
-      api.build.log(
-        'Warning: Could not determine file type for "' + file + '"',
-      );
+      api.build.log('Warning: Could not determine file type for "' + file + '"');
     }
-    let source: ProtoResourceDirectory["resource.json"]["source"] = {
-      type: "disk",
+    let source: ProtoResourceDirectory['resource.json']['source'] = {
+      type: 'disk',
       path: store.path,
     };
 
@@ -90,10 +81,63 @@ async function parse(
         source.relativePath = relative(store.path, dir);
       }
     }
+
+    // Virtual resource.
+    if (file.endsWith('/_collection.yml') || file.endsWith('/_collection.yaml')) {
+      const manifestsToInclude = newAllFiles.filter(([manifestFile]) => {
+        if (!manifestFile.startsWith(fileWithoutExtension)) return false;
+        if (manifestFile === file) return false;
+
+        // We only want ones one level down.
+        const relativeDir = relative(dirname(file), manifestFile);
+
+        return !relativeDir.includes('/');
+      });
+
+      const loadedMetadata = await import(join(cwd(), file));
+      const { label, summary, metadata, type: _1, items: _2, ...rest } = loadedMetadata;
+      const virtualCollection = {
+        id: `virtual://${fileWithoutExtension}`,
+        type: 'Collection',
+        label: label ? stringToLang(label) : fileWithoutExtension.split('/').pop() || fileWithoutExtension,
+        summary: summary ? stringToLang(summary) : undefined,
+        metadata: metadata
+          ? metadata.map((item: any) => ({
+              label: stringToLang(item.label),
+              value: stringToLang(item.value),
+            }))
+          : undefined,
+        // @todo metadata.
+        items: manifestsToInclude.map(([manifestFile, fileWithoutExtension]) => {
+          const relativePath = relative(dirname(file), manifestFile);
+          return {
+            id: './' + relativePath,
+            type: 'Manifest',
+          };
+        }),
+        ...rest,
+      };
+
+      const filePath = join(virtualCollectionsPath, fileWithoutExtension + '.json');
+      await Bun.write(filePath, JSON.stringify(virtualCollection, null, 2));
+
+      manifests.push({
+        path: filePath,
+        slug: fileWithoutExtension,
+        type: 'Collection',
+        storeId: api.storeId,
+        subFiles: subFileMap[fileWithoutExtension],
+        source: source,
+        saveToDisk: true,
+        virtual: true,
+      });
+      continue;
+    }
+
     manifests.push({
       path: file,
       slug: fileWithoutExtension,
-      type: fileType || "Manifest",
+      type: fileType || 'Manifest',
       storeId: api.storeId,
       subFiles: subFileMap[fileWithoutExtension],
       source: source,
@@ -104,26 +148,23 @@ async function parse(
   return manifests;
 }
 
-export async function getKey(
-  store: { subFiles?: boolean },
-  resource: ParsedResource,
-) {
+export async function getKey(store: { subFiles?: boolean }, resource: ParsedResource) {
   const file = await stat(resource.path);
-  const key = file.mtime + "-" + file.ctime + "-" + file.size;
+  const key = file.mtime + '-' + file.ctime + '-' + file.size;
 
   if (store.subFiles) {
-    const subFilesFolderPath = resource.path.replace(".json", "");
+    const subFilesFolderPath = resource.path.replace('.json', '');
     const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {
       const allFiles = readAllFiles(subFilesFolderPath);
       const keys = [];
       for (const fileName of allFiles) {
         const file = await stat(fileName);
-        keys.push(file.mtime + "-" + file.ctime + "-" + file.size);
+        keys.push(file.mtime + '-' + file.ctime + '-' + file.size);
       }
 
       const dirHash = objectHash(keys);
-      return key + "_dir: " + dirHash;
+      return key + '_dir: ' + dirHash;
     }
   }
 
@@ -133,7 +174,7 @@ export async function getKey(
 async function invalidate(
   store: IIIFJSONStore,
   resource: ParsedResource,
-  caches: ProtoResourceDirectory["caches.json"],
+  caches: ProtoResourceDirectory['caches.json']
 ) {
   if (!caches.load) {
     return true;
@@ -146,37 +187,59 @@ async function invalidate(
 async function load(
   store: IIIFJSONStore,
   resource: ParsedResource,
-  directory: string,
+  directory: string
 ): Promise<ProtoResourceDirectory> {
   // 1. Load from disk.
-  const file = await readFile(resource.path, "utf-8");
+  const file = await readFile(resource.path, 'utf-8');
   const cacheKey = await getKey(store, resource);
   const json = JSON.parse(file);
   const vault = new Vault();
-  const id = json.id || json["@id"];
+  const id = json.id || json['@id'];
 
   if (!id) {
-    throw new Error("No id found in json" + resource.path);
+    throw new Error('No id found in json' + resource.path);
   }
 
   if (store.subFiles) {
-    const subFilesFolderPath = resource.path.replace(".json", "");
+    const subFilesFolderPath = resource.path.replace('.json', '');
     const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {
-      if (
-        subFilesFolder &&
-        (await pathExists(subFilesFolderPath)) &&
-        !isEmpty(subFilesFolderPath)
-      ) {
-        const destination = join(cwd(), directory, "files");
+      if (subFilesFolder && (await pathExists(subFilesFolderPath)) && !isEmpty(subFilesFolderPath)) {
+        const destination = join(cwd(), directory, 'files');
         await copy(subFilesFolderPath, destination, { overwrite: true });
       }
     }
   }
 
+  // Mapping real Manifests to virtual IDs.
+  if (resource.virtual) {
+    if (resource.source.type !== 'disk') {
+      throw new Error('Virtual resources must be loaded from disk');
+    }
+    const newItems = [];
+    for (const item of json.items) {
+      try {
+        const { id, type, ...rest } = item;
+        const loadedManifest = JSON.parse(
+          await readFile(join(cwd(), resource.source.path, resource.source.relativePath || '', item.id), 'utf-8')
+        );
+        const newId = loadedManifest.id || loadedManifest['@id'];
+        const newType = loadedManifest.type || loadedManifest['@type'];
+        newItems.push({
+          id: newId,
+          type: newType,
+          ...rest,
+        });
+      } catch (err) {
+        console.error('Warning: error loading virtual collection item', item.id, err);
+      }
+    }
+    json.items = newItems;
+  }
+
   const res = await vault.load<Manifest>(id, json);
   if (!res) {
-    throw new Error("Failed to load resource: " + id);
+    throw new Error('Failed to load resource: ' + id);
   }
 
   return createProtoDirectory(
@@ -189,9 +252,10 @@ async function load(
       subResources: (res.items || []).length,
       saveToDisk: true,
       source: resource.source,
+      virtual: resource.virtual,
     },
     vault,
-    { load: cacheKey },
+    { load: cacheKey }
   );
 }
 

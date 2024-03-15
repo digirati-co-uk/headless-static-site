@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { join, relative } from 'node:path';
 
 export function rewritePath(config: { base?: string; destination?: string }) {
   return (currentPath: string) => {
@@ -10,7 +10,11 @@ export function rewritePath(config: { base?: string; destination?: string }) {
       currentPath = join(config.destination, currentPath);
     }
 
+    if (currentPath.endsWith('_collection.yml') || currentPath.endsWith('_collection.yaml')) {
+      return currentPath.replace(/\/_collection\.(yml|yaml)$/, '');
+    }
+
     // Remove extension.
-    return currentPath.replace(/\.[A-Za-z0-9]+$/, "");
+    return currentPath.replace(/\.[A-Za-z0-9]+$/, '');
   };
 }
