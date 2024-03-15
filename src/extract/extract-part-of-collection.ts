@@ -29,7 +29,6 @@ export const extractPartOfCollection: Extraction<any, TempExtraction> = {
     }
 
     if (resource.type === 'Manifest') {
-      // Mapping of manifest slug + id
       return {
         temp: {
           type: 'Manifest',
@@ -57,7 +56,10 @@ export const extractPartOfCollection: Extraction<any, TempExtraction> = {
       if (mapping.type === 'Collection') {
         // Create a mapping of collection.id -> manifest.ids
         const collectionItems = mapping.collectionItems || {};
-        for (const [collectionId, manifestIds] of Object.entries(collectionItems)) {
+        for (let [collectionId, manifestIds] of Object.entries(collectionItems)) {
+          if (collectionId.startsWith('virtual://')) {
+            collectionId = api.build.makeId({ type: 'Collection', slug });
+          }
           for (const manifestId of manifestIds) {
             const manifestSlug = manifestMapping[manifestId];
             manifestIsInCollection[manifestSlug] = manifestIsInCollection[manifestSlug] || [];

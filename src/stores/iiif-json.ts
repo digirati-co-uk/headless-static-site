@@ -84,13 +84,11 @@ async function parse(store: IIIFJSONStore, api: StoreApi): Promise<ParsedResourc
 
     // Virtual resource.
     if (file.endsWith('/_collection.yml') || file.endsWith('/_collection.yaml')) {
-      const manifestsToInclude = newAllFiles.filter(([manifestFile]) => {
-        if (!manifestFile.startsWith(fileWithoutExtension)) return false;
+      const manifestsToInclude = newAllFiles.filter(([manifestFile, full]) => {
+        if (!full.startsWith(fileWithoutExtension)) return false;
         if (manifestFile === file) return false;
-
         // We only want ones one level down.
         const relativeDir = relative(dirname(file), manifestFile);
-
         return !relativeDir.includes('/');
       });
 
@@ -220,6 +218,7 @@ async function load(
     for (const item of json.items) {
       try {
         const { id, type, ...rest } = item;
+
         const loadedManifest = JSON.parse(
           await readFile(join(cwd(), resource.source.path, resource.source.relativePath || '', item.id), 'utf-8')
         );
@@ -227,7 +226,7 @@ async function load(
         const newType = loadedManifest.type || loadedManifest['@type'];
         newItems.push({
           id: newId,
-          type: newType,
+          type: newType.includes('Collection') ? 'Collection' : 'Manifest',
           ...rest,
         });
       } catch (err) {

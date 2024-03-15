@@ -307,10 +307,15 @@ export async function getBuildConfig(options: BuildOptions) {
   })();
 
   const topicsDir = join(cwd(), topicFolder);
+  const configUrl = typeof server === 'string' ? server : server?.url;
+  const makeId = ({ type, slug }: { type: string; slug: string }) => {
+    return `${configUrl}/${slug}/${type.toLowerCase()}.json`;
+  };
 
   return {
     options,
     server,
+    configUrl,
     config,
     extractions,
     allRewrites,
@@ -335,6 +340,7 @@ export async function getBuildConfig(options: BuildOptions) {
     // Helpers based on config.
     time,
     log,
+    makeId,
     setLogger,
     clearLogger,
     slugs,
