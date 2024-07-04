@@ -59,11 +59,11 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
       extraTopics[`topic_${k}`] = v;
     }
 
-    let plaintext = '';
-    const keywordsFile = join(api.files, 'keywords.txt');
-    if (existsSync(keywordsFile)) {
-      plaintext = await readFile(keywordsFile, 'utf-8');
-    }
+    // let plaintext = '';
+    // const keywordsFile = join(api.files, 'keywords.txt');
+    // if (existsSync(keywordsFile)) {
+    //   plaintext = await readFile(keywordsFile, 'utf-8');
+    // }
     const collections = meta.partOfCollections || [];
 
     return {
@@ -79,7 +79,7 @@ export const enrichTypesense: Enrichment<{}, { record: SingleRecord; foundTopics
           url: meta.url,
           totalItems: meta.totalItems,
           collections: collections.map((c: any) => c.slug),
-          plaintext,
+          plaintext: api.resource.metadata.map((m: any) => getValue(m.value)).join(' '),
           ...extraTopics,
         },
         foundTopics: Object.keys(extraTopics),
