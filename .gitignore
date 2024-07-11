@@ -4,8 +4,8 @@ node_modules
 content
 examples
 delft
-build/hss.js
-build/client.d.ts
-build/client.js
-build
+/build/hss.js
+/build/client.d.ts
+/build/client.js
+/build
 typesense-data
