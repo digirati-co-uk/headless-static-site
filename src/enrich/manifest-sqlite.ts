@@ -1,20 +1,20 @@
-import { mkdirp } from "mkdirp";
-import { join } from "node:path";
-import { Database } from "bun:sqlite";
-import { getValue } from "../extract/extract-label-string.ts";
-import { Enrichment } from "../util/enrich.ts";
-import slug from "slug";
+import { mkdirp } from 'mkdirp';
+import { join } from 'node:path';
+import { Database } from 'bun:sqlite';
+import { getValue } from '@iiif/helpers';
+import { Enrichment } from '../util/enrich.ts';
+import slug from 'slug';
 
 export const manifestSqlite: Enrichment<{
   db: Database;
   enableTopics?: boolean;
 }> = {
-  name: "sqlite",
-  id: "manifest-sqlite",
-  types: ["Manifest"],
+  name: 'sqlite',
+  id: 'manifest-sqlite',
+  types: ['Manifest'],
   configure: async (api, config = {}) => {
     await mkdirp(api.build.filesDir);
-    const dbFile = join(api.build.filesDir, "meta", "manifests.db");
+    const dbFile = join(api.build.filesDir, 'meta', 'manifests.db');
     const db = new Database(dbFile, { create: true });
 
     db.query(
@@ -25,7 +25,7 @@ export const manifestSqlite: Enrichment<{
         slug TEXT,
         thumbnail TEXT
       )
-    `,
+    `
     ).run();
 
     if (config.enableTopics) {
@@ -39,7 +39,7 @@ export const manifestSqlite: Enrichment<{
                 label      TEXT,
                 slug       TEXT
             )
-        `,
+        `
       ).run();
 
       db.query(
@@ -50,7 +50,7 @@ export const manifestSqlite: Enrichment<{
                 manifest_id TEXT,
                 PRIMARY KEY (topic_id, manifest_id)
             )
-        `,
+        `
       ).run();
     }
     return {
@@ -75,13 +75,13 @@ export const manifestSqlite: Enrichment<{
             ON CONFLICT (id) DO UPDATE SET label = $name,
                                            slug = $slug,
                                            thumbnail = $thumbnail
-          `,
+          `
           )
           .all({
             $id: resource.id,
             $name: value,
             $slug: resource.slug,
-            $thumbnail: meta.thumbnail?.id || "",
+            $thumbnail: meta.thumbnail?.id || '',
           });
       }
 
@@ -100,7 +100,7 @@ export const manifestSqlite: Enrichment<{
                     INSERT INTO topics (id, topic, topic_type, label, slug)
                     VALUES ($id, $topic, $topic_type, $label, $slug)
                     ON CONFLICT (id) DO NOTHING
-                `,
+                `
               )
               .all({
                 $id: `${topicTypeKey}/${topicId}`,
@@ -116,7 +116,7 @@ export const manifestSqlite: Enrichment<{
                     INSERT INTO topics_manifests (topic_id, manifest_id)
                     VALUES ($topic_id, $manifest_id)
                     ON CONFLICT (topic_id, manifest_id) DO NOTHING
-                `,
+                `
               )
               .all({
                 $topic_id: `${topicTypeKey}/${topicId}`,

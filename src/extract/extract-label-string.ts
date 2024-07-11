@@ -1,18 +1,12 @@
-import { sha1 } from "object-hash";
-import { Extraction } from "../util/extract";
+import { Extraction } from '../util/extract';
+import { getValue } from '@iiif/helpers/i18n';
 
 export const extractLabelString: Extraction = {
-  id: "extract-label-string",
-  name: "Extract label as string",
-  types: ["Manifest"],
+  id: 'extract-label-string',
+  name: 'Extract label as string',
+  types: ['Manifest'],
   async invalidate(manifest, api) {
-    const resource = api.resource;
-    if (!resource.label) {
-      return false;
-    }
-    const hash = sha1(resource.label);
-    const caches = await api.caches.value;
-    return hash !== caches.extractLabelString;
+    return true;
   },
   async handler(manifest, api, config) {
     const language = config?.language;
@@ -27,23 +21,11 @@ export const extractLabelString: Extraction = {
       return {};
     }
 
-    const firstValue = (label[language || keys[0]] || [])[0] || "";
+    const firstValue = getValue(label, { language });
     return {
-      caches: {
-        extractLabelString: sha1(resource.label),
-      },
       meta: {
-        label: firstValue,
+        label: firstValue || '',
       },
     };
   },
 };
-
-export function getValue(value: any) {
-  const label = value || {};
-  const keys = Object.keys(label);
-  if (keys.length === 0) {
-    return "";
-  }
-  return (label[keys[0]] || [])[0] || "";
-}

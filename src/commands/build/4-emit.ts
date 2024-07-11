@@ -8,7 +8,7 @@ import { existsSync, readdirSync } from 'fs';
 import { isEmpty } from '../../util/is-empty.ts';
 import { copy } from 'fs-extra/esm';
 import { ActiveResourceJson } from '../../util/store.ts';
-import { getValue } from '../../extract/extract-label-string.ts';
+import { getValue } from '@iiif/helpers/i18n';
 import { makeProgressBar } from '../../util/make-progress-bar.ts';
 import { Collection, Manifest } from '@iiif/presentation-3';
 
