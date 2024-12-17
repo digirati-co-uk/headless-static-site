@@ -1,6 +1,7 @@
-import { existsSync } from "node:fs";
+import fs from "node:fs";
 import { join } from "node:path";
 import { cwd } from "node:process";
+import { parse } from "yaml";
 import type { SlugConfig } from "./slug-engine.ts";
 
 export interface IIIFRC {
@@ -53,7 +54,13 @@ export const supportedConfigFiles = [".iiifrc.yml", ".iiifrc.yaml", "iiif.config
 export async function getConfig() {
   if (!config) {
     for (const configFileName of supportedConfigFiles) {
-      if (existsSync(join(cwd(), configFileName))) {
+      if (fs.existsSync(join(cwd(), configFileName))) {
+        if (configFileName.endsWith(".yaml") || configFileName.endsWith(".yml")) {
+          const file = await fs.promises.readFile(join(cwd(), configFileName), "utf8");
+          config = parse(file);
+          break;
+        }
+
         config = await import(join(cwd(), configFileName));
         break;
       }
