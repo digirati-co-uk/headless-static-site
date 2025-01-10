@@ -19,7 +19,7 @@
   "typings": "lib/scripts.d.ts",
   "scripts": {
     "dev": "bun run ./src/entrypoint.ts",
-    "dev-cli": "bun run ./src/index.ts serve",
+    "dev-cli": "bun run ./src/index.ts",
     "build": "pnpm run build:cli && pnpm run build:server && pnpm run build:client && pnpm run build:node-client",
     "build:cli": "tsup-node src/index.ts --no-splitting --outDir build --format esm --env.NODE_ENV production",
     "build:server": "tsup-node src/entrypoint.ts --no-splitting --outDir build/server --format esm --env.NODE_ENV production",

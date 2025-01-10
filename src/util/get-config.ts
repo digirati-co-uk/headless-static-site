@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { join } from "node:path";
 import { cwd } from "node:process";
+import type { Collection } from "@iiif/presentation-3";
 import { parse } from "yaml";
 import type { SlugConfig } from "./slug-engine.ts";
 
@@ -13,6 +14,12 @@ export interface IIIFRC {
   stores: Record<string, GenericStore>;
   slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
+  collections?: {
+    index?: Partial<Collection>;
+    manifests?: Partial<Collection>;
+    collections?: Record<string, Partial<Collection>>;
+    topics?: Record<string, Partial<Collection>>;
+  };
 }
 
 export interface GenericStore {

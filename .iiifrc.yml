@@ -15,6 +15,14 @@ run:
   - folder-collections
   - typesense-manifests
 
+collections:
+  index:
+    label: { "en": "My great top level collection" }
+    summary: { "en": "This is a summary of the collection" }
+  manifests:
+    label: { "en": "Manifests" }
+    summary: { "en": "A list of all manifests in the collection" }
+
 generators:
   sts-shuttles:
     type: nasa-generator

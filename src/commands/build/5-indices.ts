@@ -116,9 +116,10 @@ export async function indices(
 
   if (indexCollection) {
     const baseTopicTypeCollectionSnippet = createCollection({
+      label: "Topics",
+      ...(config.collections?.topics || {}),
       configUrl,
       slug: "topics",
-      label: "Topics",
     });
 
     topLevelCollection.push(baseTopicTypeCollectionSnippet);
@@ -154,7 +155,7 @@ export async function indices(
 
       indexCollection[topicTypeMeta.slug] = topicTypeCollectionSnippet;
       topLevelCollection.push(topicTypeCollectionSnippet);
-      baseTopicTypeCollection.items.push(topicTypeCollectionSnippet);
+      baseTopicTypeCollection.items.push(topicTypeCollectionSnippet as any);
 
       const topicTypeCollection: Collection = {
         ...topicTypeCollectionSnippet,
@@ -189,7 +190,7 @@ export async function indices(
           label: topicMeta.label,
         });
 
-        topicTypeCollection.items.push(topicCollectionSnippet);
+        topicTypeCollection.items.push(topicCollectionSnippet as any);
 
         indexCollection[topicMeta.slug] = topicCollectionSnippet;
 
@@ -234,9 +235,10 @@ export async function indices(
 
   if (indexCollection) {
     const indexCollectionJson = createCollection({
+      label: "Index",
+      ...(config.collections?.index || {}),
       configUrl,
       slug: "",
-      label: "Index",
     }) as Collection;
 
     indexCollectionJson.items = Object.values(indexCollection);
@@ -246,9 +248,10 @@ export async function indices(
 
   if (manifestCollection) {
     const manifestCollectionJson = createCollection({
+      label: "Manifests",
+      ...(config.collections?.index || {}),
       configUrl,
       slug: "manifests",
-      label: "Manifests",
     }) as Collection;
 
     manifestCollectionJson.items = manifestCollection;
@@ -276,9 +279,10 @@ export async function indices(
     });
 
     const topLevelCollectionJson = createCollection({
-      configUrl,
-      slug: "collections",
       label: "Collections",
+      ...(config.collections?.collections || {}),
+      slug: "collections",
+      configUrl,
     }) as Collection;
     topLevelCollectionJson.items = topLevelCollection;
     await files.mkdir(join(buildDir, "collections"));
