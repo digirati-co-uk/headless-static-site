@@ -16,13 +16,14 @@
   "typings": "lib/scripts.d.ts",
   "scripts": {
     "dev": "bun run ./src/index.ts serve",
-    "build": "bun run build:cli && bun run build:server && bun run build:client && bun run build:node-client",
+    "build": "pnpm run build:cli && pnpm run build:server && pnpm run build:client && pnpm run build:node-client",
     "build:cli": "tsup-node src/index.ts --no-splitting --outDir build --format esm --env.NODE_ENV production",
     "build:server": "tsup-node src/entrypoint.ts --no-splitting --outDir build/server --format esm --env.NODE_ENV production",
     "build:client": "tsup src/dev/client.ts --outDir build",
     "build:node-client": "tsup src/dev/node-client.ts --outDir build",
     "lint": "publint",
-    "prepack": "bun run build"
+    "test": "vitest",
+    "prepack": "pnpm run build"
   },
   "exports": {
     ".": {
@@ -102,6 +103,7 @@
     "typescript": "^5.2.2",
     "typesense": "1.7.2",
     "unionfs": "^4.5.4",
+    "vitest": "^2.1.8",
     "yaml": "^2.6.1",
     "zod": "^3.24.1"
   }
