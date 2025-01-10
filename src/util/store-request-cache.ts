@@ -25,7 +25,7 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string, noCa
       }
       return null;
     },
-    async didChange(url: string, options?: FetchRequestInit) {
+    async didChange(url: string, options?: RequestInit) {
       let data = null;
 
       if (cache.has(url)) {
@@ -61,7 +61,7 @@ export function createStoreRequestCache(storeKey: string, cacheDir: string, noCa
 
       return didChange;
     },
-    async fetch(url: string, options?: FetchRequestInit) {
+    async fetch(url: string, options?: RequestInit) {
       const hash = createHash("sha256").update(url).digest("hex");
       const dir = join(cacheDir, storeKey);
       const cachePath = join(cacheDir, `${storeKey}/${hash}.json`);

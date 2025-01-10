@@ -20,9 +20,10 @@
   "scripts": {
     "dev": "bun run ./src/entrypoint.ts",
     "dev-cli": "bun run ./src/index.ts",
-    "build": "pnpm run build:cli && pnpm run build:server && pnpm run build:client && pnpm run build:node-client",
+    "build": "pnpm run build:cli && pnpm run build:server && pnpm run build:client && pnpm run build:node-client && pnpm run build:library",
     "build:cli": "tsup-node src/index.ts --no-splitting --outDir build --format esm --env.NODE_ENV production",
     "build:server": "tsup-node src/entrypoint.ts --no-splitting --outDir build/server --format esm --env.NODE_ENV production",
+    "build:library": "tsup src/library.ts --outDir build",
     "build:client": "tsup src/dev/client.ts --outDir build",
     "build:node-client": "tsup src/dev/node-client.ts --outDir build",
     "lint": "publint",
@@ -34,6 +35,12 @@
       "import": {
         "types": "./lib/scripts.d.ts",
         "default": "./lib/scripts.js"
+      }
+    },
+    "./library": {
+      "import": {
+        "types": "./build/library.d.ts",
+        "default": "./build/library.js"
       }
     },
     "./client": {
