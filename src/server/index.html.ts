@@ -41,6 +41,10 @@ export function indexHtml() {
         </section>
 
         <section class="my-5 rounded">
+          <button id="full-rebuild">Full rebuild</button>
+        </section>
+
+        <section class="my-5 rounded">
           <h3 class="text-xl mb-4">Configuration</h3>
           <pre id="config" class="rounded bg-slate-200 p-4 text-slate-800"></pre>
         </section>
@@ -53,68 +57,83 @@ export function indexHtml() {
         <script type="module">
           import { create } from "/client.js";
 
-          const helper = create(window.location.origin);
-
-          const index = await helper.getSitemap();
-          const editable = await helper.getEditable();
-          const $list = document.getElementById("list");
-          const $config = document.getElementById("config");
-
-          const stores = await helper.getStores();
-          const slugs = await helper.getSlugs;
-
-          $config.innerText = JSON.stringify(
-            {
-              stores,
-              slugs,
+          const origin = window.location.origin;
+          const helper = create(window.location.origin, {
+            ws: true,
+            onFullRebuild: () => {
+              render();
             },
-            null,
-            2
-          );
+          });
 
-          if (index) {
-            const $ul = document.createElement("ul");
+          const $button = document.getElementById("full-rebuild");
+          $button.addEventListener("click", async () => {
+            await fetch("/build", { method: "POST", body: JSON.stringify({ cache: false }) });
+          });
 
-            for (const [item, obj] of Object.entries(index)) {
-              if (obj.type === "Collection") {
-                // const $li = document.createElement('li');
-                // $li.innerText = item;
-                // $ul.appendChild($li);
-                continue;
+          render();
+
+          async function render() {
+            const index = await helper.getSitemap();
+            const editable = await helper.getEditable();
+            const $list = document.getElementById("list");
+            const $config = document.getElementById("config");
+
+            const stores = await helper.getStores();
+            const slugs = await helper.getSlugs;
+
+            $config.innerText = JSON.stringify(
+              {
+                stores,
+                slugs,
+              },
+              null,
+              2
+            );
+
+            if (index) {
+              const $ul = document.createElement("ul");
+
+              for (const [item, obj] of Object.entries(index)) {
+                if (obj.type === "Collection") {
+                  // const $li = document.createElement('li');
+                  // $li.innerText = item;
+                  // $ul.appendChild($li);
+                  continue;
+                }
+
+                const overrides = obj.source.overrides;
+                const l = "text-blue-800 hover:underline text-sm";
+                const $li = document.createElement("li");
+
+                $li.className = "mb-1 p-1 hover:bg-slate-100 flex items-center gap-3";
+                const url = await helper.getManifest(item);
+                $li.innerHTML =
+                  (!url
+                    ? ""
+                    : '<a href="' +
+                      url +
+                      "?manifest=" +
+                      url +
+                      '" target="_blank" class="' +
+                      l +
+                      '"><img src="https://iiif.io/assets/uploads/logos/logo-iiif-34x30.png" class="w-4"/></a>') +
+                  '<span class="text-slate-700 font-bold">' +
+                  (obj.label || item) +
+                  "</span>" +
+                  '<a class="' +
+                  l +
+                  '" href="/clover/' +
+                  item +
+                  '">[view]</a>' +
+                  (overrides ? '<a class="' + l + '" href="/editor/' + item + '#copy">[save copy]</a>' : "") +
+                  (editable[item] ? '<a class="' + l + '" href="/editor/' + item + '">[edit]</a>' : "");
+
+                $ul.appendChild($li);
               }
 
-              const overrides = obj.source.overrides;
-              const l = "text-blue-800 hover:underline text-sm";
-              const $li = document.createElement("li");
-
-              $li.className = "mb-1 p-1 hover:bg-slate-100 flex items-center gap-3";
-              const url = await helper.getManifest(item);
-              $li.innerHTML =
-                (!url
-                  ? ""
-                  : '<a href="' +
-                    url +
-                    "?manifest=" +
-                    url +
-                    '" target="_blank" class="' +
-                    l +
-                    '"><img src="https://iiif.io/assets/uploads/logos/logo-iiif-34x30.png" class="w-4"/></a>') +
-                '<span class="text-slate-700 font-bold">' +
-                (obj.label || item) +
-                "</span>" +
-                '<a class="' +
-                l +
-                '" href="/clover/' +
-                item +
-                '">[view]</a>' +
-                (overrides ? '<a class="' + l + '" href="/editor/' + item + '#copy">[save copy]</a>' : "") +
-                (editable[item] ? '<a class="' + l + '" href="/editor/' + item + '">[edit]</a>' : "");
-
-              $ul.appendChild($li);
+              $list.innerHTML = "";
+              $list.appendChild($ul);
             }
-
-            $list.innerHTML = "";
-            $list.appendChild($ul);
           }
         </script>
 

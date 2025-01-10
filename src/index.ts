@@ -36,6 +36,8 @@ program
   //
   .command("serve")
   .description("Serve headless static site")
+  .option("--no-build", "Build initial assets")
+  .option("--no-watch", "Watch for changes")
   .action(serveCommand);
 
 program

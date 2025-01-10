@@ -18,8 +18,18 @@ export function cloverHtml() {
         <script type="module">
           import { create } from "/client.js";
 
+          let renderFn = null;
+          const render = () => {
+            if (renderFn) {
+              renderFn();
+            }
+          };
+
           const $viewer = document.getElementById("viewer");
-          const helper = create(window.location.origin);
+          const helper = create(window.location.origin, {
+            ws: true,
+            onChangeFile: render,
+          });
 
           if (window.location.pathname === "/clover" || window.location.pathname === "/clover/") {
             $viewer.innerHTML = "No manifest selected";
@@ -47,15 +57,19 @@ export function cloverHtml() {
               $viewer.appendChild($ul);
             }
           } else {
-            const sliced = window.location.pathname.replace("/clover", "");
-            const manifest = await helper.getManifest(sliced);
-            if (manifest) {
-              const clover = document.createElement("clover-viewer");
-              clover.setAttribute("id", manifest);
-              $viewer.appendChild(clover);
-            } else {
-              $viewer.innerHTML = "Manifest not found";
-            }
+            renderFn = async () => {
+              const sliced = window.location.pathname.replace("/clover", "");
+              const manifest = await helper.getManifest(sliced);
+              if (manifest) {
+                $viewer.innerHTML = "";
+                const clover = document.createElement("clover-viewer");
+                clover.setAttribute("id", manifest);
+                $viewer.appendChild(clover);
+              } else {
+                $viewer.innerHTML = "Manifest not found";
+              }
+            };
+            renderFn();
           }
         </script>
       </body>

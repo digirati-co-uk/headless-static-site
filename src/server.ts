@@ -6,6 +6,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { timeout } from "hono/timeout";
+import mitt from "mitt";
 import { z } from "zod";
 import { type BuildOptions, build, defaultBuiltIns } from "./commands/build";
 import { cloverHtml } from "./server/clover.html";
@@ -17,7 +18,13 @@ import { getConfig } from "./util/get-config";
 
 const app = new Hono();
 
-app.use(cors());
+// app.use(cors());
+
+const emitter = mitt<{
+  "file-change": { path: string };
+  "file-refresh": { path: string };
+  "full-rebuild": unknown;
+}>();
 
 // New Hono server.
 //
@@ -99,11 +106,13 @@ app.get("/watch", async (ctx) => {
         if (event.filename) {
           const name = join(store.path, event.filename);
           const realPath = pathCache.allPaths[name];
+          emitter.emit("file-change", { path: realPath });
           await cachedBuild({
             exact: realPath,
             emit: true,
             cache: true,
           });
+          emitter.emit("file-refresh", { path: realPath });
         }
       }
     })().catch((err) => {
@@ -166,7 +175,7 @@ app.get(
 
     const { files, log, fileTypeCache, ...config } = buildConfig;
 
-    return ctx.json({
+    const report = {
       emitted: {
         stats: emitted.stats,
         siteMap: emitted.siteMap,
@@ -176,7 +185,11 @@ app.get(
       stores,
       parsed,
       config,
-    });
+    };
+
+    emitter.emit("full-rebuild", report);
+
+    return ctx.json(report);
   }
 );
 
@@ -201,7 +214,7 @@ app.post(
 
     const { buildConfig, emitted, enrichments, extractions, parsed, stores } = await cachedBuild(body);
 
-    return ctx.json({
+    const report = {
       emitted: {
         stats: emitted.stats,
         siteMap: emitted.siteMap,
@@ -211,11 +224,19 @@ app.post(
       stores,
       parsed,
       buildConfig,
-    });
+    };
+
+    emitter.emit("full-rebuild", report);
+
+    return ctx.json(report);
   }
 );
 
-app.get("/*", async (ctx) => {
+app.get("/*", async (ctx, next) => {
+  if (ctx.req.path.startsWith("/ws")) {
+    await next();
+    return;
+  }
   let realPath = join(cwd(), ".iiif/build", ctx.req.path);
   if (realPath.endsWith("meta.json")) {
     realPath = join(cwd(), ".iiif/cache", ctx.req.path);
@@ -234,6 +255,7 @@ app.get("/*", async (ctx) => {
   return ctx.notFound();
 });
 
+// @ts-ignore
 if (import.meta.main) {
   await app.request("/build?cache=true&emit=true");
 }
@@ -242,4 +264,8 @@ export default {
   request: app.request,
   fetch: app.fetch,
   port: 7111,
+  _extra: {
+    emitter,
+    app,
+  },
 };
