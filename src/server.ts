@@ -331,12 +331,15 @@ app.post("/*", async (ctx) => {
 
   const file = await ctx.req.json();
   await fileHandler.saveJson(fullRealPath, file, true);
-  await cachedBuild({
-    exact: slug,
-    emit: true,
-    cache: true,
-  });
-  emitter.emit("file-refresh", { path: realPath });
+
+  if (!isWatching) {
+    await cachedBuild({
+      exact: slug,
+      emit: true,
+      cache: true,
+    });
+    emitter.emit("file-refresh", { path: realPath });
+  }
 
   return ctx.json({ saved: true });
 });
