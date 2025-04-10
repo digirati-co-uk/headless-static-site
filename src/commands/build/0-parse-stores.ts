@@ -7,14 +7,21 @@ import type { BuildConfig } from "../build.ts";
 import { defaultCacheDir } from "../generate.ts";
 
 interface ParseStoresState {
-  storeRequestCaches: Record<string, ReturnType<typeof createStoreRequestCache>>;
+  storeRequestCaches: Record<
+    string,
+    ReturnType<typeof createStoreRequestCache>
+  >;
 }
 
 const EMPTY_CACHE: ParseStoresState = {
   storeRequestCaches: {},
 };
 
-export async function parseStores(buildConfig: BuildConfig, cache: ParseStoresState = EMPTY_CACHE, customFs?: IFS) {
+export async function parseStores(
+  buildConfig: BuildConfig,
+  cache: ParseStoresState = EMPTY_CACHE,
+  customFs?: IFS,
+) {
   const {
     //
     config,
@@ -28,7 +35,10 @@ export async function parseStores(buildConfig: BuildConfig, cache: ParseStoresSt
   } = buildConfig;
 
   const storeResources: Record<string, ParsedResource[]> = {};
-  const storeRequestCaches: Record<string, ReturnType<typeof createStoreRequestCache>> = {};
+  const storeRequestCaches: Record<
+    string,
+    ReturnType<typeof createStoreRequestCache>
+  > = {};
   const filesToWatch: string[] = [];
 
   // If there are generated stores, add them.
@@ -49,7 +59,8 @@ export async function parseStores(buildConfig: BuildConfig, cache: ParseStoresSt
 
   for (const storeId of stores) {
     const requestCache =
-      cache.storeRequestCaches[storeId] || createStoreRequestCache(storeId, requestCacheDir, false, customFs);
+      cache.storeRequestCaches[storeId] ||
+      createStoreRequestCache(storeId, requestCacheDir, false, customFs);
     storeRequestCaches[storeId] = requestCache;
     storeResources[storeId] = [];
 

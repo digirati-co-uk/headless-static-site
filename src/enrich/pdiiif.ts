@@ -1,4 +1,3 @@
-import { createWriteStream, existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { convertManifest } from "pdiiif";
@@ -8,7 +7,7 @@ export const pdiiif: Enrichment = {
   name: "PDIIIF",
   types: ["Manifest"],
   async invalidate(resource, api) {
-    return !existsSync(join(api.files, "manifest.pdf"));
+    return !api.fileHandler.exists(join(api.files, "manifest.pdf"));
   },
   async handler(resource, api) {
     await mkdir(api.files, { recursive: true });
@@ -16,7 +15,9 @@ export const pdiiif: Enrichment = {
       id: resource.id,
       type: "Manifest",
     });
-    const buffer = createWriteStream(join(api.files, "manifest.pdf"));
+    const buffer = api.fileHandler.createWriteStream(
+      join(api.files, "manifest.pdf"),
+    );
     await convertManifest(p3Manifest as any, buffer, {});
     return {};
   },

@@ -24,6 +24,7 @@ export interface Store<T> {
     store: T,
     resource: ParsedResource,
     caches: ProtoResourceDirectory["caches.json"],
+    files: FileHandler,
   ): Promise<boolean>;
 
   load(

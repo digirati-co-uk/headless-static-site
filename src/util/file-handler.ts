@@ -1,9 +1,9 @@
+import type { StatOptions } from "node:fs";
 import { join, relative } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
 import type { IFS } from "unionfs";
 import { parse as parseYaml } from "yaml";
-import { isEmpty } from "./is-empty";
 import { makeProgressBar } from "./make-progress-bar";
 
 export class FileHandler {
@@ -28,15 +28,26 @@ export class FileHandler {
     return this.fs.existsSync(path);
   }
 
+  readdirSyncWithFileTypes(path: string) {
+    return this.fs.readdirSync(path, { withFileTypes: true });
+  }
+
+  isDirectory(path: string) {
+    return this.fs.statSync(path).isDirectory();
+  }
+
   dirIsEmpty(path: string) {
     const resolvePath = this.resolve(path);
-    const isEmptyOnDisk = isEmpty(resolvePath);
+    const isEmptyOnDisk = this.isEmpty(resolvePath);
 
     if (!isEmptyOnDisk) {
       return false;
     }
 
-    const allFiles = [...Array.from(this.openJsonMap.keys()), ...Array.from(this.openBinaryMap.keys())];
+    const allFiles = [
+      ...Array.from(this.openJsonMap.keys()),
+      ...Array.from(this.openBinaryMap.keys()),
+    ];
     return allFiles.filter((file) => file.startsWith(resolvePath)).length === 0;
   }
 
@@ -51,6 +62,14 @@ export class FileHandler {
     // console.log({ in: path, out, root: this.root });
 
     return out;
+  }
+
+  async readdir(dir: string) {
+    return this.fs.promises.readdir(dir);
+  }
+
+  createWriteStream(path: string, options?: any) {
+    return this.fs.createWriteStream(path, options);
   }
 
   exists(filePath: string) {
@@ -80,6 +99,27 @@ export class FileHandler {
 
   async copy(from: string, to: string, options: any) {
     this.copyTargets.set(to, { from, options });
+  }
+
+  async _copy(from: string, to: string, options: any) {
+    const file = this.fs.statSync(from);
+    if (file.isFile()) {
+      await this.fs.promises.copyFile(from, to, options);
+    } else if (file.isDirectory()) {
+      const allFiles = await this.fs.promises.readdir(from);
+
+      for (const file of allFiles) {
+        const srcPath = join(from, file);
+        const destPath = join(to, file);
+        const stats = await this.fs.promises.stat(srcPath);
+        if (stats.isFile()) {
+          await this.fs.promises.copyFile(srcPath, destPath, options);
+        } else if (stats.isDirectory()) {
+          await this.fs.promises.mkdir(destPath, { recursive: true });
+          await this._copy(srcPath, destPath, options);
+        }
+      }
+    }
   }
 
   async readFile(path: string) {
@@ -154,8 +194,6 @@ export class FileHandler {
   }
 
   async saveAll(force = false) {
-    const queue = new PQueue();
-
     // Open JSON
     const files = Array.from(this.openJsonMap.keys())
       .filter((k) => (force ? true : this.openJsonChanged.get(k)))
@@ -166,14 +204,18 @@ export class FileHandler {
       .filter((k) => (force ? true : this.openBinaryChanged.get(k)))
       .map((k) => [k, this.openBinaryMap.get(k)] as const);
 
-    const progress = makeProgressBar("Writing files", files.length + binaryFiles.length, this.ui);
+    const progress = makeProgressBar(
+      "Writing files",
+      files.length + binaryFiles.length,
+      this.ui,
+    );
 
     for (const [filePath, data] of files) {
-      queue.add(async () => await this.writeFile(filePath, JSON.stringify(data, null, 2)));
+      await this.writeFile(filePath, JSON.stringify(data, null, 2));
     }
 
     for (const [filePath, data] of binaryFiles) {
-      queue.add(async () => await this.writeFile(filePath, data));
+      await this.writeFile(filePath, data);
     }
 
     // Copy fields.
@@ -181,18 +223,26 @@ export class FileHandler {
     for (const key of copyKeys) {
       // biome-ignore lint/style/noNonNullAssertion: This is from the copyTargets map.
       const { from, options } = this.copyTargets.get(key)!;
-      queue.add(async () => await copy(from, key, options));
+      await this._copy(from, key, options);
     }
 
-    queue.on("completed", () => progress.increment());
+    // queue.on("completed", () => progress.increment());
 
-    await queue.onIdle();
+    // await queue.onEmpty();
     progress.stop();
 
     // Clear all copy targets.
     this.copyTargets.clear();
     this.openJsonChanged.clear();
     this.openBinaryChanged.clear();
+  }
+
+  async stat(path: string, options?: StatOptions) {
+    return this.fs.promises.stat(path, options);
+  }
+
+  isEmpty(path: string) {
+    return this.fs.readdirSync(path).length === 0;
   }
 
   async cachePathExists(to: string) {

@@ -12,7 +12,7 @@ export async function extract(
   }: {
     allResources: Array<ActiveResourceJson>;
   },
-  buildConfig: BuildConfig
+  buildConfig: BuildConfig,
 ) {
   const {
     options,
@@ -33,7 +33,12 @@ export async function extract(
   }
 
   const startTime = Date.now();
-  const requestCache = createStoreRequestCache("_extract", requestCacheDir);
+  const requestCache = createStoreRequestCache(
+    "_extract",
+    requestCacheDir,
+    false,
+    files.fs,
+  );
   const extractionConfigs: Record<string, any> = {};
   const stats: Record<string, number> = {};
   for (const extraction of allExtractions) {
@@ -41,7 +46,7 @@ export async function extract(
       const extractionConfig = config.config?.[extraction.id];
       extractionConfigs[extraction.id] = await extraction.configure(
         { config, build: buildConfig, fileHandler: files },
-        extractionConfig
+        extractionConfig,
       );
     } else {
       extractionConfigs[extraction.id] = config.config?.[extraction.id];
@@ -80,7 +85,10 @@ export async function extract(
 
       const resource = await cachedResource.attachVault();
 
-      let extractions = manifest.type === "Manifest" ? manifestExtractions : collectionExtractions;
+      let extractions =
+        manifest.type === "Manifest"
+          ? manifestExtractions
+          : collectionExtractions;
 
       // Add extra steps that might not be in already.
       if (runSteps) {
@@ -88,7 +96,10 @@ export async function extract(
         extractions = [...extractions];
         for (const step of runSteps) {
           const found = allExtractions.find((e) => e.id === step);
-          if (found?.types.includes(manifest.type) && !extractions.includes(found)) {
+          if (
+            found?.types.includes(manifest.type) &&
+            !extractions.includes(found)
+          ) {
             extractions.push(found);
           }
         }
@@ -103,7 +114,7 @@ export async function extract(
         const extractConfig = Object.assign(
           {},
           storeConfig,
-          config.stores[manifest.storeId].config?.[extraction.id] || {}
+          config.stores[manifest.storeId].config?.[extraction.id] || {},
         );
         const valid =
           !options.cache ||
@@ -115,7 +126,7 @@ export async function extract(
               build: buildConfig,
               fileHandler: files,
             },
-            extractConfig
+            extractConfig,
           ));
         if (valid) {
           log(`Running extract: ${extraction.name} for ${manifest.slug}`);
@@ -131,9 +142,10 @@ export async function extract(
               build: buildConfig,
               requestCache,
             },
-            extractConfig
+            extractConfig,
           );
-          stats[extraction.id] = (stats[extraction.id] || 0) + Date.now() - startExtract;
+          stats[extraction.id] =
+            (stats[extraction.id] || 0) + Date.now() - startExtract;
 
           cachedResource.handleResponse(result, extraction);
         }
@@ -163,7 +175,12 @@ export async function extract(
           const canvasCache = createCacheResource({
             resource: canvas,
             temp,
-            resourcePath: join(cacheDir, manifest.slug, "canvases", canvasIndex.toString()),
+            resourcePath: join(
+              cacheDir,
+              manifest.slug,
+              "canvases",
+              canvasIndex.toString(),
+            ),
             collections,
             parentManifest: manifest,
             canvasIndex,
@@ -177,7 +194,8 @@ export async function extract(
             const extractConfig = Object.assign(
               {},
               storeConfig,
-              config.stores[manifest.storeId].config?.[canvasExtraction.id] || {}
+              config.stores[manifest.storeId].config?.[canvasExtraction.id] ||
+                {},
             );
             const valid =
               !options.cache ||
@@ -189,7 +207,7 @@ export async function extract(
                   build: buildConfig,
                   fileHandler: files,
                 },
-                extractConfig
+                extractConfig,
               ));
             if (!valid) {
               continue;
@@ -206,9 +224,10 @@ export async function extract(
                 build: buildConfig,
                 requestCache,
               },
-              extractConfig
+              extractConfig,
             );
-            stats[canvasExtraction.id] = (stats[canvasExtraction.id] || 0) + Date.now() - startExtract;
+            stats[canvasExtraction.id] =
+              (stats[canvasExtraction.id] || 0) + Date.now() - startExtract;
 
             canvasCache.handleResponse(result, canvasExtraction);
           }
@@ -225,15 +244,17 @@ export async function extract(
             temp[canvasExtraction.id] &&
             temp[canvasExtraction.id][manifest.slug]
           ) {
-            const extractionConfig = extractionConfigs[canvasExtraction.id] || {};
+            const extractionConfig =
+              extractionConfigs[canvasExtraction.id] || {};
             const startExtract = Date.now();
             await canvasExtraction.collectManifest(
               manifest,
               temp[canvasExtraction.id][manifest.slug],
               { config, build: buildConfig, fileHandler: files },
-              extractionConfig
+              extractionConfig,
             );
-            stats[canvasExtraction.id] = (stats[canvasExtraction.id] || 0) + Date.now() - startExtract;
+            stats[canvasExtraction.id] =
+              (stats[canvasExtraction.id] || 0) + Date.now() - startExtract;
           }
         }
       } else {
@@ -256,14 +277,16 @@ export async function extract(
       const resp = await extraction.collect(
         temp[extraction.id],
         { config, build: buildConfig, fileHandler: files },
-        extractionConfig
+        extractionConfig,
       );
       if (extraction.injectManifest && resp && resp.temp) {
         const inject = extraction.injectManifest;
         for (const manifestSlug of Object.keys(resp.temp)) {
           queue.add(async () => {
             const extractionConfig = extractionConfigs[extraction.id] || {};
-            const foundManifest = allResources.find((r) => r.slug === manifestSlug);
+            const foundManifest = allResources.find(
+              (r) => r.slug === manifestSlug,
+            );
             if (!foundManifest) {
               return;
             }
@@ -279,9 +302,10 @@ export async function extract(
               foundManifest,
               resp.temp[manifestSlug],
               { config, build: buildConfig, fileHandler: files },
-              extractionConfig
+              extractionConfig,
             );
-            stats[extraction.id] = (stats[extraction.id] || 0) + Date.now() - startExtract;
+            stats[extraction.id] =
+              (stats[extraction.id] || 0) + Date.now() - startExtract;
             manifestCache.handleResponse(manifestInjected, extraction);
             await manifestCache.save();
           });

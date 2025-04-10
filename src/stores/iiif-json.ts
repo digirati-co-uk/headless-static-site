@@ -1,12 +1,9 @@
-import { existsSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { cwd } from "node:process";
 import { Vault } from "@iiif/helpers";
 import type { Manifest } from "@iiif/presentation-3";
-import { copy, pathExists } from "fs-extra/esm";
 import objectHash from "object-hash";
-import { isEmpty } from "../util/is-empty";
+import type { FileHandler } from "../library.ts";
 import { readAllFiles } from "../util/read-all-files";
 import { readFilteredFiles } from "../util/read-filtered-files.ts";
 import { rewritePath } from "../util/rewrite-path.ts";
@@ -31,7 +28,7 @@ export interface IIIFJSONStore {
 
 export const IIIFJSONStore: Store<IIIFJSONStore> = {
   async parse(store: IIIFJSONStore, api: StoreApi): Promise<ParsedResource[]> {
-    const allFiles = readFilteredFiles(store);
+    const allFiles = readFilteredFiles(api.files, store);
     const fileNameToPath = rewritePath(store);
     const newAllFiles: Array<[string, string]> = [];
     const subFileMap: Record<string, string[]> = {};
@@ -144,8 +141,11 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
           virtualCollectionsPath,
           `${fileWithoutExtension}.json`,
         );
-        await mkdir(dirname(filePath), { recursive: true });
-        await writeFile(filePath, JSON.stringify(virtualCollection, null, 2));
+        await api.files.mkdir(dirname(filePath));
+        await api.files.writeFile(
+          filePath,
+          JSON.stringify(virtualCollection, null, 2),
+        );
         await fs.loadJson(filePath);
 
         manifests.push({
@@ -179,12 +179,13 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
     store: IIIFJSONStore,
     resource: ParsedResource,
     caches: ProtoResourceDirectory["caches.json"],
+    files,
   ) {
     if (!caches.load) {
       return true;
     }
 
-    const key = await getKey(store, resource);
+    const key = await getKey(store, resource, files);
     return key !== caches.load;
   },
 
@@ -195,7 +196,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
     api,
   ): Promise<ProtoResourceDirectory> {
     const files = api.files;
-    const cacheKey = await getKey(store, resource);
+    const cacheKey = await getKey(store, resource, api.files);
     const json = await files.loadJson(resource.path, true);
     const vault = new Vault();
     const id = json.id || json["@id"];
@@ -206,15 +207,17 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
 
     if (store.subFiles) {
       const subFilesFolderPath = resource.path.replace(".json", "");
-      const subFilesFolder = existsSync(subFilesFolderPath);
+      const subFilesFolder = files.exists(subFilesFolderPath);
       if (subFilesFolder) {
         if (
           subFilesFolder &&
-          (await pathExists(subFilesFolderPath)) &&
-          !isEmpty(subFilesFolderPath)
+          (await api.files.cachePathExists(subFilesFolderPath)) &&
+          !api.files.isEmpty(subFilesFolderPath)
         ) {
-          const destination = join(cwd(), directory, "files");
-          await copy(subFilesFolderPath, destination, { overwrite: true });
+          const destination = files.resolve(join(directory, "files"));
+          await api.files.copy(subFilesFolderPath, destination, {
+            overwrite: true,
+          });
         }
       }
     }
@@ -231,7 +234,6 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
 
           const loadedManifest = await files.loadJson(
             join(
-              cwd(),
               resource.source.path,
               resource.source.relativePath || "",
               item.id,
@@ -281,18 +283,19 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
 export async function getKey(
   store: { subFiles?: boolean },
   resource: ParsedResource,
+  files: FileHandler,
 ) {
-  const file = await stat(resource.path);
+  const file = await files.stat(resource.path);
   const key = `${file.mtime}-${file.ctime}-${file.size}`;
 
   if (store.subFiles) {
     const subFilesFolderPath = resource.path.replace(".json", "");
-    const subFilesFolder = existsSync(subFilesFolderPath);
+    const subFilesFolder = files.exists(subFilesFolderPath);
     if (subFilesFolder) {
-      const allFiles = readAllFiles(subFilesFolderPath);
+      const allFiles = readAllFiles(files, subFilesFolderPath);
       const keys = [];
       for (const fileName of allFiles) {
-        const file = await stat(fileName);
+        const file = await files.stat(fileName);
         keys.push(`${file.mtime}-${file.ctime}-${file.size}`);
       }
 

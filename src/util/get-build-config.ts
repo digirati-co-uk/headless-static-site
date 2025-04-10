@@ -72,26 +72,31 @@ const storeTypes = {
   "iiif-remote": IIIFRemoteStore,
 };
 
-export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuiltIns) {
-  const config = await getConfig();
-  const env = builtIns.env || {};
+export async function getBuildConfig(
+  options: BuildOptions,
+  builtIns: BuildBuiltIns,
+) {
   const cwd = options.cwd || nodeCwd();
-  const { devBuild, defaultBuildDir, defaultCacheDir, devCache, topicFolder } = builtIns;
-
   const files = builtIns.fileHandler || new FileHandler(fs, cwd);
+  const config = await getConfig(files);
+  const env = builtIns.env || {};
+  const { devBuild, defaultBuildDir, defaultCacheDir, devCache, topicFolder } =
+    builtIns;
 
   const allRewrites = [...builtIns.rewrites];
   const allExtractions = [...builtIns.extractions];
   const allEnrichments = [...builtIns.enrichments];
 
-  const cacheDir = options.dev ? devCache : defaultCacheDir;
-  const buildDir = options.dev ? devBuild : options.out || defaultBuildDir;
+  const cacheDir = files.resolve(options.dev ? devCache : defaultCacheDir);
+  const buildDir = files.resolve(
+    options.dev ? devBuild : options.out || defaultBuildDir,
+  );
   const filesDir = join(cacheDir, "files");
 
   const slugs = Object.fromEntries(
     Object.entries(config.slugs || {}).map(([key, value]) => {
       return [key, { info: value, compile: compileSlugConfig(value) }];
-    })
+    }),
   );
 
   const stores = Object.keys(config.stores).filter((s) => {
@@ -120,7 +125,10 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     internalLogger = defaultLogger;
   };
 
-  const fileTypeCache = createFiletypeCache(join(cacheDir, "file-types.json"));
+  const fileTypeCache = createFiletypeCache(
+    join(cacheDir, "file-types.json"),
+    files,
+  );
 
   await loadScripts(options, log);
   const globals = getNodeGlobals();
@@ -140,19 +148,35 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const enrichments = allEnrichments.filter((e) => toRun.includes(e.id));
 
   const manifestRewrites = rewrites.filter((e) => e.types.includes("Manifest"));
-  const collectionRewrites = rewrites.filter((e) => e.types.includes("Collection"));
-  const manifestExtractions = extractions.filter((e) => e.types.includes("Manifest"));
-  const collectionExtractions = extractions.filter((e) => e.types.includes("Collection"));
-  const canvasExtractions = extractions.filter((e) => e.types.includes("Canvas"));
+  const collectionRewrites = rewrites.filter((e) =>
+    e.types.includes("Collection"),
+  );
+  const manifestExtractions = extractions.filter((e) =>
+    e.types.includes("Manifest"),
+  );
+  const collectionExtractions = extractions.filter((e) =>
+    e.types.includes("Collection"),
+  );
+  const canvasExtractions = extractions.filter((e) =>
+    e.types.includes("Canvas"),
+  );
 
-  const manifestEnrichment = enrichments.filter((e) => e.types.includes("Manifest"));
-  const collectionEnrichment = enrichments.filter((e) => e.types.includes("Collection"));
-  const canvasEnrichment = enrichments.filter((e) => e.types.includes("Canvas"));
+  const manifestEnrichment = enrichments.filter((e) =>
+    e.types.includes("Manifest"),
+  );
+  const collectionEnrichment = enrichments.filter((e) =>
+    e.types.includes("Collection"),
+  );
+  const canvasEnrichment = enrichments.filter((e) =>
+    e.types.includes("Canvas"),
+  );
 
   const requestCacheDir = join(cacheDir, "_requests");
   const virtualCacheDir = join(cacheDir, "_virtual");
 
-  const server = options.dev ? { url: env.DEV_SERVER || "http://localhost:7111" } : env.SERVER_URL || config.server;
+  const server = options.dev
+    ? { url: env.DEV_SERVER || "http://localhost:7111" }
+    : env.SERVER_URL || config.server;
 
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
@@ -166,14 +190,19 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     return resp;
   };
 
-  const requestCache = createStoreRequestCache("_thumbs", requestCacheDir);
+  const requestCache = createStoreRequestCache(
+    "_thumbs",
+    requestCacheDir,
+    false,
+    files.fs,
+  );
   const imageServiceLoader = new (class extends ImageServiceLoader {
     fetchService(serviceId: string): Promise<any & { real: boolean }> {
       return requestCache.fetch(serviceId);
     }
   })();
 
-  const topicsDir = join(cwd, topicFolder);
+  const topicsDir = files.resolve(topicFolder);
   const configUrl = typeof server === "string" ? server : server?.url;
   const makeId = ({ type, slug }: { type: string; slug: string }) => {
     return `${configUrl}/${slug}/${type.toLowerCase()}.json`;

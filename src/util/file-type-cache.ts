@@ -1,9 +1,8 @@
-import fs from "node:fs";
 import { join } from "node:path";
 import { cwd } from "node:process";
-import { loadJson } from "./load-json";
+import type { FileHandler } from "./file-handler";
 
-export function createFiletypeCache(cacheFile: string) {
+export function createFiletypeCache(cacheFile: string, fs: FileHandler) {
   let isLoaded = false;
   let didChange = false;
   let fileTypeCache: Record<string, string> = {};
@@ -11,10 +10,9 @@ export function createFiletypeCache(cacheFile: string) {
   const loadIfExists = async () => {
     if (isLoaded) return;
     isLoaded = true;
-    if (fs.existsSync(cacheFile)) {
-      const file = await fs.promises.readFile(cacheFile, "utf-8");
+    if (fs.exists(cacheFile)) {
       try {
-        fileTypeCache = JSON.parse(file);
+        fileTypeCache = await fs.loadJson(cacheFile);
       } catch (e) {
         console.error("Error parsing cache file", e);
         fileTypeCache = {};
@@ -30,14 +28,17 @@ export function createFiletypeCache(cacheFile: string) {
         return fileTypeCache[filePath];
       }
 
-      if (fs.existsSync(filePath)) {
-        if (filePath.endsWith("/_collection.yml") || filePath.endsWith("/_collection.yaml")) {
+      if (fs.exists(filePath)) {
+        if (
+          filePath.endsWith("/_collection.yml") ||
+          filePath.endsWith("/_collection.yaml")
+        ) {
           fileTypeCache[filePath] = "Collection";
           didChange = true;
           return fileTypeCache[filePath];
         }
 
-        let jsonResource = await loadJson(join(cwd(), filePath), true);
+        let jsonResource = await fs.loadJson(join(cwd(), filePath), true);
 
         if (jsonResource.default) {
           jsonResource = jsonResource.default;
@@ -65,7 +66,7 @@ export function createFiletypeCache(cacheFile: string) {
     },
     async save() {
       if (didChange) {
-        fs.promises.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
+        fs.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
       }
     },
   };

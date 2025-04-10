@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { join } from "node:path";
 import type { DescriptiveProperties } from "@iiif/presentation-3";
 import type { Extraction } from "../util/extract.ts";
@@ -25,12 +24,16 @@ type ExtractionConfig = {
   translate?: boolean;
 };
 
-export const extractMetadataAnalysis: Extraction<ExtractionConfig, ExtractFormat> = {
+export const extractMetadataAnalysis: Extraction<
+  ExtractionConfig,
+  ExtractFormat
+> = {
   id: "metadata-analysis",
   name: "Metadata Analysis",
   types: ["Manifest"],
   invalidate: async () => true,
   collect: async (temp, api, config) => {
+    const fs = api.fileHandler;
     const { valueThreshold = 3 } = config || {};
     const analysisFile: ExtractionResult = {
       foundKeys: {},
@@ -109,10 +112,10 @@ export const extractMetadataAnalysis: Extraction<ExtractionConfig, ExtractFormat
       }
     }
 
-    await fs.promises.mkdir(join(api.build.filesDir, "meta"), { recursive: true });
-    await fs.promises.writeFile(
+    await fs.mkdir(join(api.build.filesDir, "meta"));
+    await fs.writeFile(
       join(api.build.filesDir, "meta", "metadata-analysis.json"),
-      JSON.stringify(analysisFile, null, 2)
+      JSON.stringify(analysisFile, null, 2),
     );
   },
   handler: async (resource, api, config) => {
