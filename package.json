@@ -88,6 +88,7 @@
     "hono": "^4.6.16",
     "js-yaml": "^4.1.0",
     "keyword-extractor": "^0.0.28",
+    "memfs": "^4.17.0",
     "micromatch": "^4.0.5",
     "mitt": "^3.0.1",
     "object-hash": "^3.0.0",
