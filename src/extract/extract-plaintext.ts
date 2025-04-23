@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { join } from "node:path";
 import keywordExtractor from "keyword-extractor";
 import type { Extraction } from "../util/extract";
@@ -15,10 +14,21 @@ export const extractPlaintext: Extraction<ExtractPlaintextConfig> = {
     return true;
   },
   async collectManifest(manifest, temp, api, config) {
+    const fs = api.fileHandler;
     if (temp.canvases) {
-      const filesDir = join(api.build.cacheDir, manifest.slug, "files", "plaintext");
-      const keywordsFile = join(api.build.cacheDir, manifest.slug, "files", "keywords.txt");
-      await fs.promises.mkdir(filesDir, { recursive: true });
+      const filesDir = join(
+        api.build.cacheDir,
+        manifest.slug,
+        "files",
+        "plaintext",
+      );
+      const keywordsFile = join(
+        api.build.cacheDir,
+        manifest.slug,
+        "files",
+        "keywords.txt",
+      );
+      await fs.mkdir(filesDir);
 
       const allText: string[] = [];
 
@@ -26,8 +36,8 @@ export const extractPlaintext: Extraction<ExtractPlaintextConfig> = {
         const text = (canvas as any).plaintext;
         if (text) {
           const canvasFile = join(filesDir, `${canvasIdx}.txt`);
-          await fs.promises.mkdir(filesDir, { recursive: true });
-          await fs.promises.writeFile(canvasFile, text);
+          await fs.mkdir(filesDir);
+          await fs.writeFile(canvasFile, text);
           allText.push(text);
         }
       }
@@ -42,7 +52,7 @@ export const extractPlaintext: Extraction<ExtractPlaintextConfig> = {
         .join(" ");
 
       if (config.keywords && keywords) {
-        await fs.promises.writeFile(keywordsFile, keywords);
+        await fs.writeFile(keywordsFile, keywords);
       }
     }
   },

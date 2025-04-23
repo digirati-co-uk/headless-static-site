@@ -42,7 +42,12 @@ export async function loadStores(
   let invalidCount = 0;
 
   for (const store of stores) {
-    const requestCache = createStoreRequestCache(store, requestCacheDir);
+    const requestCache = createStoreRequestCache(
+      store,
+      requestCacheDir,
+      false,
+      files.fs,
+    );
     const storeConfig = config.stores[store];
     const resources = storeResources[store];
 
@@ -78,7 +83,12 @@ export async function loadStores(
       const storeType: Store<any> = (storeTypes as any)[storeConfig.type];
       const shouldRebuild =
         !options.cache ||
-        (await storeType.invalidate(storeConfig as any, resource, caches));
+        (await storeType.invalidate(
+          storeConfig as any,
+          resource,
+          caches,
+          files,
+        ));
 
       if (shouldRebuild) {
         log(`Building ${resource.path}`);

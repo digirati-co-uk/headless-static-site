@@ -1,10 +1,8 @@
-import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Vault, createThumbnailHelper } from "@iiif/helpers";
 import type { Collection, Manifest } from "@iiif/presentation-3";
 import PQueue from "p-queue";
 import { getValue } from "../../extract/extract-label-string.ts";
-import { isEmpty } from "../../util/is-empty.ts";
 import { makeProgressBar } from "../../util/make-progress-bar.ts";
 import type { ActiveResourceJson } from "../../util/store.ts";
 import type { BuildConfig } from "../build.ts";
@@ -19,7 +17,15 @@ export async function emit(
     allPaths?: Record<string, string>;
     idsToSlugs?: Record<string, { slug: string; type: string }>;
   },
-  { options, server, cacheDir, buildDir, log, imageServiceLoader, files }: BuildConfig
+  {
+    options,
+    server,
+    cacheDir,
+    buildDir,
+    log,
+    imageServiceLoader,
+    files,
+  }: BuildConfig,
 ) {
   if (!options.emit) {
     return {};
@@ -32,8 +38,8 @@ export async function emit(
     canvases: 0,
     total: 0,
   };
-  const queue = new PQueue();
-  const canvasQueue = new PQueue({ autoStart: false });
+  const queue = new PQueue({ concurrency: 1 });
+  const canvasQueue = new PQueue({ autoStart: false, concurrency: 1 });
 
   const siteMap: Record<
     string,
@@ -98,7 +104,9 @@ export async function emit(
       const manifestBuildDirectory = join(buildDir, slug);
 
       queue.add(async () => {
-        const url = manifest.saveToDisk ? `${configUrl}/${slug}/manifest.json` : manifest.path;
+        const url = manifest.saveToDisk
+          ? `${configUrl}/${slug}/manifest.json`
+          : manifest.path;
 
         const manifestBuildDirectory = join(buildDir, slug);
         const manifestCacheDirectory = join(cacheDir, slug);
@@ -162,7 +170,7 @@ export async function emit(
                   maxWidth: 512,
                   maxHeight: 512,
                 },
-                false
+                false,
               );
         }
         if (!thumbnail?.best && !resource.thumbnail) {
@@ -172,7 +180,7 @@ export async function emit(
               maxWidth: 512,
               maxHeight: 512,
             },
-            true
+            true,
           );
         }
 
@@ -199,7 +207,8 @@ export async function emit(
 
         // Store collection.
         if (manifest.storeId) {
-          storeCollections[manifest.storeId] = storeCollections[manifest.storeId] || [];
+          storeCollections[manifest.storeId] =
+            storeCollections[manifest.storeId] || [];
           storeCollections[manifest.storeId].push(snippet);
         }
 
@@ -214,7 +223,8 @@ export async function emit(
         await files.mkdir(manifestBuildDirectory);
 
         if (manifest.saveToDisk) {
-          const fileName = manifest.type === "Manifest" ? "manifest.json" : "collection.json";
+          const fileName =
+            manifest.type === "Manifest" ? "manifest.json" : "collection.json";
 
           // @todo allow raw preprocessing here.
           //   This is a weak part of the system for now.
@@ -268,16 +278,20 @@ export async function emit(
           // 3. Save the meta file to disk
           join(cacheDir, manifest.slug, "meta.json"),
           join(manifestBuildDirectory, "meta.json"),
-          { overwrite: true }
+          { overwrite: true },
         );
 
-        files.copy(join(cacheDir, manifest.slug, "indices.json"), join(manifestBuildDirectory, "indices.json"), {
-          overwrite: true,
-        });
+        files.copy(
+          join(cacheDir, manifest.slug, "indices.json"),
+          join(manifestBuildDirectory, "indices.json"),
+          {
+            overwrite: true,
+          },
+        );
 
         // 4. Copy the contents of `files/`
         const filesDir = join(cacheDir, manifest.slug, "files");
-        if (existsSync(filesDir) && !isEmpty(filesDir)) {
+        if (files.exists(filesDir) && !files.isEmpty(filesDir)) {
           files.copy(filesDir, manifestBuildDirectory, { overwrite: true });
         }
 
@@ -287,19 +301,27 @@ export async function emit(
       // Canvases.
       canvasQueue.add(async () => {
         const canvasesDir = join(cacheDir, manifest.slug, "canvases");
-        if (existsSync(canvasesDir)) {
+        if (files.exists(canvasesDir)) {
           siteMap[manifest.slug].hasCanvasData = true;
-          const canvasList = readdirSync(canvasesDir);
+          const canvasList = await files.readdir(canvasesDir);
           for (const canvasIndex of canvasList) {
             const canvasDir = join(canvasesDir, canvasIndex);
             const metaFile = join(canvasDir, "meta.json");
-            const canvasBuildDirectory = join(manifestBuildDirectory, "canvases", canvasIndex);
+            const canvasBuildDirectory = join(
+              manifestBuildDirectory,
+              "canvases",
+              canvasIndex,
+            );
             await files.mkdir(canvasBuildDirectory);
-            if (existsSync(metaFile)) {
-              files.copy(join(canvasDir, "meta.json"), join(canvasBuildDirectory, "meta.json"), { overwrite: true });
+            if (files.exists(metaFile)) {
+              files.copy(
+                join(canvasDir, "meta.json"),
+                join(canvasBuildDirectory, "meta.json"),
+                { overwrite: true },
+              );
             }
             const filesDir = join(canvasesDir, canvasIndex, "files");
-            if (existsSync(filesDir) && !isEmpty(filesDir)) {
+            if (files.exists(filesDir) && !files.isEmpty(filesDir)) {
               files.copy(filesDir, canvasBuildDirectory, { overwrite: true });
             }
 

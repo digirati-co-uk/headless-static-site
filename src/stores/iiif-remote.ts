@@ -1,10 +1,7 @@
-import fs from "node:fs";
 import { join } from "node:path";
-import { cwd } from "node:process";
 import { Vault } from "@iiif/helpers";
 import type { Manifest } from "@iiif/presentation-3";
 import { copy, pathExists } from "fs-extra/esm";
-import { isEmpty } from "../util/is-empty";
 import {
   type ParsedResource,
   type ProtoResourceDirectory,
@@ -22,6 +19,7 @@ export interface IIIFRemoteStore {
 
 export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
   async parse(store, api) {
+    const fs = api.files;
     if (store.urls) {
       const toReturn = [];
       for (const url of store.urls) {
@@ -72,7 +70,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         overrides: store.overrides,
       };
 
-      if (override && fs.existsSync(join(cwd(), override))) {
+      if (override && fs.exists(override)) {
         source = {
           type: "disk",
           path: override,
@@ -129,13 +127,14 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
     store: IIIFRemoteStore,
     resource: ParsedResource,
     caches: ProtoResourceDirectory["caches.json"],
+    fs,
   ) {
     if (!caches.load && !caches.urls) {
       return true;
     }
 
     if (resource.source.type === "disk") {
-      const file = await fs.promises.stat(resource.source.path);
+      const file = await fs.stat(resource.source.path);
       const key = `${file.mtime}-${file.ctime}-${file.size}`;
       return key !== caches.load;
     }
@@ -148,6 +147,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
   },
   async load(store: IIIFRemoteStore, resource: ParsedResource, directory, api) {
     const files = api.files;
+    const fs = api.files;
 
     const json =
       resource.source.type === "disk"
@@ -167,18 +167,18 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
     // Copy any sub files.
     const caches: any = {};
     if (resource.source.type === "disk") {
-      const file = await fs.promises.stat(resource.source.path);
+      const file = await fs.stat(resource.source.path);
       caches.load = `${file.mtime}-${file.ctime}-${file.size}`;
 
       const pathWithoutExtension = resource.source.path.replace(".json", "");
-      const subFilesFolder = fs.existsSync(join(cwd(), pathWithoutExtension));
+      const subFilesFolder = fs.exists(pathWithoutExtension);
       if (subFilesFolder) {
         if (
           subFilesFolder &&
           (await pathExists(resource.slug)) &&
-          !isEmpty(resource.slug)
+          !files.isEmpty(resource.slug)
         ) {
-          const destination = join(cwd(), directory, "files");
+          const destination = join(files.root, directory, "files");
           await copy(resource.slug, destination, { overwrite: true });
         }
       }

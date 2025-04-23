@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getValue } from "@iiif/helpers";
 import type { InternationalString } from "@iiif/presentation-3";
@@ -39,7 +37,10 @@ type SingleRecord = {
 
 type TopicRecord = Record<`topic_${string}`, string[]>;
 
-export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundTopics: string[] }> = {
+export const enrichTypesense: Enrichment<
+  unknown,
+  { record: SingleRecord; foundTopics: string[] }
+> = {
   id: "typesense-manifests",
   name: "Typesense manifest collection",
   types: ["Manifest", "Collection"],
@@ -48,6 +49,7 @@ export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundT
   },
 
   async handler(resource, api) {
+    const fs = api.fileHandler;
     const id = resource.slug.replace("manifests/", "");
     const meta = await api.meta.value;
     const indices = await api.indices.value;
@@ -60,8 +62,8 @@ export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundT
 
     let plaintext = "";
     const keywordsFile = join(api.files, "keywords.txt");
-    if (existsSync(keywordsFile)) {
-      plaintext = await readFile(keywordsFile, "utf-8");
+    if (fs.exists(keywordsFile)) {
+      plaintext = (await fs.readFile(keywordsFile)).toString("utf-8");
     }
     const collections = meta.partOfCollections || [];
 
@@ -87,6 +89,7 @@ export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundT
   },
 
   async collect(temp, api, config) {
+    const fs = api.fileHandler;
     if (!temp) {
       return;
     }
@@ -112,10 +115,17 @@ export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundT
       }
     }
 
-    await mkdir(typeSenseDir, { recursive: true });
+    await fs.mkdir(typeSenseDir);
 
     // Write the schema
-    await writeFile(schemaFile, JSON.stringify({ ...schema, fields: [...schema.fields, ...topicSchema] }, null, 2));
+    await fs.writeFile(
+      schemaFile,
+      JSON.stringify(
+        { ...schema, fields: [...schema.fields, ...topicSchema] },
+        null,
+        2,
+      ),
+    );
 
     const jsonList = Object.values(temp)
       .map((record) => {
@@ -123,6 +133,6 @@ export const enrichTypesense: Enrichment<unknown, { record: SingleRecord; foundT
       })
       .join("\n");
 
-    await writeFile(dataFile, jsonList);
+    await fs.writeFile(dataFile, jsonList);
   },
 };

@@ -22,6 +22,7 @@ interface EnrichmentInvalidateApi {
   config: IIIFRC;
   resource: any;
   caches: LazyValue<Record<string, any>>;
+  files: string;
   fileHandler: FileHandler;
 }
 
@@ -45,8 +46,23 @@ export interface Enrichment<Config = any, Temp = any> {
   name: string;
   types: string[];
   close?: (config: Config) => Promise<void>;
-  collect?: (temp: Record<string, Temp>, api: EnrichmentSetupApi, config: Partial<Config>) => Promise<void>;
-  configure?: (api: EnrichmentSetupApi, config: Partial<Config>) => Promise<Config>;
-  invalidate: (resource: ActiveResourceJson, api: EnrichmentInvalidateApi, config: Config) => Promise<boolean>;
-  handler(resource: ActiveResourceJson, api: EnrichmentHandlerApi, config: Config): Promise<EnrichmentResult<Temp>>;
+  collect?: (
+    temp: Record<string, Temp>,
+    api: EnrichmentSetupApi,
+    config: Partial<Config>,
+  ) => Promise<void>;
+  configure?: (
+    api: EnrichmentSetupApi,
+    config: Partial<Config>,
+  ) => Promise<Config>;
+  invalidate: (
+    resource: ActiveResourceJson,
+    api: EnrichmentInvalidateApi,
+    config: Config,
+  ) => Promise<boolean>;
+  handler(
+    resource: ActiveResourceJson,
+    api: EnrichmentHandlerApi,
+    config: Config,
+  ): Promise<EnrichmentResult<Temp>>;
 }

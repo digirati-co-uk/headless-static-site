@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { cwd } from "node:process";
 import type { Collection } from "@iiif/presentation-3";
 import { parse } from "yaml";
+import { FileHandler } from "./file-handler.ts";
 import type { SlugConfig } from "./slug-engine.ts";
 
 export interface IIIFRC {
@@ -56,19 +57,31 @@ const DEFAULT_CONFIG: IIIFRC = {
 
 let config: IIIFRC | null = null;
 
-export const supportedConfigFiles = [".iiifrc.yml", ".iiifrc.yaml", "iiif.config.js", "iiif.config.ts"];
+export const supportedConfigFiles = [
+  ".iiifrc.yml",
+  ".iiifrc.yaml",
+  "iiif.config.js",
+  "iiif.config.ts",
+];
 
-export async function getConfig() {
+export async function getConfig(
+  files: FileHandler = new FileHandler(fs, cwd(), true),
+) {
   if (!config) {
     for (const configFileName of supportedConfigFiles) {
-      if (fs.existsSync(join(cwd(), configFileName))) {
-        if (configFileName.endsWith(".yaml") || configFileName.endsWith(".yml")) {
-          const file = await fs.promises.readFile(join(cwd(), configFileName), "utf8");
+      if (files.exists(files.resolve(configFileName))) {
+        if (
+          configFileName.endsWith(".yaml") ||
+          configFileName.endsWith(".yml")
+        ) {
+          const file = (
+            await files.readFile(files.resolve(configFileName))
+          ).toString();
           config = parse(file);
           break;
         }
 
-        config = await import(join(cwd(), configFileName));
+        config = await import(files.resolve(configFileName));
         break;
       }
     }

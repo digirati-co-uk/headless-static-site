@@ -23,7 +23,10 @@ import { IIIFRemoteStore } from "../stores/iiif-remote";
 import type { Enrichment } from "../util/enrich.ts";
 import type { Extraction } from "../util/extract.ts";
 import { FileHandler } from "../util/file-handler.ts";
-import { type BuildBuiltIns, getBuildConfig } from "../util/get-build-config.ts";
+import {
+  type BuildBuiltIns,
+  getBuildConfig,
+} from "../util/get-build-config.ts";
 import type { Rewrite } from "../util/rewrite.ts";
 import { parseStores } from "./build/0-parse-stores.ts";
 import { loadStores } from "./build/1-load-stores.ts";
@@ -158,7 +161,7 @@ export async function build(
     fileHandler?: FileHandler;
     pathCache?: { allPaths: Record<string, string> };
     storeRequestCaches?: Record<string, any>;
-  } = {}
+  } = {},
 ) {
   const buildConfig = await getBuildConfig(
     {
@@ -167,12 +170,13 @@ export async function build(
       enrich: true,
       dev: false,
       emit: true,
+      cwd: fileHandler.root,
       ...options,
     },
     {
       ...builtIns,
       fileHandler,
-    }
+    },
   );
 
   if (buildConfig.options.generate) {
@@ -181,25 +185,39 @@ export async function build(
 
   const { time } = buildConfig;
 
-  await fs.promises.mkdir(buildConfig.cacheDir, { recursive: true });
-  await fs.promises.mkdir(buildConfig.buildDir, { recursive: true });
-  await fs.promises.mkdir(buildConfig.requestCacheDir, { recursive: true });
+  await fileHandler.mkdir(buildConfig.cacheDir);
+  await fileHandler.mkdir(buildConfig.filesDir);
+  await fileHandler.mkdir(buildConfig.buildDir);
+  await fileHandler.mkdir(buildConfig.requestCacheDir);
 
   // Parse stores.
   const parsed = await time(
     "Parsed stores",
-    parseStores(buildConfig, { storeRequestCaches: storeRequestCaches || {} })
+    parseStores(
+      buildConfig,
+      { storeRequestCaches: storeRequestCaches || {} },
+      fileHandler.fs,
+    ),
   );
 
   // Load stores.
-  const stores = await time("Loaded stores", loadStores(parsed, buildConfig));
+  const stores = await time(
+    "Loaded stores",
+    loadStores(parsed, buildConfig, fileHandler.fs),
+  );
 
   pathCache.allPaths = { ...stores.allPaths };
 
   // Extract.
-  const extractions = await time("Extracting resources", extract(stores, buildConfig));
+  const extractions = await time(
+    "Extracting resources",
+    extract(stores, buildConfig),
+  );
 
-  const enrichments = await time("Enriching resources", enrich(stores, buildConfig));
+  const enrichments = await time(
+    "Enriching resources",
+    enrich(stores, buildConfig),
+  );
 
   const emitted = await time("Emitting files", emit(stores, buildConfig));
 
@@ -216,8 +234,8 @@ export async function build(
         indexCollection: emitted.indexCollection,
         siteMap: emitted.siteMap,
       },
-      buildConfig
-    )
+      buildConfig,
+    ),
   );
 
   await buildConfig.fileTypeCache.save();
@@ -233,6 +251,7 @@ export async function build(
     stores,
     parsed,
     buildConfig,
+    fileHandler,
   };
 }
 

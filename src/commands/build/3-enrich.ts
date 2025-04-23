@@ -7,7 +7,10 @@ import { createStoreRequestCache } from "../../util/store-request-cache.ts";
 import type { ActiveResourceJson } from "../../util/store.ts";
 import type { BuildConfig } from "../build.ts";
 
-export async function enrich({ allResources }: { allResources: Array<ActiveResourceJson> }, buildConfig: BuildConfig) {
+export async function enrich(
+  { allResources }: { allResources: Array<ActiveResourceJson> },
+  buildConfig: BuildConfig,
+) {
   const {
     options,
     config,
@@ -41,7 +44,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       const start = Date.now();
       enrichmentConfigs[enrichment.id] = await enrichment.configure(
         { config, build: buildConfig, fileHandler: files },
-        enrichmentConfig
+        enrichmentConfig,
       );
       stats.configiure[enrichment.id] = Date.now() - start;
     } else {
@@ -56,7 +59,12 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
   }
 
   const progress = makeProgressBar("Enrichment", totalResources, options.ui);
-  const requestCache = createStoreRequestCache("_enrich", requestCacheDir);
+  const requestCache = createStoreRequestCache(
+    "_enrich",
+    requestCacheDir,
+    false,
+    files.fs,
+  );
 
   const processManifest = async (manifest: ActiveResourceJson) => {
     if (!manifest.vault) {
@@ -77,7 +85,8 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
     const resource = await cachedResource.attachVault();
     const builder = await cachedResource.getVaultBuilder();
 
-    let enrichmentList = manifest.type === "Manifest" ? manifestEnrichment : collectionEnrichment;
+    let enrichmentList =
+      manifest.type === "Manifest" ? manifestEnrichment : collectionEnrichment;
 
     // Add extra steps that might not be in already.
     if (runSteps) {
@@ -85,7 +94,10 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       enrichmentList = [...enrichmentList];
       for (const step of runSteps) {
         const found = allEnrichments.find((e) => e.id === step);
-        if (found?.types.includes(manifest.type) && !enrichmentList.includes(found)) {
+        if (
+          found?.types.includes(manifest.type) &&
+          !enrichmentList.includes(found)
+        ) {
           enrichmentList.push(found);
         }
       }
@@ -114,7 +126,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       const enrichmentConfig = Object.assign(
         {},
         storeConfig,
-        config.stores[manifest.storeId].config?.[enrichment.id] || {}
+        config.stores[manifest.storeId].config?.[enrichment.id] || {},
       );
 
       const valid =
@@ -126,8 +138,9 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
             resource,
             config,
             files: filesDir,
+            fileHandler: files,
           },
-          enrichmentConfig
+          enrichmentConfig,
         ));
       if (!valid) {
         // console.log('Skipping "' + enrichment.name + '" for "' + manifest.slug + '" because it is not modified');
@@ -147,11 +160,12 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
           requestCache,
           fileHandler: files,
         },
-        enrichmentConfig
+        enrichmentConfig,
       );
 
       cachedResource.handleResponse(result, enrichment);
-      stats.run[enrichment.id] = (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
+      stats.run[enrichment.id] =
+        (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
     };
 
     const processedEnrichments = [];
@@ -168,7 +182,7 @@ export async function enrich({ allResources }: { allResources: Array<ActiveResou
       throw new Error(
         `Enrichment failed for ${errors.length} manifest(s):
 
-${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")}`
+${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")}`,
       );
     }
 
@@ -183,7 +197,10 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
       canvasEnrichmentSteps = [...canvasEnrichmentSteps];
       for (const step of runSteps) {
         const found = allEnrichments.find((e) => e.id === step);
-        if (found?.types.includes("Canvas") && !canvasEnrichmentSteps.includes(found)) {
+        if (
+          found?.types.includes("Canvas") &&
+          !canvasEnrichmentSteps.includes(found)
+        ) {
           canvasEnrichmentSteps.push(found);
         }
       }
@@ -197,7 +214,12 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
         const canvas = canvases[canvasIndex];
         const cachedCanvasResource = createCacheResource({
           resource: canvases[canvasIndex],
-          resourcePath: join(cacheDir, manifest.slug, "canvases", canvasIndex.toString()),
+          resourcePath: join(
+            cacheDir,
+            manifest.slug,
+            "canvases",
+            canvasIndex.toString(),
+          ),
           temp,
           collections: {},
           canvasIndex,
@@ -211,7 +233,7 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
           const enrichmentConfig = Object.assign(
             {},
             storeConfig,
-            config.stores[manifest.storeId].config?.[enrichment.id] || {}
+            config.stores[manifest.storeId].config?.[enrichment.id] || {},
           );
           const valid =
             !options.cache ||
@@ -222,8 +244,9 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
                 resource: canvas,
                 config,
                 files: cachedCanvasResource.filesDir,
+                fileHandler: files,
               },
-              enrichmentConfig
+              enrichmentConfig,
             ));
           const canvasResource: ActiveResourceJson = {
             id: canvas.id,
@@ -253,12 +276,13 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
               requestCache,
               fileHandler: files,
             },
-            enrichmentConfig
+            enrichmentConfig,
           );
 
           cachedCanvasResource.handleResponse(result, enrichment);
           cachedResource.didChange(result.didChange);
-          stats.run[enrichment.id] = (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
+          stats.run[enrichment.id] =
+            (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
         };
         manifestQueue.add(async () => {
           const processedEnrichments = [];
@@ -276,7 +300,7 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
             throw new Error(
               `Enrichment failed for ${errors.length} manifest(s):
 
-${errors.map((e, n) => `  ${n + 1}) ${(e as any)?.reason?.message}`).join(", ")}`
+${errors.map((e, n) => `  ${n + 1}) ${(e as any)?.reason?.message}`).join(", ")}`,
             );
           }
 
@@ -313,9 +337,10 @@ ${errors.map((e, n) => `  ${n + 1}) ${(e as any)?.reason?.message}`).join(", ")}
         await enrichment.collect(
           temp[enrichment.id],
           { config, build: buildConfig, fileHandler: files },
-          enrichmentConfig
+          enrichmentConfig,
         );
-        stats.run[enrichment.id] = (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
+        stats.run[enrichment.id] =
+          (stats.run[enrichment.id] || 0) + (Date.now() - startTime);
       }
     });
   }

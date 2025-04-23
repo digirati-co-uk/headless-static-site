@@ -1,18 +1,26 @@
+import fs from "node:fs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { cwd } from "node:process";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { FileHandler } from "../library.ts";
 import { getConfig } from "../util/get-config.ts";
 import { loadJson } from "../util/load-json.ts";
 import { resolveFromSlug } from "../util/resolve-from-slug.ts";
-import { compileReverseSlugConfig, compileSlugConfig } from "../util/slug-engine.ts";
+import {
+  compileReverseSlugConfig,
+  compileSlugConfig,
+} from "../util/slug-engine.ts";
 
 type ValidateOptions = unknown;
 
-export async function validateCommand(options: ValidateOptions, command?: Command) {
+export async function validateCommand(
+  options: ValidateOptions,
+  command?: Command,
+) {
   let didError = false;
-  const config = await getConfig();
+  const config = await getConfig(new FileHandler(fs, cwd(), true));
   if (config.slugs) {
     const slugs = Object.keys(config.slugs);
     for (const slugName of slugs) {
@@ -39,7 +47,9 @@ export async function validateCommand(options: ValidateOptions, command?: Comman
         if (!reverseResult || reverseResult !== example) {
           didError = true;
           console.log(chalk.red(prefix), chalk.red`⨯ failed to reverse`);
-          console.log(`\n    Found:    ${reverseResult}\n    Expected: ${example} \n`);
+          console.log(
+            `\n    Found:    ${reverseResult}\n    Expected: ${example} \n`,
+          );
           continue;
         }
 
@@ -65,13 +75,22 @@ export async function validateCommand(options: ValidateOptions, command?: Comman
         if (item.type === "Manifest") {
           const expectedPath = join(cwd(), ".iiif/build", key, "manifest.json");
           if (!existsSync(expectedPath)) {
-            console.log(chalk.red`  - Missing ${chalk.white(key)} at ${expectedPath}`);
+            console.log(
+              chalk.red`  - Missing ${chalk.white(key)} at ${expectedPath}`,
+            );
           }
         }
         if (item.type === "Collection") {
-          const expectedPath = join(cwd(), ".iiif/build", key, "collection.json");
+          const expectedPath = join(
+            cwd(),
+            ".iiif/build",
+            key,
+            "collection.json",
+          );
           if (!existsSync(expectedPath)) {
-            console.log(chalk.red`  - Missing ${chalk.white(key)} at ${expectedPath}`);
+            console.log(
+              chalk.red`  - Missing ${chalk.white(key)} at ${expectedPath}`,
+            );
             didError = true;
           }
         }
