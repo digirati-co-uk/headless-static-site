@@ -65,7 +65,10 @@ describe("warm remote stores", () => {
       });
     });
 
-    vi.stubGlobal("fetch", fetchMock as any);
+    const globalFetch = vi.fn(async () => {
+      throw new Error("global fetch must not be called");
+    });
+    vi.stubGlobal("fetch", globalFetch as any);
 
     const buildConfig: any = {
       stores: ["remote"],
@@ -93,6 +96,7 @@ describe("warm remote stores", () => {
         respectRetryAfter: true,
       },
       log: () => undefined,
+      fetch: fetchMock,
     };
 
     const stats = await warmRemoteStores(buildConfig, { storeRequestCaches: {} });
@@ -101,5 +105,6 @@ describe("warm remote stores", () => {
     expect(stats.urls).toBe(3);
     expect(stats.failures).toBe(0);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 });

@@ -51,12 +51,20 @@ export async function warmRemoteStores(
     const requestCache =
       useNetworkCache && state.storeRequestCaches[storeId]
         ? state.storeRequestCaches[storeId]
-        : createStoreRequestCache(storeId, requestCacheDir, !useNetworkCache, undefined, network, (event) => {
-            progress?.onFetch?.({
-              ...event,
-              phase: "warm-remote",
-            });
-          });
+        : createStoreRequestCache(
+            storeId,
+            requestCacheDir,
+            !useNetworkCache,
+            undefined,
+            network,
+            (event) => {
+              progress?.onFetch?.({
+                ...event,
+                phase: "warm-remote",
+              });
+            },
+            buildConfig.fetch
+          );
     state.storeRequestCaches[storeId] = requestCache;
 
     const queue = new PQueue({ concurrency: network.concurrency });

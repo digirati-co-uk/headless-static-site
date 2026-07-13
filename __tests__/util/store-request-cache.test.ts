@@ -113,6 +113,38 @@ describe("store request cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test("uses an injected request function for retries without falling back to global fetch", async () => {
+    cacheDir = await mkdtemp(join(tmpdir(), "iiif-hss-request-cache-"));
+    const url = "https://example.org/injected.json";
+    const responses = [mockJsonResponse({}, 429, { "retry-after": "0" }), mockJsonResponse({ value: 3 })];
+    const request = vi.fn(async () => responses.shift() || mockJsonResponse({ value: 3 }));
+    const globalFetch = vi.fn(async () => {
+      throw new Error("global fetch must not be called");
+    });
+    vi.stubGlobal("fetch", globalFetch as any);
+
+    const cache = createStoreRequestCache(
+      "store",
+      cacheDir,
+      true,
+      undefined,
+      {
+        minDelayMs: 0,
+        maxRetries: 1,
+        baseDelayMs: 1,
+        maxDelayMs: 2,
+        jitterRatio: 0,
+        retryStatuses: [429],
+      },
+      undefined,
+      request as any
+    );
+
+    expect(await cache.fetch(url)).toEqual({ value: 3 });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
   test("coalesces in-flight requests for the same URL", async () => {
     cacheDir = await mkdtemp(join(tmpdir(), "iiif-hss-request-cache-"));
     const url = "https://example.org/in-flight.json";

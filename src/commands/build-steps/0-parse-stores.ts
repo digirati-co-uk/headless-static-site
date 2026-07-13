@@ -47,8 +47,7 @@ export async function parseStores(
     collectionRewrites,
     files,
   } = buildConfig;
-  const resolveFilePath =
-    typeof files.resolve === "function" ? files.resolve.bind(files) : (path: string) => path;
+  const resolveFilePath = typeof files.resolve === "function" ? files.resolve.bind(files) : (path: string) => path;
 
   const storeResources: Record<string, ParsedResource[]> = {};
   const storeRequestCaches: Record<string, ReturnType<typeof createStoreRequestCache>> = {};
@@ -59,9 +58,7 @@ export async function parseStores(
       {
         ...store,
         ...(store.type === "iiif-json" && store.path ? { path: resolveFilePath(store.path) } : {}),
-        ...(store.type === "iiif-remote" && store.overrides
-          ? { overrides: resolveFilePath(store.overrides) }
-          : {}),
+        ...(store.type === "iiif-remote" && store.overrides ? { overrides: resolveFilePath(store.overrides) } : {}),
       },
     ])
   );
@@ -106,12 +103,20 @@ export async function parseStores(
     const requestCache =
       useNetworkCache && cache.storeRequestCaches[storeId]
         ? cache.storeRequestCaches[storeId]
-        : createStoreRequestCache(storeId, resolveFilePath(requestCacheDir), !useNetworkCache, customFs, network, (event) => {
-            progress?.onFetch?.({
-              ...event,
-              phase: "parse-stores",
-            });
-          });
+        : createStoreRequestCache(
+            storeId,
+            resolveFilePath(requestCacheDir),
+            !useNetworkCache,
+            customFs,
+            network,
+            (event) => {
+              progress?.onFetch?.({
+                ...event,
+                phase: "parse-stores",
+              });
+            },
+            buildConfig.fetch
+          );
     storeRequestCaches[storeId] = requestCache;
     storeResources[storeId] = [];
 

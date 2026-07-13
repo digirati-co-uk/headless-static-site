@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { defaultBuiltIns } from "../../src/commands/build";
 import { getBuildConfig } from "../../src/util/get-build-config";
 
@@ -14,6 +14,7 @@ describe("getBuildConfig search indexNames", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await rm(testDir, { recursive: true, force: true });
     (global as any).__hss = undefined;
   });
@@ -159,6 +160,31 @@ describe("getBuildConfig search indexNames", () => {
     expect(buildConfig.requestCacheDir).toBe(".iiif/cache/_requests");
     expect(devConfig.requestCacheDir).toBe(".iiif/cache/_requests");
     expect(devConfig.cacheDir).toBe(".iiif/dev/cache");
+  });
+
+  test("uses the injected fetch for image service requests", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+    const request = vi.fn(async () => new Response(JSON.stringify({ type: "ImageService3" })));
+    const globalFetch = vi.fn(async () => {
+      throw new Error("global fetch must not be called");
+    });
+    vi.stubGlobal("fetch", globalFetch as any);
+
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here", networkCache: false },
+      { ...defaultBuiltIns, customConfig: config as any, fetch: request as any }
+    );
+
+    await result.imageServiceLoader.fetchService("https://example.org/iiif/info.json");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 
   test("derives bounded queue concurrency defaults", async () => {

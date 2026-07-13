@@ -21,6 +21,7 @@ interface GenerateOptions {
   cache?: boolean;
   networkCache?: boolean;
   ui?: boolean;
+  fetch?: typeof globalThis.fetch;
 }
 
 const defaultGenerators: IIIFGenerator[] = [
@@ -72,7 +73,15 @@ export async function generateCommand(options: GenerateOptions, command?: Comman
       const cacheDirectory = join(generatorDirectory, generatorName);
       const resourcesDirectory = join(cacheDirectory, "resources");
       const useNetworkCache = options.networkCache ?? true;
-      const requestCache = createStoreRequestCache("requests", cacheDirectory, !useNetworkCache, undefined, network);
+      const requestCache = createStoreRequestCache(
+        "requests",
+        cacheDirectory,
+        !useNetworkCache,
+        undefined,
+        network,
+        undefined,
+        options.fetch
+      );
 
       await fs.promises.mkdir(cacheDirectory, { recursive: true });
       await fs.promises.mkdir(buildDirectory, { recursive: true });

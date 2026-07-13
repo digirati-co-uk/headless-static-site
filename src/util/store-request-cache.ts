@@ -83,7 +83,8 @@ export function createStoreRequestCache(
   noCache = false,
   customFs?: IFS,
   networkConfig?: NetworkConfig,
-  onProgress?: (event: StoreRequestCacheProgressEvent) => void
+  onProgress?: (event: StoreRequestCacheProgressEvent) => void,
+  request: typeof globalThis.fetch = globalThis.fetch
 ) {
   const network = resolveNetworkConfig(networkConfig);
   const fs = customFs?.promises || nfs.promises;
@@ -165,7 +166,7 @@ export function createStoreRequestCache(
     }
 
     release();
-    return fetch(url, options);
+    return request(url, options);
   }
 
   async function requestJson(url: string, options?: RequestInit) {

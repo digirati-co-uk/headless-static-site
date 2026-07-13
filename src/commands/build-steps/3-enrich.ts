@@ -140,7 +140,8 @@ export async function enrich(
         ...event,
         phase: "enrich-resources",
       });
-    }
+    },
+    buildConfig.fetch
   );
 
   const processManifest = async (manifest: ActiveResourceJson) => {

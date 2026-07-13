@@ -49,7 +49,8 @@ export async function extract(
         ...event,
         phase: "extract-resources",
       });
-    }
+    },
+    buildConfig.fetch
   );
   const extractionConfigs: Record<string, any> = {};
   const stats: Record<string, number> = {};

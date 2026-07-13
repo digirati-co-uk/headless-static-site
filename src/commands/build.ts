@@ -325,6 +325,7 @@ export async function build(
     customConfig,
     customConfigSource,
     progress,
+    fetch,
   }: {
     fileHandler?: FileHandler;
     pathCache?: { allPaths: Record<string, string> };
@@ -333,6 +334,7 @@ export async function build(
     customConfig?: IIIFRC;
     customConfigSource?: Omit<ResolvedConfigSource, "config">;
     progress?: BuildProgressCallbacks;
+    fetch?: typeof globalThis.fetch;
   } = {}
 ) {
   const buildConfig = await getBuildConfig(
@@ -352,11 +354,12 @@ export async function build(
       tracer,
       customConfig,
       customConfigSource,
+      fetch,
     }
   );
 
   if (buildConfig.options.generate) {
-    await generateCommand(buildConfig.options);
+    await generateCommand({ ...buildConfig.options, fetch: buildConfig.fetch });
   }
 
   const { time } = buildConfig;

@@ -68,7 +68,8 @@ export async function loadStores(
           ...event,
           phase: "load-stores",
         });
-      }
+      },
+      buildConfig.fetch
     );
     const resources = storeResources[store] || [];
 

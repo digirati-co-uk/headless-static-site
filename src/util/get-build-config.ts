@@ -102,6 +102,7 @@ export interface BuildBuiltIns {
   tracer?: Tracer;
   customConfig?: IIIFRC;
   customConfigSource?: Omit<ResolvedConfigSource, "config">;
+  fetch?: typeof globalThis.fetch;
 }
 
 const storeTypes = {
@@ -141,6 +142,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     write: normalizeConcurrency(concurrencyConfig.write, ioConcurrency),
   };
   const useNetworkCache = options.networkCache ?? true;
+  const request = builtIns.fetch ?? globalThis.fetch;
   const network = resolveNetworkConfig(config.network, { prefetch: options.prefetch });
 
   const files = builtIns.fileHandler || new FileHandler(fs, cwd);
@@ -257,7 +259,9 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     files.resolve(requestCacheDir),
     !useNetworkCache,
     undefined,
-    network
+    network,
+    undefined,
+    request
   );
   const imageServiceLoader = new (class extends ImageServiceLoader {
     fetchService(serviceId: string): Promise<any & { real: boolean }> {
@@ -318,6 +322,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     files,
     options,
     network,
+    fetch: request,
     server,
     configUrl,
     search,
