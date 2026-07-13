@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
-import { cwd } from "node:process";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep as pathSeparator } from "node:path";
 import { upgrade } from "@iiif/parser/upgrader";
 import type { Hono } from "hono";
 import micromatch from "micromatch";
@@ -127,7 +126,8 @@ function findUpwardNodeModulesDebugUiDir(startDir: string) {
 function resolveSafePath(root: string, requestedPath: string) {
   const absoluteRoot = resolve(root);
   const absoluteTarget = resolve(absoluteRoot, requestedPath);
-  if (!absoluteTarget.startsWith(absoluteRoot)) {
+  const relativeTarget = relative(absoluteRoot, absoluteTarget);
+  if (isAbsolute(relativeTarget) || relativeTarget === ".." || relativeTarget.startsWith(`..${pathSeparator}`)) {
     return null;
   }
   return absoluteTarget;
@@ -141,7 +141,7 @@ function withNull<T>(callback: () => T): T | null {
   }
 }
 
-function toAbsoluteDiskPath(source: any) {
+function toAbsoluteDiskPath(source: any, projectRoot: string) {
   if (!source || source.type !== "disk") {
     return null;
   }
@@ -152,7 +152,7 @@ function toAbsoluteDiskPath(source: any) {
   if (rawPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rawPath)) {
     return rawPath;
   }
-  return join(cwd(), rawPath);
+  return join(projectRoot, rawPath);
 }
 
 function tryResolveSlug(
@@ -212,6 +212,7 @@ export function findDebugUiDir(currentWorkingDirectory: string, resolveModule?: 
 
 interface RegisterDebugUiRoutesOptions {
   app: Hono;
+  projectRoot?: string;
   fileHandler: FileHandler;
   getActivePaths: () => { buildDir: string; cacheDir: string };
   getConfig: () => Promise<IIIFRC> | IIIFRC;
@@ -367,8 +368,8 @@ function normalizeTopicThumbnailConfig(input: unknown) {
   };
 }
 
-async function getCachedResources(cacheDir: string, handler: FileHandler) {
-  const cacheRoot = join(cwd(), cacheDir);
+async function getCachedResources(cacheDir: string, handler: FileHandler, projectRoot: string) {
+  const cacheRoot = join(projectRoot, cacheDir);
   if (!existsSync(cacheRoot)) {
     return [];
   }
@@ -402,6 +403,7 @@ function defaultBuildStatus(): BuildStatus {
 
 export function registerDebugUiRoutes({
   app,
+  projectRoot = process.cwd(),
   fileHandler,
   getActivePaths,
   getConfig,
@@ -474,10 +476,10 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/site", async (ctx) => {
     const { buildDir } = getActivePaths();
     const config = await getConfig();
-    const siteMapPath = join(cwd(), buildDir, "meta", "sitemap.json");
-    const topCollectionPath = join(cwd(), buildDir, "collection.json");
-    const manifestsCollectionPath = join(cwd(), buildDir, "manifests", "collection.json");
-    const topicsCollectionPath = join(cwd(), buildDir, "topics", "collection.json");
+    const siteMapPath = join(projectRoot, buildDir, "meta", "sitemap.json");
+    const topCollectionPath = join(projectRoot, buildDir, "collection.json");
+    const manifestsCollectionPath = join(projectRoot, buildDir, "manifests", "collection.json");
+    const topicsCollectionPath = join(projectRoot, buildDir, "topics", "collection.json");
 
     const siteMap = (await fileHandler.loadJson(siteMapPath, true)) as Record<string, any>;
     const topCollection = (await fileHandler.loadJson(topCollectionPath, true)) as Record<string, any>;
@@ -496,7 +498,7 @@ export function registerDebugUiRoutes({
           thumbnail: asThumbnailUrl(item?.thumbnail),
           type: slug ? siteMap[slug]?.type || item?.type || null : item?.type || null,
           source: slug ? siteMap[slug]?.source || null : null,
-          diskPath: slug ? toAbsoluteDiskPath(siteMap[slug]?.source) : null,
+          diskPath: slug ? toAbsoluteDiskPath(siteMap[slug]?.source, projectRoot) : null,
         };
       }
     );
@@ -526,7 +528,7 @@ export function registerDebugUiRoutes({
         type: (value as any)?.type || null,
         label: (value as any)?.label || null,
         source: (value as any)?.source || null,
-        diskPath: toAbsoluteDiskPath((value as any)?.source),
+        diskPath: toAbsoluteDiskPath((value as any)?.source, projectRoot),
       })),
     });
   });
@@ -534,8 +536,8 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/resource/*", async (ctx) => {
     const { buildDir, cacheDir } = getActivePaths();
     const config = await getConfig();
-    const siteMapPath = join(cwd(), buildDir, "meta", "sitemap.json");
-    const editablePath = join(cwd(), buildDir, "meta", "editable.json");
+    const siteMapPath = join(projectRoot, buildDir, "meta", "sitemap.json");
+    const editablePath = join(projectRoot, buildDir, "meta", "editable.json");
     const siteMap = (await fileHandler.loadJson(siteMapPath, true)) as Record<string, any>;
     const editable = (await fileHandler.loadJson(editablePath, true)) as Record<string, string>;
     const slugsConfig = config.slugs as Record<string, SlugConfig> | undefined;
@@ -546,8 +548,8 @@ export function registerDebugUiRoutes({
       return ctx.json({ error: "Missing slug" }, 400);
     }
 
-    const manifestPath = join(cwd(), buildDir, slug, "manifest.json");
-    const collectionPath = join(cwd(), buildDir, slug, "collection.json");
+    const manifestPath = join(projectRoot, buildDir, slug, "manifest.json");
+    const collectionPath = join(projectRoot, buildDir, slug, "collection.json");
     const hasManifest = fileHandler.exists(manifestPath);
     const hasCollection = fileHandler.exists(collectionPath);
 
@@ -612,11 +614,11 @@ export function registerDebugUiRoutes({
             : null;
     const primaryJsonUrl = localJsonUrl || remoteJsonUrl;
 
-    const cacheMetaPath = join(cwd(), cacheDir, slug, "meta.json");
-    const cacheIndicesPath = join(cwd(), cacheDir, slug, "indices.json");
-    const cacheSearchRecordPath = join(cwd(), cacheDir, slug, "search-record.json");
-    const buildIndicesPath = join(cwd(), buildDir, slug, "indices.json");
-    const buildSearchRecordPath = join(cwd(), buildDir, slug, "search-record.json");
+    const cacheMetaPath = join(projectRoot, cacheDir, slug, "meta.json");
+    const cacheIndicesPath = join(projectRoot, cacheDir, slug, "indices.json");
+    const cacheSearchRecordPath = join(projectRoot, cacheDir, slug, "search-record.json");
+    const buildIndicesPath = join(projectRoot, buildDir, slug, "indices.json");
+    const buildSearchRecordPath = join(projectRoot, buildDir, slug, "search-record.json");
 
     const meta = await fileHandler.loadJson(cacheMetaPath, true);
     const indices = await fileHandler.loadJson(cacheIndicesPath, true);
@@ -643,7 +645,7 @@ export function registerDebugUiRoutes({
       slug,
       type,
       source,
-      diskPath: toAbsoluteDiskPath(source),
+      diskPath: toAbsoluteDiskPath(source, projectRoot),
       isEditable: Boolean(editable[slug]),
       editablePath: editable[slug] || null,
       resource,
@@ -672,10 +674,10 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/metadata-analysis", async (ctx) => {
     const { buildDir } = getActivePaths();
     const config = await getConfig();
-    const metadataAnalysisPath = join(cwd(), buildDir, "meta", "metadata-analysis.json");
+    const metadataAnalysisPath = join(projectRoot, buildDir, "meta", "metadata-analysis.json");
     const metadataAnalysisExists = existsSync(metadataAnalysisPath);
     const analysis = metadataAnalysisExists ? await fileHandler.loadJson(metadataAnalysisPath, true) : null;
-    const outputPath = join(cwd(), "iiif-config", "config", "extract-topics.json");
+    const outputPath = join(projectRoot, "iiif-config", "config", "extract-topics.json");
 
     return ctx.json({
       analysis,
@@ -689,7 +691,7 @@ export function registerDebugUiRoutes({
   app.post("/_debug/api/metadata-analysis/create-collection", async (ctx) => {
     const config = await getConfig();
     const { buildDir } = getActivePaths();
-    const metadataAnalysisPath = join(cwd(), buildDir, "meta", "metadata-analysis.json");
+    const metadataAnalysisPath = join(projectRoot, buildDir, "meta", "metadata-analysis.json");
     const metadataAnalysisExists = existsSync(metadataAnalysisPath);
     let payload: any = null;
     try {
@@ -733,7 +735,7 @@ export function registerDebugUiRoutes({
       }
     }
 
-    const outputPath = join(cwd(), "iiif-config", "config", "extract-topics.json");
+    const outputPath = join(projectRoot, "iiif-config", "config", "extract-topics.json");
     let existingConfig = null;
     try {
       existingConfig = await loadExistingExtractTopicsConfig(outputPath);
@@ -804,7 +806,7 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/config/stores", async (ctx) => {
     const config = await getConfig();
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     return ctx.json({
       mode,
       writable: workspace.writable,
@@ -888,7 +890,7 @@ export function registerDebugUiRoutes({
 
   app.put("/_debug/api/config/stores/:storeId", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -943,7 +945,7 @@ export function registerDebugUiRoutes({
 
   app.delete("/_debug/api/config/stores/:storeId", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -976,7 +978,7 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/config/slugs", async (ctx) => {
     const config = await getConfig();
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     return ctx.json({
       mode,
       writable: workspace.writable,
@@ -1055,7 +1057,7 @@ export function registerDebugUiRoutes({
     } catch (error) {
       return ctx.json({ error: (error as Error)?.message || String(error) }, 400);
     }
-    const resources = await getCachedResources(cacheDir, fileHandler);
+    const resources = await getCachedResources(cacheDir, fileHandler, projectRoot);
     const bySlug: Record<string, any[]> = {};
 
     for (const resource of resources) {
@@ -1098,7 +1100,7 @@ export function registerDebugUiRoutes({
 
   app.post("/_debug/api/config/slugs/save", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -1132,7 +1134,7 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/config/collections", async (ctx) => {
     const config = await getConfig();
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     return ctx.json({
       mode,
       writable: workspace.writable,
@@ -1144,7 +1146,7 @@ export function registerDebugUiRoutes({
 
   app.post("/_debug/api/config/collections/save", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -1183,7 +1185,7 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/config/folder-collections", async (ctx) => {
     const config = await getConfig();
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     const normalized = normalizeFolderCollectionsConfig(config.config?.["folder-collections"]);
     return ctx.json({
       mode,
@@ -1205,7 +1207,7 @@ export function registerDebugUiRoutes({
     }
 
     const previewConfig = normalizeFolderCollectionsConfig(payload?.config || config.config?.["folder-collections"]);
-    const resources = await getCachedResources(cacheDir, fileHandler);
+    const resources = await getCachedResources(cacheDir, fileHandler, projectRoot);
     const included: Record<string, { count: number; label: string }> = {};
     const excluded: Array<{ slug: string; excludeReason: string }> = [];
 
@@ -1269,7 +1271,7 @@ export function registerDebugUiRoutes({
 
   app.post("/_debug/api/config/folder-collections/save", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -1298,8 +1300,8 @@ export function registerDebugUiRoutes({
   app.get("/_debug/api/topics/thumbnails", async (ctx) => {
     const config = await getConfig();
     const { buildDir, cacheDir } = getActivePaths();
-    const topicsRoot = join(cwd(), "content", "topics");
-    const metaIndicesPath = join(cwd(), buildDir, "meta", "indices.json");
+    const topicsRoot = join(projectRoot, "content", "topics");
+    const metaIndicesPath = join(projectRoot, buildDir, "meta", "indices.json");
     const topicIndex = (await fileHandler.loadJson(metaIndicesPath, true)) as Record<string, Record<string, string[]>>;
     const scriptConfig = normalizeTopicThumbnailConfig(config.config?.["enrich-topic-thumbnails"]);
     const entries: Array<{
@@ -1321,7 +1323,7 @@ export function registerDebugUiRoutes({
           typeof existingMeta?.thumbnail === "string" && existingMeta.thumbnail.trim() ? existingMeta.thumbnail : null;
         const candidates = new Set<string>();
         for (const itemSlug of slugs || []) {
-          const metaPath = join(cwd(), cacheDir, itemSlug, "meta.json");
+          const metaPath = join(projectRoot, cacheDir, itemSlug, "meta.json");
           if (!existsSync(metaPath)) {
             continue;
           }
@@ -1349,7 +1351,7 @@ export function registerDebugUiRoutes({
     return ctx.json({
       config: scriptConfig,
       entries: entries.sort((a, b) => b.count - a.count),
-      outputPath: join(cwd(), "iiif-config", "config", "enrich-topic-thumbnails.json"),
+      outputPath: join(projectRoot, "iiif-config", "config", "enrich-topic-thumbnails.json"),
     });
   });
 
@@ -1363,7 +1365,7 @@ export function registerDebugUiRoutes({
       payload = {};
     }
     const scriptConfig = normalizeTopicThumbnailConfig(payload?.config || config.config?.["enrich-topic-thumbnails"]);
-    const metaIndicesPath = join(cwd(), buildDir, "meta", "indices.json");
+    const metaIndicesPath = join(projectRoot, buildDir, "meta", "indices.json");
     const topicIndex = (await fileHandler.loadJson(metaIndicesPath, true)) as Record<string, Record<string, string[]>>;
     const preview: Array<{ topicType: string; topic: string; selectedThumbnail: string | null; candidates: string[] }> =
       [];
@@ -1372,7 +1374,7 @@ export function registerDebugUiRoutes({
       for (const [topic, slugs] of Object.entries(values || {})) {
         const candidates: string[] = [];
         for (const itemSlug of slugs || []) {
-          const metaPath = join(cwd(), cacheDir, itemSlug, "meta.json");
+          const metaPath = join(projectRoot, cacheDir, itemSlug, "meta.json");
           if (!existsSync(metaPath)) {
             continue;
           }
@@ -1411,7 +1413,7 @@ export function registerDebugUiRoutes({
 
   app.post("/_debug/api/topics/thumbnails/save-config", async (ctx) => {
     const mode = await getCurrentConfigMode(getConfigMode);
-    const workspace = resolveIiifConfigWorkspace(mode);
+    const workspace = resolveIiifConfigWorkspace(mode, projectRoot);
     if (!workspace.writable) {
       return ctx.json({ error: workspace.reason || "Config workspace is read-only." }, 409);
     }
@@ -1455,7 +1457,7 @@ export function registerDebugUiRoutes({
       return ctx.json({ error: '"thumbnail" is required' }, 400);
     }
     const topicSlug = slug(topic) || normalizeLabelValue(topic);
-    const topicPath = join(cwd(), "content", "topics", topicType, `${topicSlug}.yaml`);
+    const topicPath = join(projectRoot, "content", "topics", topicType, `${topicSlug}.yaml`);
     const existing = existsSync(topicPath) ? parseYaml(await readFile(topicPath, "utf-8")) : {};
     const next = {
       id: topicSlug,
@@ -1487,7 +1489,12 @@ export function registerDebugUiRoutes({
       return ctx.text("Debug UI is not built yet.", 404);
     }
 
-    const assetPath = ctx.req.path.split("/_debug/assets/")[1] || "";
+    let assetPath = ctx.req.path.split("/_debug/assets/")[1] || "";
+    try {
+      assetPath = decodeURIComponent(assetPath);
+    } catch {
+      return ctx.notFound();
+    }
     const absoluteAssetPath = resolveSafePath(join(debugUiDir, "assets"), assetPath);
     if (!absoluteAssetPath || !existsSync(absoluteAssetPath)) {
       return ctx.notFound();
@@ -1501,6 +1508,9 @@ export function registerDebugUiRoutes({
   });
 
   app.get("/_debug/*", async (ctx) => {
+    if (extname(ctx.req.path)) {
+      return ctx.notFound();
+    }
     const debugUiDir = getDebugUiDir();
     if (!debugUiDir) {
       return ctx.html(`

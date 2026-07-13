@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import chalk from "chalk";
 import objectHash from "object-hash";
 import { version } from "../../package.json";
-import { createServer } from "../create-server";
+import { createServer, type IiifServerBuildEvent } from "../create-server";
 import {
   DEFAULT_CONFIG,
   type IIIFRC,
@@ -97,6 +97,15 @@ export interface IIIFHSSSPluginOptions {
    */
   source?: "vite" | "astro";
 }
+
+export type IiifBuildEvent =
+  | IiifServerBuildEvent
+  | {
+      type: "skipped";
+      context: "development" | "production";
+      reason: "no-buildable-stores";
+      durationMs: number;
+    };
 
 type MiddlewareContainer = {
   use: (path: string, handler: (req: any, res: any, next: () => void) => Promise<void>) => void;
@@ -276,7 +285,10 @@ function resolveBuildUrlFromEnv() {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
-export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
+export function createIiifRuntime(
+  options: IIIFHSSSPluginOptions = {},
+  lifecycle: { onBuild?: (event: IiifBuildEvent) => void | Promise<void> } = {}
+) {
   const {
     basePath = "/iiif",
     port,
@@ -318,7 +330,7 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
   let didStartDevBuild = false;
   let didStartWatch = false;
   let didAttachHmrBridge = false;
-  let devBuildQueue: Promise<void> = Promise.resolve();
+  let devSessionPromise: Promise<void> | null = null;
 
   async function ensureCacheDirectoryInvalidation(devMode: boolean, logger?: RuntimeLogger) {
     const configSource = await resolveIiifConfig();
@@ -350,7 +362,7 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
     if (resolvedConfig) {
       return resolvedConfig;
     }
-    const loadedConfigSource = await resolveConfigSource(configFile);
+    const loadedConfigSource = await resolveConfigSource(configFile, resolvedRoot || process.cwd());
     const mergedInlineConfigSource: ResolvedConfigSource = {
       ...loadedConfigSource,
       config: customConfig
@@ -411,6 +423,8 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
     server = await createServer(configSource.config, {
       configSource: restConfigSource,
       onboarding: onboardingInfo,
+      projectRoot: resolvedRoot || process.cwd(),
+      onBuild: lifecycle.onBuild,
     });
     return server;
   }
@@ -427,7 +441,7 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
           return true;
         }
       }
-      if (store.type === "iiif-json" && store.path && existsSync(store.path)) {
+      if (store.type === "iiif-json" && store.path && existsSync(toAbsolutePath(store.path))) {
         return true;
       }
     }
@@ -508,20 +522,11 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
   }
 
   async function runQueuedDevBuild() {
-    const nextBuild = devBuildQueue.then(async () => {
-      const serverInstance = await ensureServer();
-      const output = await serverInstance._extra.cachedBuild({ cache: true, emit: true, dev: true });
-      if (output?.buildConfig?.buildDir) {
-        lastIiifBuildDir = toAbsolutePath(output.buildConfig.buildDir);
-      }
-    });
-
-    devBuildQueue = nextBuild.then(
-      () => undefined,
-      () => undefined
-    );
-
-    return nextBuild;
+    const serverInstance = await ensureServer();
+    const output = await serverInstance._extra.cachedBuild({ cache: true, emit: true, dev: true });
+    if (output?.buildConfig?.buildDir) {
+      lastIiifBuildDir = toAbsolutePath(output.buildConfig.buildDir);
+    }
   }
 
   function resolveServerUrl(hostname: string | boolean | undefined, currentPort: number, fallbackPort: number) {
@@ -595,6 +600,7 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
   }
 
   async function runBuild(logger?: RuntimeLogger) {
+    const startedAt = Date.now();
     const configSource = await resolveIiifConfig();
     const configuredServerUrl =
       typeof configSource.config.server === "string" ? configSource.config.server : configSource.config.server?.url;
@@ -604,6 +610,12 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
     }
     if (!hasBuildableStores(configSource.config)) {
       logger?.warn?.(`${chalk.green`✓`}  Skipping iiif build (no buildable stores found)`);
+      await lifecycle.onBuild?.({
+        type: "skipped",
+        context: "production",
+        reason: "no-buildable-stores",
+        durationMs: Date.now() - startedAt,
+      });
       return null;
     }
 
@@ -640,24 +652,40 @@ export function createIiifRuntime(options: IIIFHSSSPluginOptions = {}) {
     return { copied: true, sourceDir, outDir: targetOutDir };
   }
 
-  async function startDevSession(logger?: RuntimeLogger) {
-    const configSource = await resolveIiifConfig();
-    if (!hasBuildableStores(configSource.config)) {
-      logger?.warn?.(`${chalk.green`✓`}  Skipping iiif dev build (no buildable stores found)`);
-      return;
+  function startDevSession(logger?: RuntimeLogger) {
+    if (devSessionPromise) {
+      return devSessionPromise;
     }
+    const startedAt = Date.now();
+    devSessionPromise = (async () => {
+      const configSource = await resolveIiifConfig();
+      if (!hasBuildableStores(configSource.config)) {
+        logger?.warn?.(`${chalk.green`✓`}  Skipping iiif dev build (no buildable stores found)`);
+        await lifecycle.onBuild?.({
+          type: "skipped",
+          context: "development",
+          reason: "no-buildable-stores",
+          durationMs: Date.now() - startedAt,
+        });
+        return;
+      }
 
-    await ensureCacheDirectoryInvalidation(true, logger);
-    if (!didStartDevBuild) {
-      didStartDevBuild = true;
-      await runQueuedDevBuild();
-    }
+      await ensureCacheDirectoryInvalidation(true, logger);
+      if (!didStartDevBuild) {
+        await runQueuedDevBuild();
+        didStartDevBuild = true;
+      }
 
-    if (!didStartWatch) {
-      didStartWatch = true;
-      const serverInstance = await ensureServer();
-      await serverInstance.request("/watch");
-    }
+      if (!didStartWatch) {
+        const serverInstance = await ensureServer();
+        await serverInstance.request("/watch");
+        didStartWatch = true;
+      }
+    })().catch((error) => {
+      devSessionPromise = null;
+      throw error;
+    });
+    return devSessionPromise;
   }
 
   async function attachDevHotReloadBridge(triggerReload: () => void) {

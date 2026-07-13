@@ -116,7 +116,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
         ...(builtIns.customConfigSource || {}),
         config: builtIns.customConfig,
       } as ResolvedConfigSource)
-    : await resolveConfigSource(options.config);
+    : await resolveConfigSource(options.config, options.cwd || nodeCwd());
   const config = resolvedConfigSource.config;
   const env = builtIns.env || {};
   const cwd = options.cwd || nodeCwd();
@@ -186,7 +186,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     internalLogger = defaultLogger;
   };
 
-  const fileTypeCache = createFiletypeCache(join(cacheDir, "file-types.json"));
+  const fileTypeCache = createFiletypeCache(files.resolve(join(cacheDir, "file-types.json")));
 
   const scriptsPath = options.scripts || resolvedConfigSource.defaultScriptsPath;
   await loadScripts({ ...options, scripts: scriptsPath, cwd }, log);
@@ -252,7 +252,13 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     return resp;
   };
 
-  const requestCache = createStoreRequestCache("_thumbs", requestCacheDir, !useNetworkCache, undefined, network);
+  const requestCache = createStoreRequestCache(
+    "_thumbs",
+    files.resolve(requestCacheDir),
+    !useNetworkCache,
+    undefined,
+    network
+  );
   const imageServiceLoader = new (class extends ImageServiceLoader {
     fetchService(serviceId: string): Promise<any & { real: boolean }> {
       return requestCache.fetch(serviceId);

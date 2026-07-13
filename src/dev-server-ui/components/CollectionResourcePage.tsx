@@ -37,21 +37,25 @@ export function CollectionResourcePage({
           title="IIIF Resource"
           value={data.resource}
           href={data.links.files.resource}
+          filename="collection.json"
         />
         <JsonPanel
           title="meta.json"
           value={data.meta}
           href={data.links.files.meta}
+          filename="meta.json"
         />
         <JsonPanel
           title="indices.json"
           value={data.indices}
           href={data.links.files.indices}
+          filename="indices.json"
         />
         <JsonPanel
           title="search-record.json"
           value={data.searchRecord}
           href={data.links.files.searchRecord}
+          filename="search-record.json"
         />
       </section>
     </main>

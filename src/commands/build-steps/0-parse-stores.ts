@@ -47,11 +47,24 @@ export async function parseStores(
     collectionRewrites,
     files,
   } = buildConfig;
+  const resolveFilePath =
+    typeof files.resolve === "function" ? files.resolve.bind(files) : (path: string) => path;
 
   const storeResources: Record<string, ParsedResource[]> = {};
   const storeRequestCaches: Record<string, ReturnType<typeof createStoreRequestCache>> = {};
   const filesToWatch: string[] = [];
-  const effectiveStoreConfigs: Record<string, any> = { ...config.stores };
+  const effectiveStoreConfigs: Record<string, any> = Object.fromEntries(
+    Object.entries(config.stores).map(([storeId, store]) => [
+      storeId,
+      {
+        ...store,
+        ...(store.type === "iiif-json" && store.path ? { path: resolveFilePath(store.path) } : {}),
+        ...(store.type === "iiif-remote" && store.overrides
+          ? { overrides: resolveFilePath(store.overrides) }
+          : {}),
+      },
+    ])
+  );
   const effectiveStores = Array.from(new Set(stores));
   let estimatedResources = 0;
 
@@ -93,7 +106,7 @@ export async function parseStores(
     const requestCache =
       useNetworkCache && cache.storeRequestCaches[storeId]
         ? cache.storeRequestCaches[storeId]
-        : createStoreRequestCache(storeId, requestCacheDir, !useNetworkCache, customFs, network, (event) => {
+        : createStoreRequestCache(storeId, resolveFilePath(requestCacheDir), !useNetworkCache, customFs, network, (event) => {
             progress?.onFetch?.({
               ...event,
               phase: "parse-stores",

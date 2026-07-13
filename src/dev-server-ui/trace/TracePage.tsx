@@ -444,33 +444,63 @@ function ResourceDetails({
 }: { trace: TraceJson; debugBase: string }) {
   const [expandedResource, setExpandedResource] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [executionFilter, setExecutionFilter] = useState<"all" | "uncached" | "cached">("all");
+  const [sortBy, setSortBy] = useState<"total" | "extraction" | "enrichment" | "slug">("total");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, executionFilter, sortBy]);
 
   const sortedResources = useMemo(() => {
     return Object.entries(trace.resources || {})
       .map(([slug, resource]) => {
-        const totalExtractionTime =
-          resource.extractionEnd - resource.extractionStart;
-        const totalEnrichmentTime =
-          resource.enrichmentEnd - resource.enrichmentStart;
+        const totalExtractionTime = Math.max(
+          0,
+          (resource.extractionEnd || 0) - (resource.extractionStart || 0),
+        );
+        const totalEnrichmentTime = Math.max(
+          0,
+          (resource.enrichmentEnd || 0) - (resource.enrichmentStart || 0),
+        );
+        const executions = [
+          ...Object.values(resource.extractions || {}),
+          ...Object.values(resource.enrichments || {}),
+        ];
         return {
           slug,
           resource,
           totalTime: totalExtractionTime + totalEnrichmentTime,
           totalExtractionTime,
           totalEnrichmentTime,
+          fullyCached: executions.length > 0 && executions.every((execution) => execution.cacheHit === true),
+          hadUncachedWork: executions.some((execution) => execution.cacheHit === false),
         };
       })
       .filter(({ slug, resource }) => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-          slug.toLowerCase().includes(term) ||
-          renderLabel(resource.label).toLowerCase().includes(term)
-        );
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          if (
+            !slug.toLowerCase().includes(term) &&
+            !renderLabel(resource.label).toLowerCase().includes(term)
+          ) {
+            return false;
+          }
+        }
+        return true;
       })
-      .sort((a, b) => b.totalTime - a.totalTime);
-  }, [trace.resources, searchTerm]);
+      .filter(({ fullyCached, hadUncachedWork }) => {
+        if (executionFilter === "cached") return fullyCached;
+        if (executionFilter === "uncached") return hadUncachedWork;
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "slug") return a.slug.localeCompare(b.slug);
+        if (sortBy === "extraction") return b.totalExtractionTime - a.totalExtractionTime;
+        if (sortBy === "enrichment") return b.totalEnrichmentTime - a.totalEnrichmentTime;
+        return b.totalTime - a.totalTime;
+      });
+  }, [trace.resources, searchTerm, executionFilter, sortBy]);
 
   const [resources, pager] = usePaginateArray(sortedResources, {
     pageSize: 50,
@@ -481,9 +511,9 @@ function ResourceDetails({
   return (
     <div className="bg-white rounded-lg shadow-lg p-6" ref={pager.topRef}>
       <h2 className="text-2xl font-bold text-gray-900 mb-4">
-        Resources (by total processing time)
+        Resources
       </h2>
-      <div className="mb-4">
+      <div className="mb-2 grid gap-3 md:grid-cols-[1fr_auto_auto]">
         <input
           type="text"
           placeholder="Search resources by label or slug"
@@ -491,6 +521,30 @@ function ResourceDetails({
           onChange={(event) => setSearchTerm(event.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
         />
+        <select
+          aria-label="Execution filter"
+          value={executionFilter}
+          onChange={(event) => setExecutionFilter(event.target.value as typeof executionFilter)}
+          className="px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+        >
+          <option value="all">All</option>
+          <option value="uncached">Had uncached work</option>
+          <option value="cached">Fully cached</option>
+        </select>
+        <select
+          aria-label="Sort resources"
+          value={sortBy}
+          onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+          className="px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+        >
+          <option value="total">Total time</option>
+          <option value="extraction">Extraction time</option>
+          <option value="enrichment">Enrichment time</option>
+          <option value="slug">Slug</option>
+        </select>
+      </div>
+      <div className="mb-4 text-sm text-gray-600">
+        Showing {sortedResources.length} of {Object.keys(trace.resources || {}).length} resources
       </div>
 
       <div className="space-y-4">

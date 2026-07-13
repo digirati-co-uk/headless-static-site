@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { cwd } from "node:process";
 import type { FileHandler } from "./file-handler";
 
 function normalizeSlug(slug: string) {
@@ -31,14 +30,14 @@ export async function resolveEditablePathForSlug(fileHandler: FileHandler, build
     return null;
   }
 
-  const editablePath = join(cwd(), buildDir, "meta", "editable.json");
+  const editablePath = join(fileHandler.root, buildDir, "meta", "editable.json");
   const editable = (await fileHandler.loadJson(editablePath, true)) as Record<string, string>;
   const directPath = editable[slug];
   if (typeof directPath === "string" && directPath.length > 0) {
     return directPath;
   }
 
-  const siteMapPath = join(cwd(), buildDir, "meta", "sitemap.json");
+  const siteMapPath = join(fileHandler.root, buildDir, "meta", "sitemap.json");
   const siteMap = (await fileHandler.loadJson(siteMapPath, true)) as Record<string, any>;
   const siteMapEntry = siteMap[slug];
   if (!siteMapEntry || typeof siteMapEntry !== "object") {

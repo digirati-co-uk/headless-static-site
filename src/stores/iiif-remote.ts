@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import { join } from "node:path";
-import { cwd } from "node:process";
 import { Vault } from "@iiif/helpers";
 import type { Manifest } from "@iiif/presentation-3";
 import { copy, pathExists } from "fs-extra/esm";
@@ -66,7 +65,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         overrides: store.overrides,
       };
 
-      if (override && fs.existsSync(join(cwd(), override))) {
+      if (override && fs.existsSync(override)) {
         source = {
           type: "disk",
           path: override,
@@ -157,10 +156,10 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       caches.load = `${file.mtime}-${file.ctime}-${file.size}`;
 
       const pathWithoutExtension = resource.source.path.replace(".json", "");
-      const subFilesFolder = fs.existsSync(join(cwd(), pathWithoutExtension));
+      const subFilesFolder = fs.existsSync(pathWithoutExtension);
       if (subFilesFolder) {
         if (subFilesFolder && (await pathExists(resource.slug)) && !isEmpty(resource.slug)) {
-          const destination = join(cwd(), directory, "files");
+          const destination = api.files.resolve(join(directory, "files"));
           await copy(resource.slug, destination, { overwrite: true });
         }
       }

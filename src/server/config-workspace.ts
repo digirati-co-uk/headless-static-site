@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { cwd } from "node:process";
+import { dirname, join, resolve } from "node:path";
 import type { ConfigMode } from "../util/get-config.ts";
 
 export interface RebuildStatus {
@@ -52,8 +51,11 @@ export async function maybeRunRebuild(rebuild?: () => Promise<void>): Promise<Re
   return status;
 }
 
-export function resolveIiifConfigWorkspace(mode?: ConfigMode | "unknown"): IiifConfigWorkspace {
-  const projectRoot = cwd();
+export function resolveIiifConfigWorkspace(
+  mode?: ConfigMode | "unknown",
+  root = process.cwd()
+): IiifConfigWorkspace {
+  const projectRoot = resolve(root);
   const configRoot = join(projectRoot, "iiif-config");
   const configDir = join(configRoot, "config");
   const storesDir = join(configRoot, "stores");

@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { cwd } from "node:process";
 import { Vault } from "@iiif/helpers";
 import type { Manifest } from "@iiif/presentation-3";
 import { copy, pathExists } from "fs-extra/esm";
@@ -185,7 +184,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
       const subFilesFolder = existsSync(subFilesFolderPath);
       if (subFilesFolder) {
         if (subFilesFolder && (await pathExists(subFilesFolderPath)) && !isEmpty(subFilesFolderPath)) {
-          const destination = join(cwd(), directory, "files");
+          const destination = files.resolve(join(directory, "files"));
           await copy(subFilesFolderPath, destination, {
             overwrite: true,
             filter: (file) => {
@@ -194,7 +193,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
           });
           const canvasesOriginDir = join(subFilesFolderPath, "canvases");
           if (await pathExists(canvasesOriginDir)) {
-            const canvasesDir = join(cwd(), directory, "canvases");
+            const canvasesDir = files.resolve(join(directory, "canvases"));
             await copy(canvasesOriginDir, canvasesDir, { overwrite: true });
             // /canvases/0/some-file.json -> /canvases/0/files/some-file.json
             const canvasIndexes = await readdir(canvasesDir);
@@ -230,7 +229,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
           const { id, type, ...rest } = item;
 
           const loadedManifest = await files.loadJson(
-            join(cwd(), resource.source.path, resource.source.relativePath || "", item.id)
+            files.resolve(join(resource.source.path, resource.source.relativePath || "", item.id))
           );
           const newId = loadedManifest.id || loadedManifest["@id"];
           const newType = loadedManifest.type || loadedManifest["@type"];

@@ -1,24 +1,24 @@
 name: Build + test
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ["18", "20"]
+        node: ["20", "22"]
 
     name: Node ${{ matrix.node }} build
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
 
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
           version: 9
@@ -29,7 +29,7 @@ jobs:
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         name: Setup pnpm cache
         with:
           path: ${{ env.STORE_PATH }}
@@ -41,3 +41,5 @@ jobs:
       - run: pnpm run build
       - run: pnpm run test
       - run: pnpm run lint
+      - if: matrix.node == '22'
+        run: pnpm dlx pkg-pr-new publish

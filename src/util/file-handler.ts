@@ -25,7 +25,7 @@ export class FileHandler {
   }
 
   dirExists(path: string) {
-    return this.fs.existsSync(path);
+    return this.fs.existsSync(this.resolve(path));
   }
 
   dirIsEmpty(path: string) {
@@ -58,7 +58,7 @@ export class FileHandler {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   existsBinary(filePath: string) {
@@ -66,7 +66,7 @@ export class FileHandler {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   async loadJson(path: string, fresh = false) {
@@ -75,7 +75,7 @@ export class FileHandler {
   }
 
   async copy(from: string, to: string, options: any) {
-    this.copyTargets.set(to, { from, options });
+    this.copyTargets.set(this.resolve(to), { from: this.resolve(from), options });
   }
 
   async readFile(path: string) {
@@ -122,7 +122,7 @@ export class FileHandler {
   }
 
   async mkdir(path: string) {
-    await this.fs.promises.mkdir(path, { recursive: true });
+    await this.fs.promises.mkdir(this.resolve(path), { recursive: true });
   }
 
   async saveJson(path: string, data: object, force = false) {
@@ -203,7 +203,7 @@ export class FileHandler {
 
   async cachePathExists(to: string) {
     try {
-      await this.fs.promises.stat(to);
+      await this.fs.promises.stat(this.resolve(to));
       return true;
     } catch (e) {
       return false;

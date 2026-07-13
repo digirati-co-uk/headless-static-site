@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { cwd } from "node:process";
 import { pathToFileURL } from "node:url";
 import type { Collection } from "@iiif/presentation-3";
@@ -389,11 +389,11 @@ async function loadIiifConfigFolder(projectRoot: string): Promise<ResolvedConfig
   };
 }
 
-export async function resolveConfigSource(configFile?: string): Promise<ResolvedConfigSource> {
-  const projectRoot = cwd();
+export async function resolveConfigSource(configFile?: string, projectRoot = cwd()): Promise<ResolvedConfigSource> {
+  projectRoot = resolve(projectRoot);
 
   if (configFile) {
-    const configFilePath = join(projectRoot, configFile);
+    const configFilePath = isAbsolute(configFile) ? configFile : resolve(projectRoot, configFile);
     return {
       mode: "explicit",
       config: applyDefaultStores(await loadConfigFile(configFilePath)),
@@ -429,8 +429,8 @@ export async function resolveConfigSource(configFile?: string): Promise<Resolved
   };
 }
 
-export async function getConfig(configFile?: string) {
-  const resolvedSource = await resolveConfigSource(configFile);
+export async function getConfig(configFile?: string, projectRoot = cwd()) {
+  const resolvedSource = await resolveConfigSource(configFile, projectRoot);
   return applyDefaultStores(resolvedSource.config) as IIIFRC;
 }
 

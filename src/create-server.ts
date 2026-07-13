@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import { existsSync } from "node:fs";
-import { watch, writeFile } from "node:fs/promises";
+import { readFile, watch, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
-import { cwd } from "node:process";
+import { isAbsolute, join, resolve } from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -14,6 +13,8 @@ import { z } from "zod";
 import { type BuildOptions, build, defaultBuiltIns } from "./commands/build";
 import { createBuildStatusTracker } from "./server/build-status.ts";
 import { findDebugUiDir, registerDebugUiRoutes } from "./server/debug-ui-routes.ts";
+import { editorHtml } from "./server/editor.html";
+import { explorerHtml } from "./server/explorer.html";
 import type { BuildStatus } from "./util/build-progress.ts";
 import { FileHandler } from "./util/file-handler";
 import type { IIIFRC, ResolvedConfigSource } from "./util/get-config";
@@ -23,9 +24,28 @@ import { Tracer } from "./util/tracer";
 
 const require = createRequire(import.meta.url);
 
+export type IiifServerBuildEvent =
+  | { type: "start"; context: "development" | "production"; buildNumber: number }
+  | {
+      type: "success";
+      context: "development" | "production";
+      buildNumber: number;
+      buildDir: string | null;
+      durationMs: number;
+    }
+  | {
+      type: "error";
+      context: "development" | "production";
+      buildNumber: number;
+      error: Error;
+      durationMs: number;
+    };
+
 interface IIIFServerOptions {
   customManifestEditor?: string;
   configSource?: Omit<ResolvedConfigSource, "config">;
+  projectRoot?: string;
+  onBuild?: (event: IiifServerBuildEvent) => void | Promise<void>;
   onboarding?: {
     enabled?: boolean;
     configMode?: string;
@@ -51,6 +71,7 @@ function redirectToDebugPath(basePathHeader?: string) {
 
 export async function createServer(config: IIIFRC, serverOptions: IIIFServerOptions = {}) {
   const app = new Hono();
+  const projectRoot = resolve(serverOptions.projectRoot || process.cwd());
   const meUrl = serverOptions.customManifestEditor || "https://manifest-editor.digirati.services";
   const baseServerUrl = resolveHostUrl(config.server?.url || "http://localhost:7111").replace(/\/+$/, "");
   const configSource = serverOptions.configSource;
@@ -77,6 +98,17 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     })
   );
 
+  app.use("/_debug/api/*", async (ctx, next) => {
+    if (ctx.req.method === "GET") {
+      return next();
+    }
+    const origin = ctx.req.header("origin");
+    if (origin && origin !== new URL(ctx.req.url).origin) {
+      return ctx.json({ error: "Cross-origin debug mutations are forbidden" }, 403);
+    }
+    return next();
+  });
+
   const emitter = mitt<{
     "file-change": { path: string };
     "file-refresh": { path: string };
@@ -94,7 +126,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   const pathCache = { allPaths: {} as Record<string, string> };
 
   let isWatching = false;
-  const fileHandler = new FileHandler(fs, cwd());
+  const fileHandler = new FileHandler(fs, projectRoot);
   const tracer = new Tracer();
   const storeRequestCaches = {};
   const buildStatusTracker = createBuildStatusTracker((status) => {
@@ -105,8 +137,12 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     shouldRebuild: false,
   };
 
+  function toProjectPath(path: string) {
+    return isAbsolute(path) ? path : resolve(projectRoot, path);
+  }
+
   function selectInitialPath(devPath: string, defaultPath: string) {
-    return existsSync(join(cwd(), devPath)) ? devPath : defaultPath;
+    return existsSync(toProjectPath(devPath)) ? devPath : defaultPath;
   }
 
   const activePaths = {
@@ -114,11 +150,19 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     cacheDir: selectInitialPath(defaultBuiltIns.devCache, defaultBuiltIns.defaultCacheDir),
   };
 
-  const cachedBuild = async (options: BuildOptions) => {
+  let buildNumber = 0;
+  let buildQueue: Promise<unknown> = Promise.resolve();
+
+  const executeBuild = async (options: BuildOptions) => {
+    const context = options.dev ? "development" : "production";
+    const currentBuildNumber = ++buildNumber;
+    const startedAt = Date.now();
+    await serverOptions.onBuild?.({ type: "start", context, buildNumber: currentBuildNumber });
     buildStatusTracker.startBuild();
 
+    let result: Awaited<ReturnType<typeof build>>;
     try {
-      const result = await build(options, defaultBuiltIns, {
+      result = await build({ ...options, cwd: projectRoot }, defaultBuiltIns, {
         storeRequestCaches,
         fileHandler,
         pathCache,
@@ -130,21 +174,62 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       activePaths.buildDir = result.buildConfig.buildDir;
       activePaths.cacheDir = result.buildConfig.cacheDir;
       buildStatusTracker.completeBuild();
-      return result;
     } catch (error) {
       buildStatusTracker.failBuild(error);
+      const originalError = error instanceof Error ? error : new Error(String(error));
+      try {
+        await serverOptions.onBuild?.({
+          type: "error",
+          context,
+          buildNumber: currentBuildNumber,
+          error: originalError,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch {
+        // The build error is the useful failure; a reporting failure must not replace it.
+      }
       throw error;
     }
+    await serverOptions.onBuild?.({
+      type: "success",
+      context,
+      buildNumber: currentBuildNumber,
+      buildDir: result.buildConfig.buildDir ? toProjectPath(result.buildConfig.buildDir) : null,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  };
+
+  const cachedBuild = (options: BuildOptions) => {
+    const queued = buildQueue.then(() => executeBuild(options));
+    buildQueue = queued.catch(() => undefined);
+    return queued;
   };
 
   app.get("/", async (ctx) => {
     return ctx.redirect(redirectToDebugPath(ctx.req.header("x-hss-base-path")));
   });
 
+  app.get("/explorer/*", async (ctx) => ctx.html(explorerHtml()));
+  app.get("/editor/*", async (ctx) => ctx.html(editorHtml()));
+
+  app.get("/client.js", async (ctx) => {
+    const localPath = join(projectRoot, "build", "client.js");
+    try {
+      const file = await readFile(existsSync(localPath) ? localPath : require.resolve("iiif-hss/client"), "utf-8");
+      ctx.header("Content-Type", "application/javascript");
+      return ctx.body(file);
+    } catch (error) {
+      console.warn(error);
+      return ctx.notFound();
+    }
+  });
+
   app.get("/config", async (ctx) => {
     return ctx.json({
       isWatching: isWatching,
       pendingFiles: Array.from(fileHandler.openJsonChanged.keys()).filter(Boolean),
+      configMode: configSource?.mode || "custom",
       ...config,
       run: config.run || defaultBuiltIns.defaultRun,
     });
@@ -161,7 +246,8 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     getConfig: () => config,
     getConfigMode: () => (configSource?.mode as any) || "custom",
     getTraceJson: () => tracer.toJSON(),
-    getDebugUiDir: () => findDebugUiDir(cwd(), require.resolve.bind(require)),
+    getDebugUiDir: () => findDebugUiDir(projectRoot, require.resolve.bind(require)),
+    projectRoot,
     manifestEditorUrl: meUrl,
     getBuildStatus: () => buildStatusTracker.getBuildStatus(),
     subscribeBuildProgress: (listener) => {
@@ -192,11 +278,12 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     let watchCount = 0;
 
     for (const store of jsonStores) {
-      if (!existsSync(store.path)) {
+      const storePath = toProjectPath(store.path);
+      if (!existsSync(storePath)) {
         continue;
       }
       (async () => {
-        const watcher = watch(store.path, {
+        const watcher = watch(storePath, {
           signal: ac.signal,
           recursive: true,
         });
@@ -204,7 +291,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
 
         for await (const event of watcher) {
           if (event.filename) {
-            const name = join(store.path, event.filename);
+            const name = join(storePath, event.filename);
             const realPath = pathCache.allPaths[name];
             emitter.emit("file-change", { path: realPath });
             await cachedBuild({
@@ -222,7 +309,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     }
 
     for (const store of remoteOverrideStores) {
-      const overridesPath = store.overrides.trim();
+      if (store.type !== "iiif-remote" || typeof store.overrides !== "string") {
+        continue;
+      }
+      const overridesPath = toProjectPath(store.overrides.trim());
       if (!existsSync(overridesPath)) {
         continue;
       }
@@ -261,11 +351,12 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     }
 
     for (const watchPath of extraWatchPaths) {
-      if (!existsSync(watchPath.path)) {
+      const resolvedWatchPath = toProjectPath(watchPath.path);
+      if (!existsSync(resolvedWatchPath)) {
         continue;
       }
       (async () => {
-        const watcher = watch(watchPath.path, {
+        const watcher = watch(resolvedWatchPath, {
           signal: ac.signal,
           recursive: watchPath.recursive,
         });
@@ -278,7 +369,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
           });
           emitter.emit("full-rebuild", {
             source: "config-watch",
-            path: watchPath.path,
+            path: resolvedWatchPath,
             filename: event.filename || null,
           });
         }
@@ -450,7 +541,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       }
 
       // Check for existing?
-      const existing = join(cwd(), chosenStore.path, `${name}.json`);
+      const existing = join(toProjectPath(chosenStore.path), `${name}.json`);
       if (existsSync(existing)) {
         return ctx.text(`Manifest ${name} already exists`, 400);
       }
@@ -472,6 +563,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       await cachedBuild({
         emit: true,
         cache: false,
+        dev: true,
       });
 
       const manifestId = `${exactPath}/manifest.json`;
@@ -490,9 +582,9 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       await next();
       return;
     }
-    let realPath = join(cwd(), activePaths.buildDir, ctx.req.path);
+    let realPath = join(projectRoot, activePaths.buildDir, ctx.req.path);
     if (realPath.endsWith("meta.json")) {
-      realPath = join(cwd(), activePaths.cacheDir, ctx.req.path);
+      realPath = join(projectRoot, activePaths.cacheDir, ctx.req.path);
     }
 
     const headers: Record<string, string> = {
@@ -551,6 +643,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       exact: slug,
       emit: true,
       cache: true,
+      dev: true,
     });
     emitter.emit("file-refresh", { path: realPath });
 

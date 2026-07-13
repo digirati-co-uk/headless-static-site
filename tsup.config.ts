@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 const baseConfig = {
-  target: "node22",
+  target: "node20",
   format: ["esm"] as const,
   external: [],
   loader: {

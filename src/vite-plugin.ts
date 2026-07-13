@@ -2,13 +2,24 @@ import { relative } from "node:path";
 import { cwd } from "node:process";
 import chalk from "chalk";
 import type { Plugin } from "vite";
-import { type IIIFHSSSPluginOptions, createIiifRuntime } from "./integrations/shared-iiif-runtime";
+import {
+  type IIIFHSSSPluginOptions,
+  type IiifBuildEvent,
+  createIiifRuntime,
+} from "./integrations/shared-iiif-runtime";
+
+export type IiifViteBuildEvent = IiifBuildEvent;
+
+export interface IiifVitePluginOptions extends IIIFHSSSPluginOptions {
+  onBuild?: (event: IiifViteBuildEvent) => void | Promise<void>;
+}
 
 /**
  * Vite plugin for integrating Hono server.
  */
-export function iiifPlugin(options: IIIFHSSSPluginOptions = {}): Plugin {
-  const runtime = createIiifRuntime({ ...options, source: "vite" });
+export function iiifPlugin(options: IiifVitePluginOptions = {}): Plugin {
+  const { onBuild, ...runtimeOptions } = options;
+  const runtime = createIiifRuntime({ ...runtimeOptions, source: "vite" }, { onBuild });
   let resolvedViteCommand: "serve" | "build" | null = null;
   let resolvedViteMode: string | null = null;
   let resolvedOutDir: string | null = null;

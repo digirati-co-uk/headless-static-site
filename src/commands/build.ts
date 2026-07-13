@@ -318,7 +318,7 @@ export async function build(
   options: BuildOptions,
   builtIns: BuildBuiltIns = defaultBuiltIns,
   {
-    fileHandler = new FileHandler(fs, cwd(), true),
+    fileHandler = new FileHandler(fs, options.cwd || cwd(), true),
     pathCache = { allPaths: {} },
     storeRequestCaches,
     tracer,
@@ -361,9 +361,9 @@ export async function build(
 
   const { time } = buildConfig;
 
-  await fs.promises.mkdir(buildConfig.cacheDir, { recursive: true });
-  await fs.promises.mkdir(buildConfig.buildDir, { recursive: true });
-  await fs.promises.mkdir(buildConfig.requestCacheDir, { recursive: true });
+  await buildConfig.files.mkdir(buildConfig.cacheDir);
+  await buildConfig.files.mkdir(buildConfig.buildDir);
+  await buildConfig.files.mkdir(buildConfig.requestCacheDir);
 
   const parseState = { storeRequestCaches: storeRequestCaches || {} };
 
