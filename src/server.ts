@@ -5,17 +5,24 @@ import { join } from "node:path";
 import { cwd } from "node:process";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { timeout } from "hono/timeout";
 import mitt from "mitt";
 import { z } from "zod";
 import { type BuildOptions, build, defaultBuiltIns } from "./commands/build";
-import { cloverHtml } from "./server/clover.html";
+import { createBuildStatusTracker } from "./server/build-status.ts";
+import {
+  findDebugUiDir,
+  registerDebugUiRoutes,
+} from "./server/debug-ui-routes.ts";
 import { editorHtml } from "./server/editor.html";
 import { explorerHtml } from "./server/explorer.html";
-import { indexHtml } from "./server/index.html";
+import type { BuildStatus } from "./util/build-progress.ts";
 import { FileHandler } from "./util/file-handler";
-import { getConfig } from "./util/get-config";
+import { resolveConfigSource } from "./util/get-config";
+import { resolveEditablePathForSlug } from "./util/resolve-editable-path";
+import { Tracer } from "./util/tracer";
 
 const require = createRequire(import.meta.url);
 
@@ -39,7 +46,7 @@ app.use(async (c, next) => {
 app.use(
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     exposeHeaders: [
       "Content-Type",
       "X-IIIF-Post-Url",
@@ -53,6 +60,7 @@ const emitter = mitt<{
   "file-change": { path: string };
   "file-refresh": { path: string };
   "full-rebuild": unknown;
+  "build-progress": BuildStatus;
 }>();
 
 // New Hono server.
@@ -66,22 +74,61 @@ const pathCache = { allPaths: {} as Record<string, string> };
 
 let isWatching = false;
 const fileHandler = new FileHandler(fs, cwd());
+const tracer = new Tracer();
 const storeRequestCaches = {};
+const buildStatusTracker = createBuildStatusTracker((status) => {
+  emitter.emit("build-progress", status);
+});
 
 const state = {
   shouldRebuild: false,
 };
 
+function redirectToDebugPath(basePathHeader?: string) {
+  const normalizedBase = (basePathHeader || "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  return normalizedBase.length > 0 ? `/${normalizedBase}/_debug/` : "/_debug/";
+}
+
+function selectInitialPath(devPath: string, defaultPath: string) {
+  return existsSync(join(cwd(), devPath)) ? devPath : defaultPath;
+}
+
+const activePaths = {
+  buildDir: selectInitialPath(
+    defaultBuiltIns.devBuild,
+    defaultBuiltIns.defaultBuildDir,
+  ),
+  cacheDir: selectInitialPath(
+    defaultBuiltIns.devCache,
+    defaultBuiltIns.defaultCacheDir,
+  ),
+};
+
 const cachedBuild = async (options: BuildOptions) => {
-  return build(options, defaultBuiltIns, {
-    storeRequestCaches,
-    fileHandler,
-    pathCache,
-  });
+  buildStatusTracker.startBuild();
+
+  try {
+    const result = await build(options, defaultBuiltIns, {
+      storeRequestCaches,
+      fileHandler,
+      pathCache,
+      tracer,
+      progress: buildStatusTracker.callbacks,
+    });
+    activePaths.buildDir = result.buildConfig.buildDir;
+    activePaths.cacheDir = result.buildConfig.cacheDir;
+    buildStatusTracker.completeBuild();
+    return result;
+  } catch (error) {
+    buildStatusTracker.failBuild(error);
+    throw error;
+  }
 };
 
 app.get("/", async (ctx) => {
-  return ctx.html(indexHtml());
+  return ctx.redirect(redirectToDebugPath(ctx.req.header("x-hss-base-path")));
 });
 
 app.get("/explorer/*", async (ctx) => {
@@ -93,14 +140,42 @@ app.get("/editor/*", async (ctx) => {
 });
 
 app.get("/config", async (ctx) => {
-  const config = await getConfig();
+  const resolvedConfigSource = await resolveConfigSource();
+  const config = resolvedConfigSource.config;
   return ctx.json({
     isWatching: isWatching,
     pendingFiles: Array.from(fileHandler.openJsonChanged.keys()).filter(
       Boolean,
     ),
+    configMode: resolvedConfigSource.mode,
     ...config,
   });
+});
+
+app.get("/trace.json", async (ctx) => {
+  return ctx.json(tracer.toJSON());
+});
+
+registerDebugUiRoutes({
+  app,
+  fileHandler,
+  getActivePaths: () => ({ ...activePaths }),
+  getConfig: async () => (await resolveConfigSource()).config,
+  getConfigMode: async () => (await resolveConfigSource()).mode,
+  getTraceJson: () => tracer.toJSON(),
+  getDebugUiDir: () => findDebugUiDir(cwd(), require.resolve.bind(require)),
+  getBuildStatus: () => buildStatusTracker.getBuildStatus(),
+  subscribeBuildProgress: (listener) => {
+    emitter.on("build-progress", listener);
+    return () => emitter.off("build-progress", listener);
+  },
+  defaultRun: defaultBuiltIns.defaultRun,
+  rebuild: async () => 
+    await cachedBuild({
+      cache: true,
+      emit: true,
+      dev: true,
+    }),
 });
 
 app.get("/client.js", async (ctx) => {
@@ -124,30 +199,49 @@ app.get("/client.js", async (ctx) => {
 app.get("/watch", async (ctx) => {
   if (isWatching) return ctx.json({ watching: true });
 
-  const config = await getConfig();
+  const resolvedConfigSource = await resolveConfigSource();
+  const config = resolvedConfigSource.config;
+  const extraWatchPaths = resolvedConfigSource.watchPaths;
 
-  const stores = Object.values(config.stores).filter((store) => {
+  const jsonStores = Object.values(config.stores).filter((store) => {
     return store.type === "iiif-json";
   });
+  const remoteOverrideStores = Object.values(config.stores).filter((store) => {
+    return (
+      store.type === "iiif-remote" &&
+      typeof store.overrides === "string" &&
+      Boolean(store.overrides.trim())
+    );
+  });
+  let watchCount = 0;
 
-  for (const store of stores) {
+  for (const store of jsonStores) {
+    if (!existsSync(store.path)) {
+      continue;
+    }
     (async () => {
       const watcher = watch(store.path, {
         signal: ac.signal,
         recursive: true,
       });
+      watchCount++;
 
       for await (const event of watcher) {
         if (event.filename) {
-          const name = join(store.path, event.filename);
-          const realPath = pathCache.allPaths[name];
-          emitter.emit("file-change", { path: realPath });
-          await cachedBuild({
-            exact: realPath,
-            emit: true,
-            cache: true,
-          });
-          emitter.emit("file-refresh", { path: realPath });
+          try {
+            const name = join(store.path, event.filename);
+            const realPath = pathCache.allPaths[name];
+            emitter.emit("file-change", { path: realPath });
+            await cachedBuild({
+              exact: realPath || undefined,
+              emit: true,
+              cache: true,
+              dev: true,
+            });
+            emitter.emit("file-refresh", { path: realPath });
+          } catch (e) {
+            console.error("Watch error:", (e as Error)?.message || e);
+          }
         }
       }
     })().catch((err) => {
@@ -155,7 +249,84 @@ app.get("/watch", async (ctx) => {
     });
   }
 
-  console.log(`Watching ${stores.length} stores`);
+  for (const store of remoteOverrideStores) {
+    const overridesPath = store.overrides.trim();
+    if (!existsSync(overridesPath)) {
+      continue;
+    }
+
+    (async () => {
+      const watcher = watch(overridesPath, {
+        signal: ac.signal,
+        recursive: true,
+      });
+      watchCount++;
+
+      for await (const event of watcher) {
+        try {
+          const changedPath = event.filename
+            ? join(overridesPath, event.filename)
+            : null;
+          const realPath = changedPath
+            ? pathCache.allPaths[changedPath]
+            : undefined;
+          if (realPath) {
+            emitter.emit("file-change", { path: realPath });
+          }
+          await cachedBuild({
+            exact: realPath || undefined,
+            emit: true,
+            cache: true,
+            dev: true,
+          });
+          if (realPath) {
+            emitter.emit("file-refresh", { path: realPath });
+          } else {
+            emitter.emit("full-rebuild", {
+              source: "overrides-watch",
+              path: overridesPath,
+              filename: event.filename || null,
+            });
+          }
+        } catch (e) {
+          console.error("Overrides watch error:", (e as Error)?.message || e);
+        }
+      }
+    })().catch((err) => {
+      // ignore.
+    });
+  }
+
+  for (const watchPath of extraWatchPaths) {
+    if (!existsSync(watchPath.path)) {
+      continue;
+    }
+
+    (async () => {
+      const watcher = watch(watchPath.path, {
+        signal: ac.signal,
+        recursive: watchPath.recursive,
+      });
+      watchCount++;
+
+      for await (const event of watcher) {
+        await cachedBuild({
+          emit: true,
+          cache: true,
+          dev: true,
+        });
+        emitter.emit("full-rebuild", {
+          source: "config-watch",
+          path: watchPath.path,
+          filename: event.filename || null,
+        });
+      }
+    })().catch((err) => {
+      // ignore.
+    });
+  }
+
+  console.log(`Watching ${watchCount} paths`);
 
   isWatching = true;
 
@@ -179,10 +350,6 @@ app.get("/build/save", async (ctx) => {
   return ctx.json({ saved: true, total });
 });
 
-app.get("/clover/*", async (ctx) => {
-  return ctx.html(cloverHtml());
-});
-
 app.get(
   "/build",
   timeout(120_000),
@@ -190,6 +357,7 @@ app.get(
     "query",
     z.object({
       cache: z.string().optional(),
+      networkCache: z.string().optional(),
       generate: z.string().optional(),
       exact: z.string().optional(),
       save: z.string().optional(),
@@ -203,12 +371,14 @@ app.get(
     const { buildConfig, emitted, enrichments, extractions, parsed, stores } =
       await cachedBuild({
         cache: ctx.req.query("cache") !== "false",
+        networkCache: ctx.req.query("networkCache") !== "false",
         generate: ctx.req.query("generate") !== "false",
         exact: ctx.req.query("exact"),
         emit: ctx.req.query("emit") !== "false",
         debug: ctx.req.query("debug") === "true",
         enrich: ctx.req.query("enrich") !== "false",
         extract: ctx.req.query("extract") !== "false",
+        dev: true,
       });
 
     const { files, log, fileTypeCache, ...config } = buildConfig;
@@ -238,6 +408,7 @@ app.post(
     "json",
     z.object({
       cache: z.string().optional(),
+      networkCache: z.string().optional(),
       generate: z.string().optional(),
       exact: z.string().optional(),
       save: z.string().optional(),
@@ -255,7 +426,10 @@ app.post(
     }
 
     const { buildConfig, emitted, enrichments, extractions, parsed, stores } =
-      await cachedBuild(body);
+      await cachedBuild({
+        ...body,
+        dev: true,
+      });
 
     const report = {
       emitted: {
@@ -280,9 +454,9 @@ app.get("/*", async (ctx, next) => {
     await next();
     return;
   }
-  let realPath = join(cwd(), ".iiif/build", ctx.req.path);
+  let realPath = join(cwd(), activePaths.buildDir, ctx.req.path);
   if (realPath.endsWith("meta.json")) {
-    realPath = join(cwd(), ".iiif/cache", ctx.req.path);
+    realPath = join(cwd(), activePaths.cacheDir, ctx.req.path);
   }
 
   const headers: Record<string, string> = {
@@ -309,7 +483,7 @@ app.get("/*", async (ctx, next) => {
   return ctx.notFound();
 });
 
-app.post("/*", async (ctx) => {
+const saveManifest = async (ctx: Context) => {
   const isManifest = ctx.req.path.endsWith("manifest.json");
   if (!isManifest) {
     return ctx.notFound();
@@ -317,37 +491,36 @@ app.post("/*", async (ctx) => {
 
   // WIthout `/manifest.json`
   const slug = ctx.req.path.replace("/manifest.json", "").slice(1);
-  const editable = join(cwd(), ".iiif/build/meta/editable.json");
-  const allEditable = await fileHandler.loadJson(editable, true);
-  const realPath = allEditable[slug];
+  const realPath = await resolveEditablePathForSlug(
+    fileHandler,
+    activePaths.buildDir,
+    slug,
+  );
   if (!realPath) {
     return ctx.notFound();
   }
 
-  const fullRealPath = join(cwd(), realPath);
-  if (!fileHandler.exists(fullRealPath)) {
-    return ctx.notFound();
-  }
-
   const file = await ctx.req.json();
-  await fileHandler.saveJson(fullRealPath, file, true);
-
-  if (!isWatching) {
-    await cachedBuild({
-      exact: slug,
-      emit: true,
-      cache: true,
-    });
-    emitter.emit("file-refresh", { path: realPath });
-  }
+  await fileHandler.saveJson(realPath, file, true);
+  await cachedBuild({
+    exact: slug,
+    emit: true,
+    cache: true,
+  });
+  emitter.emit("file-refresh", { path: realPath });
 
   return ctx.json({ saved: true });
-});
+};
+
+app.post("/*", saveManifest);
+app.put("/*", saveManifest);
+app.patch("/*", saveManifest);
 
 // @ts-ignore
-if (import.meta.main) {
-  await app.request("/build?cache=true&emit=true");
-}
+// if (import.meta.main) {
+//   console.log("BUILD CACHE?");
+//   await app.request("/build?cache=true&emit=true");
+// }
 
 export default {
   request: app.request,

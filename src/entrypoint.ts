@@ -1,7 +1,20 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
+import { Command } from "commander";
 import server from "./server";
+import { resolveHostUrl } from "./util/resolve-host-url";
+
+const program = new Command();
+
+program
+  //
+  .option("--no-cache", "Disable caching")
+  .option("--no-network-cache", "Disable network request caching")
+  .option("--debug", "Debug building")
+  .parse(process.argv);
+
+const options = program.opts();
 
 const { app, emitter } = server._extra;
 
@@ -23,10 +36,16 @@ app.get(
   })
 );
 
-console.log(`Server running: http://localhost:${server.port}`);
+console.log(`Server running: ${resolveHostUrl(`http://localhost:${server.port}`)}`);
 const runningServer = serve(server);
 injectWebSocket(runningServer);
 
-// @todo make this optional?
-await server.request("/build?cache=true&emit=true");
-await server.request("/watch");
+try {
+  // @todo make this optional?
+  await server.request(
+    `/build?cache=${options.cache ? "true" : "false"}&networkCache=${options.networkCache ? "true" : "false"}&emit=true`
+  );
+  await server.request("/watch");
+} catch (error) {
+  console.error(error);
+}

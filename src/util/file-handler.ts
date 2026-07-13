@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
 import type { IFS } from "unionfs";
@@ -71,10 +71,6 @@ export class FileHandler {
 
   async loadJson(path: string, fresh = false) {
     const filePath = this.resolve(path);
-    // Returns empty object if not exists.
-    if (!this.exists(filePath)) {
-      return {};
-    }
     return this.openJson(filePath, true, fresh);
   }
 
@@ -150,11 +146,13 @@ export class FileHandler {
 
   async writeFile(path: string, data: any) {
     const filePath = this.resolve(path);
+    const dirName = dirname(filePath);
+    await this.fs.promises.mkdir(dirName, { recursive: true });
     await this.fs.promises.writeFile(filePath, data);
   }
 
-  async saveAll(force = false) {
-    const queue = new PQueue();
+  async saveAll(force = false, concurrency = 16) {
+    const queue = new PQueue({ concurrency });
 
     // Open JSON
     const files = Array.from(this.openJsonMap.keys())
@@ -167,32 +165,40 @@ export class FileHandler {
       .map((k) => [k, this.openBinaryMap.get(k)] as const);
 
     const progress = makeProgressBar("Writing files", files.length + binaryFiles.length, this.ui);
-
+    const failedToWrite: any[] = [];
     for (const [filePath, data] of files) {
-      queue.add(async () => await this.writeFile(filePath, JSON.stringify(data, null, 2)));
+      queue.add(
+        async () =>
+          await this.writeFile(filePath, JSON.stringify(data, null, 2)).catch((err) =>
+            failedToWrite.push({ filePath, err })
+          )
+      );
     }
 
     for (const [filePath, data] of binaryFiles) {
-      queue.add(async () => await this.writeFile(filePath, data));
+      queue.add(async () => await this.writeFile(filePath, data).catch((err) => failedToWrite.push({ filePath, err })));
     }
+
+    queue.on("completed", () => progress.increment());
+
+    await queue.onIdle();
 
     // Copy fields.
     const copyKeys = Array.from(this.copyTargets.keys());
     for (const key of copyKeys) {
       // biome-ignore lint/style/noNonNullAssertion: This is from the copyTargets map.
       const { from, options } = this.copyTargets.get(key)!;
-      queue.add(async () => await copy(from, key, options));
+      await copy(from, key, options).catch((err) => failedToWrite.push({ filePath: key, err }));
     }
 
-    queue.on("completed", () => progress.increment());
-
-    await queue.onIdle();
     progress.stop();
 
     // Clear all copy targets.
     this.copyTargets.clear();
     this.openJsonChanged.clear();
     this.openBinaryChanged.clear();
+
+    return { failedToWrite };
   }
 
   async cachePathExists(to: string) {
