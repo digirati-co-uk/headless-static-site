@@ -1,19 +1,18 @@
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chdir, cwd } from "node:process";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { createServer } from "../../src/create-server.ts";
+import { createServer as createSharedServer } from "../../src/create-server.ts";
 import { findDebugUiDir } from "../../src/server/debug-ui-routes.ts";
 
 describe("debug UI routes", () => {
-  const originalCwd = cwd();
   let testDir = "";
+  const createServer = (config: any, options: any = {}) =>
+    createSharedServer(config, { projectRoot: testDir, ...options });
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-debug-routes-"));
-    chdir(testDir);
-    const baseDir = cwd();
+    const baseDir = testDir;
     await mkdir(join(baseDir, ".iiif", "build", "meta"), { recursive: true });
     await mkdir(join(baseDir, ".iiif", "build"), { recursive: true });
     await mkdir(join(baseDir, ".iiif", "build", "manifests", "demo"), { recursive: true });
@@ -119,7 +118,6 @@ describe("debug UI routes", () => {
   });
 
   afterEach(async () => {
-    chdir(originalCwd);
     if (testDir) {
       await rm(testDir, { recursive: true, force: true });
       testDir = "";
@@ -193,6 +191,36 @@ describe("debug UI routes", () => {
     });
     expect(rootRedirectRes.status).toBe(302);
     expect(rootRedirectRes.headers.get("location")).toBe("/iiif/_debug/");
+  });
+
+  test("guards debug mutations by request origin while leaving reads public", async () => {
+    const server = await createServer({ stores: {} });
+    const request = (origin?: string) =>
+      server.request("/_debug/api/config/stores/preview", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(origin ? { origin } : {}),
+        },
+        body: JSON.stringify({ store: { type: "iiif-json", path: "content" } }),
+      });
+
+    expect((await request()).status).not.toBe(403);
+    expect((await request("http://localhost")).status).not.toBe(403);
+    expect((await request("https://evil.example")).status).toBe(403);
+
+    const readResponse = await server.request("/_debug/api/status", {
+      headers: { origin: "https://evil.example" },
+    });
+    expect(readResponse.status).toBe(200);
+  });
+
+  test("rejects encoded traversal and sibling-prefix debug assets", async () => {
+    const server = await createServer({ stores: {} });
+    await writeFile(join(testDir, "build", "dev-ui", "assets-secret.js"), "secret");
+
+    expect((await server.request("/_debug/assets/%2e%2e/assets-secret.js")).status).toBe(404);
+    expect((await server.request("/_debug/assets/%2e%2e%2fassets-secret.js")).status).toBe(404);
   });
 
   test("exposes build status and onboarding metadata", async () => {
@@ -326,7 +354,7 @@ describe("debug UI routes", () => {
     });
     expect(createJson.warnings).toEqual([]);
 
-    const persisted = JSON.parse(await readFile(join(cwd(), "iiif-config", "config", "extract-topics.json"), "utf-8"));
+    const persisted = JSON.parse(await readFile(join(testDir, "iiif-config", "config", "extract-topics.json"), "utf-8"));
     expect(persisted.topicTypes).toEqual({
       contributor: ["Contributor", "Contributors"],
       date: ["Year"],
@@ -334,9 +362,9 @@ describe("debug UI routes", () => {
   });
 
   test("merges existing extract-topics config when saving metadata topic groups", async () => {
-    await mkdir(join(cwd(), "iiif-config", "config"), { recursive: true });
+    await mkdir(join(testDir, "iiif-config", "config"), { recursive: true });
     await writeFile(
-      join(cwd(), "iiif-config", "config", "extract-topics.json"),
+      join(testDir, "iiif-config", "config", "extract-topics.json"),
       JSON.stringify(
         {
           language: "en",
@@ -384,9 +412,9 @@ describe("debug UI routes", () => {
   });
 
   test("includes top-level topics collection summary in site response", async () => {
-    await mkdir(join(cwd(), ".iiif", "build", "topics"), { recursive: true });
+    await mkdir(join(testDir, ".iiif", "build", "topics"), { recursive: true });
     await writeFile(
-      join(cwd(), ".iiif", "build", "topics", "collection.json"),
+      join(testDir, ".iiif", "build", "topics", "collection.json"),
       JSON.stringify(
         {
           id: "http://localhost:7111/topics/collection.json",
@@ -452,8 +480,8 @@ describe("debug UI routes", () => {
   });
 
   test("saves stores in folder mode debug config endpoints", async () => {
-    await mkdir(join(cwd(), "iiif-config", "stores"), { recursive: true });
-    await mkdir(join(cwd(), "iiif-config", "config"), { recursive: true });
+    await mkdir(join(testDir, "iiif-config", "stores"), { recursive: true });
+    await mkdir(join(testDir, "iiif-config", "config"), { recursive: true });
 
     const server = await createServer(
       {
@@ -490,7 +518,7 @@ describe("debug UI routes", () => {
 
     const json = await response.json();
     expect(json.saved).toBe(true);
-    const persisted = JSON.parse(await readFile(join(cwd(), "iiif-config", "stores", "newStore.json"), "utf-8"));
+    const persisted = JSON.parse(await readFile(join(testDir, "iiif-config", "stores", "newStore.json"), "utf-8"));
     expect(persisted.type).toBe("iiif-json");
 
     const deleteResponse = await server.request("/_debug/api/config/stores/newStore", {
@@ -543,9 +571,9 @@ describe("debug UI routes", () => {
       },
     });
 
-    await unlink(join(cwd(), ".iiif", "build", "manifests", "demo", "manifest.json"));
+    await unlink(join(testDir, ".iiif", "build", "manifests", "demo", "manifest.json"));
     await writeFile(
-      join(cwd(), ".iiif", "build", "meta", "sitemap.json"),
+      join(testDir, ".iiif", "build", "meta", "sitemap.json"),
       JSON.stringify(
         {
           "manifests/demo": {
@@ -599,9 +627,9 @@ describe("debug UI routes", () => {
       },
     });
 
-    await writeFile(join(cwd(), ".iiif", "build", "meta", "editable.json"), JSON.stringify({}, null, 2));
+    await writeFile(join(testDir, ".iiif", "build", "meta", "editable.json"), JSON.stringify({}, null, 2));
     await writeFile(
-      join(cwd(), ".iiif", "build", "meta", "sitemap.json"),
+      join(testDir, ".iiif", "build", "meta", "sitemap.json"),
       JSON.stringify(
         {
           "manifests/demo": {
@@ -643,7 +671,7 @@ describe("debug UI routes", () => {
     expect(saveRes.status).toBe(200);
     expect(await saveRes.json()).toEqual({ saved: true });
 
-    const savedOverride = await readFile(join(cwd(), "content", "demo.json"), "utf-8");
+    const savedOverride = await readFile(join(testDir, "content", "demo.json"), "utf-8");
     expect(JSON.parse(savedOverride)).toEqual(updatedManifest);
   });
 });

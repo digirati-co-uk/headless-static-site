@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chdir, cwd } from "node:process";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const cachedBuildMock = vi.fn(async () => ({
@@ -29,25 +28,46 @@ const emitterMock = {
     emitterListeners.get(event)?.add(listener);
   }),
 };
-const createServerMock = vi.fn(async () => ({
-  _extra: {
-    cachedBuild: cachedBuildMock,
-    app: { fetch: vi.fn() },
-    emitter: emitterMock,
-  },
-  request: requestMock,
-}));
+const createServerMock = vi.fn(async (_config: any, serverOptions: any = {}) => {
+  let buildNumber = 0;
+  return {
+    _extra: {
+      cachedBuild: async (options: any) => {
+        const context = options.dev ? "development" : "production";
+        const currentBuild = ++buildNumber;
+        await serverOptions.onBuild?.({ type: "start", context, buildNumber: currentBuild });
+        try {
+          const output = await cachedBuildMock(options);
+          await serverOptions.onBuild?.({
+            type: "success",
+            context,
+            buildNumber: currentBuild,
+            buildDir: output.buildConfig.buildDir,
+            durationMs: 0,
+          });
+          return output;
+        } catch (error) {
+          await serverOptions.onBuild?.({ type: "error", context, buildNumber: currentBuild, error, durationMs: 0 });
+          throw error;
+        }
+      },
+      app: { fetch: vi.fn() },
+      emitter: emitterMock,
+    },
+    request: requestMock,
+  };
+});
 
 vi.mock("../src/create-server", () => ({
   createServer: (...args: any[]) => createServerMock(...args),
 }));
 
 describe("vite plugin lifecycle", () => {
-  const originalCwd = cwd();
+  let runtimeRoot = "";
   let testDir = "";
 
-  beforeEach(() => {
-    chdir(originalCwd);
+  beforeEach(async () => {
+    runtimeRoot = await mkdtemp(join(tmpdir(), "iiif-hss-vite-runtime-"));
     process.env.VITEST = "";
     cachedBuildMock.mockClear();
     requestMock.mockClear();
@@ -57,7 +77,7 @@ describe("vite plugin lifecycle", () => {
   });
 
   afterEach(async () => {
-    chdir(originalCwd);
+    await rm(runtimeRoot, { recursive: true, force: true });
     if (testDir) {
       await rm(testDir, { recursive: true, force: true });
       testDir = "";
@@ -91,6 +111,39 @@ describe("vite plugin lifecycle", () => {
     expect(requestMock).not.toHaveBeenCalledWith("/watch");
   });
 
+  test("emits production success and no-store skipped lifecycle events", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-vite-lifecycle-"));
+    const events: any[] = [];
+    const { iiifPlugin } = await import("../src/vite-plugin");
+    const successPlugin = iiifPlugin({
+      enabled: true,
+      onBuild: async (event) => events.push(event),
+      config: {
+        stores: {
+          remote: { type: "iiif-remote", url: "https://example.org/manifest.json" },
+        },
+      },
+    });
+    await successPlugin.configResolved?.({ command: "build", mode: "production", root: testDir } as any);
+    await successPlugin.buildStart?.call({} as any);
+    expect(events.map((event) => event.type)).toEqual(["start", "success"]);
+
+    events.length = 0;
+    await writeFile(
+      join(testDir, "missing.yml"),
+      "stores:\n  local:\n    type: iiif-json\n    path: missing\n",
+    );
+    const skippedPlugin = iiifPlugin({
+      enabled: true,
+      onBuild: (event) => events.push(event),
+      configFile: "missing.yml",
+    });
+    await skippedPlugin.configResolved?.({ command: "build", mode: "production", root: testDir } as any);
+    await skippedPlugin.buildStart?.call({} as any);
+    expect(events.map((event) => event.type)).toEqual(["skipped"]);
+    expect(events[0].reason).toBe("no-buildable-stores");
+  });
+
   test("uses explicit serverUrl option for build-time emitted IDs", async () => {
     const { iiifPlugin } = await import("../src/vite-plugin");
     const plugin = iiifPlugin({
@@ -109,7 +162,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "build",
       mode: "production",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },
@@ -118,7 +171,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.buildStart?.call({} as any);
 
     const configured = createServerMock.mock.calls.at(-1)?.[0] as any;
-    expect(configured.server?.url).toBe("https://iiif.example.org");
+    expect(configured.server?.url).toBe("https://iiif.example.org/iiif");
   });
 
   test("uses deployment env URL defaults in build mode", async () => {
@@ -148,7 +201,7 @@ describe("vite plugin lifecycle", () => {
       await plugin.configResolved?.({
         command: "build",
         mode: "production",
-        root: process.cwd(),
+      root: runtimeRoot,
         build: {
           outDir: "dist",
         },
@@ -157,7 +210,7 @@ describe("vite plugin lifecycle", () => {
       await plugin.buildStart?.call({} as any);
 
       const configured = createServerMock.mock.calls.at(-1)?.[0] as any;
-      expect(configured.server?.url).toBe("https://my-site.vercel.app");
+      expect(configured.server?.url).toBe("https://my-site.vercel.app/iiif");
     } finally {
       if (typeof originalServerUrl === "string") {
         process.env.SERVER_URL = originalServerUrl;
@@ -239,7 +292,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "serve",
       mode: "production",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },
@@ -306,6 +359,7 @@ describe("vite plugin lifecycle", () => {
 
     try {
       await plugin.configureServer?.(devServer);
+      await vi.waitFor(() => expect(cachedBuildMock).toHaveBeenCalledTimes(1));
       devServer.printUrls();
       expect(logSpy).toHaveBeenCalledWith("  ➜  Local:   http://localhost:5173/");
       expect(
@@ -334,7 +388,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "serve",
       mode: "development",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },
@@ -358,6 +412,8 @@ describe("vite plugin lifecycle", () => {
         send: wsSend,
       },
     } as any);
+
+    await vi.waitFor(() => expect(cachedBuildMock).toHaveBeenCalledTimes(1));
 
     emitterMock.emit("file-refresh", { path: "content/demo.json" });
 
@@ -383,7 +439,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "serve",
       mode: "development",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },
@@ -526,7 +582,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "serve",
       mode: "development",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },
@@ -556,9 +612,27 @@ describe("vite plugin lifecycle", () => {
     expect(configured.stores.default).toBeUndefined();
   });
 
+  test("discovers config and content from Vite root when process cwd differs", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-vite-root-"));
+    await mkdir(join(testDir, "content"), { recursive: true });
+    await writeFile(
+      join(testDir, "custom.yml"),
+      "stores:\n  local:\n    type: iiif-json\n    path: ./content\n",
+    );
+    await writeFile(join(testDir, "content", "demo.json"), JSON.stringify({ type: "Manifest", id: "demo" }));
+
+    const { iiifPlugin } = await import("../src/vite-plugin");
+    const plugin = iiifPlugin({ enabled: true, configFile: "custom.yml" });
+    await plugin.configResolved?.({ command: "build", mode: "production", root: testDir } as any);
+    await plugin.buildStart?.call({} as any);
+
+    expect(createServerMock.mock.calls.at(-1)?.[0].stores.local.path).toBe("./content");
+    expect(createServerMock.mock.calls.at(-1)?.[1].projectRoot).toBe(testDir);
+    expect(cachedBuildMock).toHaveBeenCalledWith({ cache: false, emit: true });
+  });
+
   test("merges inline config with iiif-config folder config", async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-vite-merge-"));
-    chdir(testDir);
     await mkdir(join(testDir, "iiif-config", "stores"), { recursive: true });
     await mkdir(join(testDir, "iiif-config", "config"), { recursive: true });
     await writeFile(join(testDir, "iiif-config", "config.yml"), "");
@@ -634,7 +708,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.configResolved?.({
       command: "serve",
       mode: "development",
-      root: process.cwd(),
+      root: runtimeRoot,
       build: {
         outDir: "dist",
       },

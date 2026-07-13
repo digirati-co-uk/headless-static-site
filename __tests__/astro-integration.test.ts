@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chdir, cwd } from "node:process";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -64,11 +63,11 @@ function jsonResponse(value: unknown, status = 200) {
 }
 
 describe("astro integration lifecycle", () => {
-  const originalCwd = cwd();
+  let runtimeRoot = "";
   let testDir = "";
 
-  beforeEach(() => {
-    chdir(originalCwd);
+  beforeEach(async () => {
+    runtimeRoot = await mkdtemp(join(tmpdir(), "iiif-hss-astro-runtime-"));
     process.env.VITEST = "";
     cachedBuildMock.mockClear();
     createServerMock.mockClear();
@@ -78,7 +77,7 @@ describe("astro integration lifecycle", () => {
   });
 
   afterEach(async () => {
-    chdir(originalCwd);
+    await rm(runtimeRoot, { recursive: true, force: true });
     if (testDir) {
       await rm(testDir, { recursive: true, force: true });
       testDir = "";
@@ -103,7 +102,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
@@ -112,7 +111,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-          root: process.cwd(),
+      root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -149,7 +148,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
@@ -158,7 +157,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-          root: process.cwd(),
+      root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -193,7 +192,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
@@ -202,7 +201,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-          root: process.cwd(),
+      root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -248,14 +247,14 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "build",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
       logger,
     });
     await hooks["astro:config:done"]({
-      config: { root: pathToFileURL(`${process.cwd()}/`), mode: "production" },
+      config: { root: pathToFileURL(`${runtimeRoot}/`), mode: "production" },
     });
     await hooks["astro:build:start"]({ logger });
     await hooks["astro:build:start"]({ logger });
@@ -375,7 +374,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "preview",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig,
       addWatchFile: vi.fn(),
@@ -390,7 +389,7 @@ describe("astro integration lifecycle", () => {
 
     await previewPlugin.configurePreviewServer({
       config: {
-        root: process.cwd(),
+      root: runtimeRoot,
         preview: {
           host: "127.0.0.1",
           port: 4321,
@@ -422,7 +421,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
@@ -454,7 +453,7 @@ describe("astro integration lifecycle", () => {
 
     await hooks["astro:config:setup"]({
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       updateConfig: vi.fn(),
       addWatchFile: vi.fn(),
@@ -463,7 +462,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-          root: process.cwd(),
+      root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -490,7 +489,6 @@ describe("astro integration lifecycle", () => {
 
   test("merges inline config with iiif-config folder config", async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-astro-merge-"));
-    chdir(testDir);
     await mkdir(join(testDir, "iiif-config", "stores"), { recursive: true });
     await mkdir(join(testDir, "iiif-config", "config"), { recursive: true });
     await writeFile(join(testDir, "iiif-config", "config.yml"), "");
@@ -577,7 +575,7 @@ describe("astro integration lifecycle", () => {
       addDevToolbarApp,
       addWatchFile: vi.fn(),
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       logger: { info: vi.fn(), warn: vi.fn() },
       updateConfig: vi.fn(),
@@ -656,7 +654,7 @@ describe("astro integration lifecycle", () => {
       }
       if (path.startsWith("/_debug/api/resource/")) {
         return jsonResponse({
-          diskPath: process.cwd(),
+          diskPath: runtimeRoot,
           isEditable: false,
           links: {
             json: "http://localhost:4321/content/demo/manifest.json",
@@ -704,7 +702,7 @@ describe("astro integration lifecycle", () => {
       addDevToolbarApp: vi.fn(),
       addWatchFile: vi.fn(),
       command: "dev",
-      config: { root: pathToFileURL(`${process.cwd()}/`) },
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
       isRestart: false,
       logger: { info: vi.fn(), warn: vi.fn() },
       updateConfig: vi.fn(),
@@ -713,7 +711,7 @@ describe("astro integration lifecycle", () => {
       logger: { warn: vi.fn() },
       server: {
         config: {
-          root: process.cwd(),
+      root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,

@@ -1,9 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { chdir, cwd } from "node:process";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { mergeIiifConfig, resolveConfigSource } from "../../src/util/get-config";
+import { mergeIiifConfig, resolveConfigSource as resolveConfigSourceFromRoot } from "../../src/util/get-config";
 
 async function write(path: string, content: string) {
   await mkdir(dirname(path), { recursive: true });
@@ -11,16 +10,15 @@ async function write(path: string, content: string) {
 }
 
 describe("resolveConfigSource", () => {
-  const originalCwd = cwd();
   let testDir: string;
+  const resolveConfigSource = (configFile?: string, projectRoot = testDir) =>
+    resolveConfigSourceFromRoot(configFile, projectRoot);
 
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-config-"));
-    chdir(testDir);
   });
 
   afterEach(async () => {
-    chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -170,6 +168,17 @@ stores:
     const result = await resolveConfigSource();
     expect(result.mode).toBe("default");
     expect(result.config.stores.default).toBeDefined();
+  });
+
+  test("discovers configs from an explicit project root and resolves relative or absolute config files", async () => {
+    const projectRoot = join(testDir, "site");
+    const configPath = join(projectRoot, "config", "custom.yml");
+    await write(configPath, "stores:\n  local:\n    type: iiif-json\n    path: ./content\n");
+    await write(join(projectRoot, ".iiifrc.yml"), "stores:\n  root:\n    type: iiif-json\n    path: ./root-content\n");
+
+    expect((await resolveConfigSource(undefined, projectRoot)).config.stores.root).toBeDefined();
+    expect((await resolveConfigSource("config/custom.yml", projectRoot)).configPath).toBe(configPath);
+    expect((await resolveConfigSource(configPath, projectRoot)).configPath).toBe(configPath);
   });
 });
 
