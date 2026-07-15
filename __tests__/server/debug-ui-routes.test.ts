@@ -354,7 +354,9 @@ describe("debug UI routes", () => {
     });
     expect(createJson.warnings).toEqual([]);
 
-    const persisted = JSON.parse(await readFile(join(testDir, "iiif-config", "config", "extract-topics.json"), "utf-8"));
+    const persisted = JSON.parse(
+      await readFile(join(testDir, "iiif-config", "config", "extract-topics.json"), "utf-8")
+    );
     expect(persisted.topicTypes).toEqual({
       contributor: ["Contributor", "Contributors"],
       date: ["Year"],
@@ -578,10 +580,23 @@ describe("debug UI routes", () => {
         {
           "manifests/demo": {
             type: "Manifest",
+          },
+        },
+        null,
+        2
+      )
+    );
+    await writeFile(
+      join(testDir, ".iiif", "cache", "manifests", "demo", "meta.json"),
+      JSON.stringify(
+        {
+          "hss:runtime": {
+            type: "Manifest",
             source: {
               type: "remote",
               url: "https://example.org/iiif/remote-demo/manifest.json",
             },
+            saveToDisk: false,
           },
         },
         null,
@@ -611,6 +626,13 @@ describe("debug UI routes", () => {
       const resourceJson = await resourceRes.json();
       expect(resourceJson.resource?.id).toBe("https://example.org/iiif/remote-demo/manifest.json");
       expect(resourceJson.links.json).toBe("https://example.org/iiif/remote-demo/manifest.json");
+      expect(resourceJson.source).toEqual({
+        type: "remote",
+        url: "https://example.org/iiif/remote-demo/manifest.json",
+      });
+
+      const siteJson = await (await server.request("/_debug/api/site")).json();
+      expect(siteJson.featuredItems[0].source).toEqual(resourceJson.source);
     } finally {
       globalThis.fetch = originalFetch;
     }

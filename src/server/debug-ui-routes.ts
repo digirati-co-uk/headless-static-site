@@ -474,7 +474,7 @@ export function registerDebugUiRoutes({
   });
 
   app.get("/_debug/api/site", async (ctx) => {
-    const { buildDir } = getActivePaths();
+    const { buildDir, cacheDir } = getActivePaths();
     const config = await getConfig();
     const siteMapPath = join(projectRoot, buildDir, "meta", "sitemap.json");
     const topCollectionPath = join(projectRoot, buildDir, "collection.json");
@@ -487,18 +487,27 @@ export function registerDebugUiRoutes({
     const topicsCollection = (await fileHandler.loadJson(topicsCollectionPath, true)) as Record<string, any>;
     const baseUrl = config.server?.url || new URL(ctx.req.url).origin;
     const topicItems = Array.isArray(topicsCollection?.items) ? topicsCollection.items : [];
+    const runtimeBySlug = new Map<string, any>();
+    await Promise.all(
+      Object.keys(siteMap || {}).map(async (slug) => {
+        const meta = await fileHandler.loadJson(join(projectRoot, cacheDir, slug, "meta.json"), true);
+        runtimeBySlug.set(slug, meta?.["hss:runtime"] || null);
+      })
+    );
 
     const featuredItems = (topCollection.items?.length ? topCollection.items : manifestsCollection.items || []).map(
       (item: any) => {
         const slug = trimSlashes(item?.["hss:slug"] || "");
+        const runtime = runtimeBySlug.get(slug);
+        const source = slug ? siteMap[slug]?.source || runtime?.source || null : null;
         return {
           id: item?.id || null,
           slug: slug || null,
           label: asLabel(item?.label),
           thumbnail: asThumbnailUrl(item?.thumbnail),
-          type: slug ? siteMap[slug]?.type || item?.type || null : item?.type || null,
-          source: slug ? siteMap[slug]?.source || null : null,
-          diskPath: slug ? toAbsoluteDiskPath(siteMap[slug]?.source, projectRoot) : null,
+          type: slug ? siteMap[slug]?.type || runtime?.type || item?.type || null : item?.type || null,
+          source,
+          diskPath: toAbsoluteDiskPath(source, projectRoot),
         };
       }
     );
@@ -523,13 +532,17 @@ export function registerDebugUiRoutes({
         label: asLabel(topicsCollection?.label) || "Topics",
       },
       featuredItems,
-      resources: Object.entries(siteMap || {}).map(([slug, value]) => ({
-        slug,
-        type: (value as any)?.type || null,
-        label: (value as any)?.label || null,
-        source: (value as any)?.source || null,
-        diskPath: toAbsoluteDiskPath((value as any)?.source, projectRoot),
-      })),
+      resources: Object.entries(siteMap || {}).map(([slug, value]) => {
+        const runtime = runtimeBySlug.get(slug);
+        const source = (value as any)?.source || runtime?.source || null;
+        return {
+          slug,
+          type: (value as any)?.type || runtime?.type || null,
+          label: (value as any)?.label || null,
+          source,
+          diskPath: toAbsoluteDiskPath(source, projectRoot),
+        };
+      }),
     });
   });
 
@@ -552,9 +565,14 @@ export function registerDebugUiRoutes({
     const collectionPath = join(projectRoot, buildDir, slug, "collection.json");
     const hasManifest = fileHandler.exists(manifestPath);
     const hasCollection = fileHandler.exists(collectionPath);
+    const cacheMetaPath = join(projectRoot, cacheDir, slug, "meta.json");
+    const cacheIndicesPath = join(projectRoot, cacheDir, slug, "indices.json");
+    const cacheSearchRecordPath = join(projectRoot, cacheDir, slug, "search-record.json");
+    const meta = await fileHandler.loadJson(cacheMetaPath, true);
+    const runtime = meta?.["hss:runtime"] || null;
 
-    const source = siteMap[slug]?.source || null;
-    let type: "Manifest" | "Collection" | null = siteMap[slug]?.type || null;
+    const source = siteMap[slug]?.source || runtime?.source || null;
+    let type: "Manifest" | "Collection" | null = siteMap[slug]?.type || runtime?.type || null;
     if (!type) {
       if (hasManifest) {
         type = "Manifest";
@@ -614,13 +632,9 @@ export function registerDebugUiRoutes({
             : null;
     const primaryJsonUrl = localJsonUrl || remoteJsonUrl;
 
-    const cacheMetaPath = join(projectRoot, cacheDir, slug, "meta.json");
-    const cacheIndicesPath = join(projectRoot, cacheDir, slug, "indices.json");
-    const cacheSearchRecordPath = join(projectRoot, cacheDir, slug, "search-record.json");
     const buildIndicesPath = join(projectRoot, buildDir, slug, "indices.json");
     const buildSearchRecordPath = join(projectRoot, buildDir, slug, "search-record.json");
 
-    const meta = await fileHandler.loadJson(cacheMetaPath, true);
     const indices = await fileHandler.loadJson(cacheIndicesPath, true);
     const searchRecord = await fileHandler.loadJson(cacheSearchRecordPath, true);
 
