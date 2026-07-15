@@ -132,4 +132,53 @@ describe("build indices", () => {
       )
     ).rejects.toThrow(/both normalize to "topic-type"/);
   });
+
+  test("uses normalized topic paths for spaces, punctuation, and Unicode", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-topic-paths-"));
+    const buildDir = join(testDir, "build");
+    const files = {
+      async writeFile(path: string, content: string) {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content);
+      },
+      async saveJson(path: string, content: unknown) {
+        await writeJson(path, content);
+      },
+      async loadJson() {
+        return { "Média Type!": ["Café & Tea"] };
+      },
+      async mkdir(path: string) {
+        await mkdir(path, { recursive: true });
+      },
+      readYaml() {
+        return {};
+      },
+    };
+
+    await indices(
+      {
+        allResources: [{ slug: "manifest", source: { type: "disk" } }] as any,
+        indexCollection: {
+          manifest: { id: "https://example.org/manifest", type: "Manifest", "hss:slug": "manifest" },
+        },
+        allIndices: {},
+      },
+      {
+        options: {},
+        configUrl: "https://example.org/iiif",
+        buildDir,
+        cacheDir: join(testDir, "cache"),
+        topicsDir: join(testDir, "topics"),
+        collectionRewrites: [],
+        files,
+        config: { stores: {}, collections: {} },
+      } as any
+    );
+
+    const leaf = JSON.parse(
+      await readFile(join(buildDir, "topics", "media-type", "cafe-tea", "collection.json"), "utf-8")
+    );
+    expect(leaf.id).toBe("https://example.org/iiif/topics/media-type/cafe-tea/collection.json");
+    expect(leaf["hss:slug"]).toBe("topics/media-type/cafe-tea");
+  });
 });
