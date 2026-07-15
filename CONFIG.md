@@ -48,6 +48,13 @@ output:
   includeDebugMetadata: true
 ```
 
+Per-Manifest Canvas indexes are also disabled by default because they can add significantly to large builds. Enable them when clients use `getCanvasIndex(slug)`:
+
+```yaml
+output:
+  includeCanvasIndex: true
+```
+
 YAML example:
 
 ```yaml

@@ -45,6 +45,7 @@ export interface IIIFRC {
   concurrency?: BuildConcurrencyConfig;
   fileTemplates?: Record<string, any>;
   output?: {
+    includeCanvasIndex?: boolean;
     includeDebugMetadata?: boolean;
     includeSourceConfig?: boolean;
   };

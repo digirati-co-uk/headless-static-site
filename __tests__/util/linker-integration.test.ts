@@ -288,6 +288,21 @@ describe("linker integration", () => {
     await expect(readFile(join(testDir, ".iiif", "build", "config", "stores.json"), "utf-8")).rejects.toMatchObject({
       code: "ENOENT",
     });
+    await expect(
+      readFile(join(testDir, ".iiif", "build", output.stores.allResources[0].slug, "canvases", "index.json"), "utf-8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("canvas indexes can be enabled", async () => {
+    const output = await build({ emit: true, cache: false, debug: false, ui: false }, defaultBuiltIns, {
+      customConfig: {
+        stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+        server: { url: "http://localhost:7111" },
+        output: { includeCanvasIndex: true },
+      },
+      fileHandler: new FileHandler(fs as any, testDir, false),
+    });
+
     expect(
       JSON.parse(
         await readFile(

@@ -93,6 +93,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "includeCanvasIndex": { "type": "boolean", "default": false },
         "includeDebugMetadata": { "type": "boolean", "default": false },
         "includeSourceConfig": { "type": "boolean", "default": false }
       }

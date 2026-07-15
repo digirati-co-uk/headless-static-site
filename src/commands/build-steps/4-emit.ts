@@ -387,7 +387,7 @@ export async function emit(
           files.saveJson(join(manifestBuildDirectory, fileName), resource);
         }
 
-        if (resource.type === "Manifest") {
+        if (resource.type === "Manifest" && config.output?.includeCanvasIndex) {
           const canvasEntries = (resource.items || []).map((canvasRef, position) => {
             const canvas = vault.toPresentation3<Canvas>(vault.get(canvasRef.id)) || (canvasRef as Canvas);
             const canvasCacheDirectory = join(cacheDir, manifest.slug, "canvases", String(position));

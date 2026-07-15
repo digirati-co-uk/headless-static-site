@@ -238,7 +238,7 @@ Enabled Canvas extractions and enrichments produce one directory per zero-based 
 
 Canvas `meta.json` is the same merge model as resource metadata. The built-in canvas-dimensions extraction contributes `width` and `height`; other steps can add thumbnails, OCR information, or custom fields. Canvas files are flattened from their working `files` directory into the Canvas directory.
 
-Every emitted Manifest also has `<slug>/canvases/index.json`. Each entry contains the Canvas ID, zero-based position, label, dimensions, thumbnail, metadata/file links, and local or remote search availability. Use `getCanvasIndex(slug)` instead of inferring positional paths.
+With `output.includeCanvasIndex: true`, each emitted Manifest also has `<slug>/canvases/index.json`. It is disabled by default to keep builds small. Each entry contains the Canvas ID, zero-based position, label, dimensions, thumbnail, metadata/file links, and local or remote search availability. Use `getCanvasIndex(slug)` instead of inferring positional paths.
 
 The Canvas's full IIIF JSON is not emitted separately. It remains inside its parent `manifest.json` or remote Manifest. Canvas `indices.json`, `search-record.json`, and invalidation caches are also not copied as individual files; relevant Canvas search data is emitted through the search files described below.
 
