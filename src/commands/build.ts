@@ -1,8 +1,10 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { watch as watchFs } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { cwd, env } from "node:process";
 import type { Command } from "commander";
+import packageJson from "../../package.json";
 import { canvasThumbnail } from "../enrich/canvas-thumbnail.ts";
 import { filesRewrite } from "../enrich/files-rewrite.ts";
 import { homepageProperty } from "../enrich/homepage-property";
@@ -37,6 +39,7 @@ import type { BuildConcurrencyConfig, IIIFRC, ResolvedConfigSource } from "../ut
 import type { Linker } from "../util/linker.ts";
 import type { Rewrite } from "../util/rewrite.ts";
 import type { Tracer } from "../util/tracer.ts";
+import { OUTPUT_FORMAT_VERSION, type BuildManifest, type OutputFile } from "../output-contract.ts";
 import { warmRemoteStores } from "./build-steps/-1-warm-remote.ts";
 import { parseStores } from "./build-steps/0-parse-stores.ts";
 import { link } from "./build-steps/1-link.ts";
@@ -370,6 +373,9 @@ export async function build(
     await buildConfig.files.remove(buildConfig.buildDir);
   }
   await buildConfig.files.mkdir(buildConfig.buildDir);
+  if (isPartialBuild) {
+    await buildConfig.files.remove(join(buildConfig.buildDir, "meta", "build.json"));
+  }
   await buildConfig.files.mkdir(buildConfig.requestCacheDir);
 
   const parseState = { storeRequestCaches: storeRequestCaches || {} };
@@ -462,6 +468,64 @@ export async function build(
         .join("\n");
       throw new Error(`Failed to write ${failedToWrite.length} output file(s):\n${details}`);
     }
+
+    const outputRoot = buildConfig.files.resolve(buildConfig.buildDir);
+    const inventory: OutputFile[] = [];
+    const visit = async (directory: string) => {
+      const entries = await buildConfig.files.fs.promises.readdir(directory, { withFileTypes: true });
+      for (const entry of entries) {
+        const filePath = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          await visit(filePath);
+          continue;
+        }
+        if (relative(outputRoot, filePath) === "meta/build.json") {
+          continue;
+        }
+        const data = await buildConfig.files.fs.promises.readFile(filePath);
+        inventory.push({
+          path: relative(outputRoot, filePath).split("\\").join("/"),
+          bytes: data.byteLength,
+          sha256: createHash("sha256").update(data).digest("hex"),
+        });
+      }
+    };
+    await visit(outputRoot);
+    inventory.sort((a, b) => a.path.localeCompare(b.path));
+    const features = [
+      inventory.some(({ path }) => path.startsWith("meta/search/")) && "search",
+      inventory.some(({ path }) => path.includes("/canvases/index.json")) && "canvas-discovery",
+      inventory.some(({ path }) => path === "topics/collection.json") && "topics",
+      buildConfig.options.debug && "debug",
+    ].filter(Boolean) as string[];
+    const manifest: BuildManifest = {
+      formatVersion: OUTPUT_FORMAT_VERSION,
+      hssVersion: packageJson.version,
+      mode: isPartialBuild ? "partial" : "full",
+      canonicalBaseUrl: buildConfig.configUrl as string,
+      completedAt: new Date().toISOString(),
+      stores: [...buildConfig.stores].sort(),
+      features,
+      search: inventory.filter(({ path }) => path.endsWith(".mapping.json")).map(({ path }) => path),
+      analysis: inventory.filter(({ path }) => /(^|\/)analysis[^/]*\.json$/i.test(path)).map(({ path }) => path),
+      resources: {
+        manifests: emitted.indexCollection
+          ? Object.values(emitted.indexCollection).filter((item: any) => item.type === "Manifest").length
+          : 0,
+        collections: emitted.indexCollection
+          ? Object.values(emitted.indexCollection).filter((item: any) => item.type === "Collection").length
+          : 0,
+        canvases: Object.values(emitted.siteMap || {}).reduce(
+          (total: number, entry: any) => total + (entry.canvases || 0),
+          0
+        ),
+      },
+      files: inventory,
+    };
+    await buildConfig.files.writeFile(
+      join(buildConfig.buildDir, "meta", "build.json"),
+      JSON.stringify(manifest, null, 2)
+    );
   }
 
   return {

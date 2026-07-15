@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/canvases.schema.json",
+  "title": "IIIF HSS Canvas discovery index",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "position", "files", "search"],
+    "properties": {
+      "id": { "type": "string" },
+      "position": { "type": "integer", "minimum": 0 },
+      "width": { "type": "integer", "minimum": 0 },
+      "height": { "type": "integer", "minimum": 0 },
+      "meta": { "type": "string" },
+      "files": { "type": "array", "items": { "type": "string" } },
+      "search": { "type": "array", "items": { "type": "object" } }
+    },
+    "additionalProperties": true
+  }
+}

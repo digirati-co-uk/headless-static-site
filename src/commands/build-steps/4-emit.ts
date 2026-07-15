@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Vault, createThumbnailHelper } from "@iiif/helpers";
-import type { Collection, Manifest } from "@iiif/presentation-3";
+import type { Canvas, Collection, Manifest } from "@iiif/presentation-3";
 import PQueue from "p-queue";
 import { getValue } from "../../extract/extract-label-string.ts";
 import type { CanvasSearchIndex, CanvasSearchIndexFile } from "../../util/enrich.ts";
@@ -22,7 +22,7 @@ export async function emit(
     allPaths?: Record<string, string>;
     idsToSlugs?: Record<string, { slug: string; type: string }>;
   },
-  { options, server, cacheDir, buildDir, log, imageServiceLoader, files, search, concurrency }: BuildConfig,
+  { options, configUrl, cacheDir, buildDir, log, imageServiceLoader, files, search, concurrency, config }: BuildConfig,
   { canvasSearchIndex }: { canvasSearchIndex?: CanvasSearchIndex }
 ) {
   if (!options.emit) {
@@ -43,7 +43,7 @@ export async function emit(
     string,
     {
       type: string;
-      source: any;
+      source?: any;
       label?: string;
       canvases?: number;
       hasCanvasData?: boolean;
@@ -80,13 +80,13 @@ export async function emit(
     files.copy(filesDir, buildDir, { overwrite: true });
   }
 
-  const configUrl = typeof server === "string" ? server : server?.url;
   const indexCollection: Record<string, any> = {};
   const indexCollectionMap: Record<string, any> = {};
   const storeCollections: Record<string, Array<any>> = {};
   const manifestCollection: any[] = [];
   const snippets: Record<string, any> = {};
   const metaThumbnailBySlug: Record<string, any> = {};
+  const resourceOrdinal = new Map(allResources.map((resource, index) => [resource.slug, index]));
   const idToSlugMap: Record<
     string,
     {
@@ -133,7 +133,9 @@ export async function emit(
     }
 
     const metaJson = await files.loadJson(metaPath);
-    const thumbnail = normalizeThumbnail((metaJson as any).thumbnail || (metaJson as any).default?.thumbnail);
+    const thumbnail = normalizeThumbnail(
+      (metaJson as any)["hss:thumbnail"]?.image || (metaJson as any).thumbnail || (metaJson as any).default?.thumbnail
+    );
     metaThumbnailBySlug[slug] = thumbnail;
     return thumbnail;
   };
@@ -177,7 +179,7 @@ export async function emit(
         const getMetaThumbnail = async () => {
           try {
             const metaJson = await files.loadJson(cache["meta.json"]);
-            return metaJson.thumbnail || metaJson.default?.thumbnail || null;
+            return metaJson["hss:thumbnail"]?.image || metaJson.thumbnail || metaJson.default?.thumbnail || null;
           } catch (err) {
             return null;
           }
@@ -202,8 +204,8 @@ export async function emit(
 
         siteMap[manifest.slug] = {
           type: manifest.type,
-          source: manifest.source,
           label: getValue(resource.label),
+          ...(config.output?.includeSourceConfig ? { source: manifest.source } : {}),
         };
 
         let thumbnail = null;
@@ -257,20 +259,30 @@ export async function emit(
           id: url,
           type: resource.type,
           label: resource.label,
+          summary: resource.summary,
+          rights: resource.rights,
+          requiredStatement: resource.requiredStatement,
+          provider: resource.provider,
+          homepage: resource.homepage,
+          navDate: resource.navDate,
+          behavior: resource.behavior,
           "hss:slug": manifest.slug,
+          "hss:totalItems": resource.type === "Collection" ? resource.items?.length || 0 : undefined,
           thumbnail:
-            resource.thumbnail ||
-            (thumbnail?.best
-              ? [
-                  {
-                    id: thumbnail.best.id,
-                    type: "Image",
-                    width: thumbnail.best.width,
-                    height: thumbnail.best.height,
-                  },
-                ]
-              : null) ||
-            undefined,
+            normalizeThumbnail(
+              resource.thumbnail ||
+                (thumbnail?.best
+                  ? [
+                      {
+                        id: thumbnail.best.id,
+                        type: "Image",
+                        width: thumbnail.best.width,
+                        height: thumbnail.best.height,
+                      },
+                    ]
+                  : null) ||
+                undefined
+            ) || undefined,
         };
         snippets[url] = snippet;
 
@@ -366,6 +378,49 @@ export async function emit(
           }
 
           files.saveJson(join(manifestBuildDirectory, fileName), resource);
+        }
+
+        if (resource.type === "Manifest") {
+          const canvasEntries = (resource.items || []).map((canvasRef, position) => {
+            const canvas = vault.toPresentation3<Canvas>(vault.get(canvasRef.id)) || (canvasRef as Canvas);
+            const canvasCacheDirectory = join(cacheDir, manifest.slug, "canvases", String(position));
+            const canvasFilesDirectory = join(canvasCacheDirectory, "files");
+            const outputPrefix = `canvases/${position}`;
+            const artifactFiles = files.dirExists(canvasFilesDirectory)
+              ? readdirSync(files.resolve(canvasFilesDirectory), { withFileTypes: true })
+                  .filter((entry) => entry.isFile())
+                  .map((entry) => `${outputPrefix}/${entry.name}`)
+              : [];
+            const searchEntries: any[] = [];
+            for (const [index, details] of Object.entries(canvasSearchIndex?.[manifest.slug] || {})) {
+              if (details.records.length) {
+                searchEntries.push({ index, type: "file", path: `${index}.search.jsonl` });
+              }
+              searchEntries.push(
+                ...details.remoteRecords
+                  .filter((record) => record.canvasIndex === position || record.canvas === canvas.id)
+                  .map((record) => ({
+                    index,
+                    type: "remote",
+                    url: record.url,
+                    format: record.format,
+                    recordId: record.recordId,
+                  }))
+              );
+            }
+            return {
+              id: canvas.id,
+              position,
+              label: canvas.label,
+              width: canvas.width,
+              height: canvas.height,
+              thumbnail: normalizeThumbnail(canvas.thumbnail),
+              meta: files.exists(join(canvasCacheDirectory, "meta.json")) ? `${outputPrefix}/meta.json` : undefined,
+              files: artifactFiles,
+              search: searchEntries,
+            };
+          });
+          await files.saveJson(join(manifestBuildDirectory, "canvases", "index.json"), canvasEntries);
         }
 
         if (canvasSearchIndex?.[manifest.slug]) {
@@ -481,6 +536,15 @@ export async function emit(
   progress.stop();
 
   stats.total = Date.now() - start;
+
+  const bySourceOrder = (a: any, b: any) =>
+    (resourceOrdinal.get(a?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) -
+      (resourceOrdinal.get(b?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) ||
+    String(a?.["hss:slug"] || "").localeCompare(String(b?.["hss:slug"] || ""));
+  manifestCollection.sort(bySourceOrder);
+  for (const items of Object.values(storeCollections)) {
+    items.sort(bySourceOrder);
+  }
 
   // Emit the canvasSearchIndexFile
   // @todo also emit meta/search/{index}.mapping.json

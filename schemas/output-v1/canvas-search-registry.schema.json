@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/canvas-search-registry.schema.json",
+  "title": "IIIF HSS Canvas search registry",
+  "type": "object",
+  "additionalProperties": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": ["index", "type"],
+      "properties": {
+        "index": { "type": "string" },
+        "type": { "enum": ["file", "remote"] },
+        "path": { "type": "string" },
+        "url": { "type": "string" },
+        "format": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

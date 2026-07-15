@@ -38,6 +38,15 @@ Typical keys:
 - `network`
 - `concurrency`
 - `fileTemplates`
+- `output`
+
+Production output omits source store configuration, editable source paths, and overrides by default. Opt in only when those operational details are safe to publish:
+
+```yaml
+output:
+  includeSourceConfig: true
+  includeDebugMetadata: true
+```
 
 YAML example:
 

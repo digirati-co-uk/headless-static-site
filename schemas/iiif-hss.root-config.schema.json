@@ -88,6 +88,14 @@
     "fileTemplates": {
       "type": "object",
       "additionalProperties": true
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "includeDebugMetadata": { "type": "boolean", "default": false },
+        "includeSourceConfig": { "type": "boolean", "default": false }
+      }
     }
   },
   "$defs": {

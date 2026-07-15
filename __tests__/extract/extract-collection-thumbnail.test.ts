@@ -65,6 +65,10 @@ describe("extractCollectionThumbnail", () => {
     expect(injected).toEqual({
       meta: {
         thumbnail: { id: "https://example.org/thumbs/a.jpg", type: "Image" },
+        "hss:thumbnail": {
+          source: "collection-item",
+          image: { id: "https://example.org/thumbs/a.jpg", type: "Image" },
+        },
       },
     });
   });

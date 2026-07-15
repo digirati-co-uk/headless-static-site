@@ -34,7 +34,18 @@ export const extractThumbnail: Extraction = {
 
     if (thumbnail?.best) {
       return {
-        meta: { thumbnail: thumbnail.best },
+        meta: {
+          thumbnail: thumbnail.best,
+          "hss:thumbnail": {
+            source: "iiif",
+            image: {
+              id: thumbnail.best.id,
+              type: "Image",
+              width: thumbnail.best.width,
+              height: thumbnail.best.height,
+            },
+          },
+        },
         caches: { extractThumbnail: true },
       };
     }

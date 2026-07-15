@@ -226,6 +226,13 @@ export const extractCollectionThumbnail: Extraction<any, TempExtraction, TempInj
     return {
       meta: {
         thumbnail: temp.thumbnail,
+        "hss:thumbnail": {
+          source: "collection-item",
+          image: {
+            ...temp.thumbnail,
+            type: "Image",
+          },
+        },
       },
     };
   },

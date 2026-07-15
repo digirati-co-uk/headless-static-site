@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/build.schema.json",
+  "title": "IIIF HSS build manifest",
+  "type": "object",
+  "required": ["formatVersion", "hssVersion", "mode", "canonicalBaseUrl", "completedAt", "stores", "features", "search", "analysis", "resources", "files"],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "hssVersion": { "type": "string" },
+    "mode": { "enum": ["full", "partial"] },
+    "canonicalBaseUrl": { "type": "string", "format": "uri" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "stores": { "type": "array", "items": { "type": "string" } },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "search": { "type": "array", "items": { "type": "string" } },
+    "analysis": { "type": "array", "items": { "type": "string" } },
+    "resources": {
+      "type": "object",
+      "required": ["manifests", "collections", "canvases"],
+      "additionalProperties": false,
+      "properties": {
+        "manifests": { "type": "integer", "minimum": 0 },
+        "collections": { "type": "integer", "minimum": 0 },
+        "canvases": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -44,6 +44,10 @@ export interface IIIFRC {
   network?: NetworkConfig;
   concurrency?: BuildConcurrencyConfig;
   fileTemplates?: Record<string, any>;
+  output?: {
+    includeDebugMetadata?: boolean;
+    includeSourceConfig?: boolean;
+  };
 }
 
 export interface GenericStore {

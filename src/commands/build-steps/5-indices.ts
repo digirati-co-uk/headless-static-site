@@ -27,16 +27,19 @@ export async function indices(
     indexCollection?: Record<string, any>;
     manifestCollection?: any[];
     storeCollections?: Record<string, Array<any>>;
-    siteMap?: Record<string, { type: string; source: any; label?: string }>;
+    siteMap?: Record<
+      string,
+      { type: string; source?: any; label?: string; canvases?: number; hasCanvasData?: boolean }
+    >;
     editable?: Record<string, string>;
     overrides?: Record<string, string>;
     collections?: Record<string, string[]>;
     searchIndexes?: SearchIndexes;
     allIndices?: Record<string, string[]>;
   },
-  { options, server, buildDir, config, cacheDir, topicsDir, collectionRewrites, files, trace }: BuildConfig
+  { options, configUrl, buildDir, config, cacheDir, topicsDir, collectionRewrites, files, trace }: BuildConfig
 ) {
-  if (options.exact || options.stores) {
+  if (options.exact || options.stores?.length) {
     return;
   }
 
@@ -52,7 +55,18 @@ export async function indices(
   }
 
   const topLevelCollection: any[] = [];
-  const configUrl = typeof server === "string" ? server : server?.url;
+  const resourcesBySlug = new Map(allResources.map((resource) => [resource.slug, resource]));
+  const resourceOrdinal = new Map(allResources.map((resource, index) => [resource.slug, index]));
+  const bySourceOrder = (a: any, b: any) =>
+    (resourceOrdinal.get(a?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) -
+      (resourceOrdinal.get(b?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) ||
+    String(a?.["hss:slug"] || "").localeCompare(String(b?.["hss:slug"] || ""));
+  const byLabel = (a: any, b: any) => getLabel(a).localeCompare(getLabel(b));
+  function getLabel(item: any) {
+    const label = item?.label;
+    if (typeof label === "string") return label;
+    return String(Object.values(label || {})[0]?.[0] || item?.["hss:slug"] || "");
+  }
   const folderCollectionsConfig = (config.config?.["folder-collections"] || {}) as {
     labelStrategy?: "folderName" | "metadata" | "customMap";
     customMap?: Record<string, string | InternationalString>;
@@ -79,7 +93,7 @@ export async function indices(
 
     if (labelStrategy === "metadata") {
       for (const manifestSlug of manifestSlugs) {
-        const resource = allResources.find((candidate) => candidate.slug === manifestSlug);
+        const resource = resourcesBySlug.get(manifestSlug);
         if (!resource || resource.source.type !== "disk") {
           continue;
         }
@@ -107,7 +121,7 @@ export async function indices(
   }
 
   if (collections && indexCollection) {
-    const collectionSlugs = Object.keys(collections);
+    const collectionSlugs = Object.keys(collections).sort();
     for (const originalCollectionSlug of collectionSlugs) {
       const manifestSlugs = collections[originalCollectionSlug];
       let collectionSlug = originalCollectionSlug; // @todo rewrite
@@ -134,18 +148,17 @@ export async function indices(
           slug: collectionSlug,
           label: collectionLabel,
         });
+        (collectionSnippet as any)["hss:totalItems"] = manifestSlugs.filter((slug) => indexCollection[slug]).length;
         const collection = {
           ...collectionSnippet,
           items: manifestSlugs
             .map((slug) => {
               return indexCollection[slug];
             })
-            .filter(Boolean),
+            .filter(Boolean)
+            .sort(bySourceOrder),
         };
-
-        await writeJson(join(buildDir, "meta", "index-collection.json"), indexCollection);
-
-        (collectionSnippet as any)["hss:totalItems"] = collection.items.length;
+        indexCollection[collectionSlug] = collectionSnippet;
         await files.mkdir(join(buildDir, collectionSlug));
         await writeJson(join(buildDir, collectionSlug, "collection.json"), collection);
 
@@ -158,10 +171,10 @@ export async function indices(
   for (const resource of allResources) {
     const indices = join(cacheDir, resource.slug, "indices.json");
     const file = await readJson(indices);
-    const subjectTypes = Object.keys(file);
+    const subjectTypes = Object.keys(file).sort();
     for (const subjectType of subjectTypes) {
       indexMap[subjectType] = indexMap[subjectType] || {};
-      for (const subject of file[subjectType]) {
+      for (const subject of [...file[subjectType]].sort()) {
         indexMap[subjectType][subject] = indexMap[subjectType][subject] || [];
         // const indices = file[subjectType][subject];
         if (indexMap[subjectType][subject].includes(resource.slug)) {
@@ -187,7 +200,7 @@ export async function indices(
       ...baseTopicTypeCollectionSnippet,
       items: [],
     };
-    const topicTypeKeys = Object.keys(indexMap);
+    const topicTypeKeys = Object.keys(indexMap).sort();
     const normalizedTopicTypes = new Map<string, string>();
     for (const topicTypeKey of topicTypeKeys) {
       const topicTypeId = slug(topicTypeKey);
@@ -199,7 +212,7 @@ export async function indices(
       }
       normalizedTopicTypes.set(topicTypeId, topicTypeKey);
       const topicType = indexMap[topicTypeKey];
-      const topicKeys = Object.keys(topicType);
+      const topicKeys = Object.keys(topicType).sort();
 
       let baseTopicTypeMeta = {};
       const topicTypeMetaDisk = join(topicsDir, topicTypeId, "_meta.yaml");
@@ -222,7 +235,6 @@ export async function indices(
       });
 
       indexCollection[topicTypeMeta.slug] = topicTypeCollectionSnippet;
-      topLevelCollection.push(topicTypeCollectionSnippet);
       baseTopicTypeCollection.items.push(topicTypeCollectionSnippet as any);
 
       const topicTypeCollection: Collection = {
@@ -285,7 +297,8 @@ export async function indices(
             .map((slug: string) => {
               return indexCollection[slug];
             })
-            .filter((e) => e),
+            .filter((e) => e)
+            .sort(bySourceOrder),
         };
 
         await files.mkdir(join(buildDir, "topics", topicTypeId, topicId));
@@ -306,6 +319,7 @@ export async function indices(
     await files.mkdir(join(buildDir, "topics"));
     (baseTopicTypeCollection as any)["hss:totalItems"] = baseTopicTypeCollection.items.length;
     (baseTopicTypeCollectionSnippet as any)["hss:totalItems"] = baseTopicTypeCollection.items.length;
+    indexCollection.topics = baseTopicTypeCollectionSnippet;
     await writeJson(join(buildDir, "topics", "collection.json"), baseTopicTypeCollection);
   }
 
@@ -329,9 +343,10 @@ export async function indices(
 
     indexCollectionJson.items = [
       // Manifests then Collections.
-      ...indexCollectionJsonManifests,
-      ...indexCollectionJsonCollections,
+      ...indexCollectionJsonManifests.sort(bySourceOrder),
+      ...indexCollectionJsonCollections.sort(byLabel),
     ];
+    (indexCollectionJson as any)["hss:totalItems"] = indexCollectionJson.items.length;
 
     await writeJson(join(buildDir, "collection.json"), indexCollectionJson);
   }
@@ -344,7 +359,12 @@ export async function indices(
       slug: "manifests",
     }) as Collection;
 
-    manifestCollectionJson.items = manifestCollection;
+    manifestCollectionJson.items = [...manifestCollection].sort(bySourceOrder);
+    (manifestCollectionJson as any)["hss:totalItems"] = manifestCollection.length;
+    indexCollection.manifests = {
+      ...manifestCollectionJson,
+      items: undefined,
+    };
 
     await writeJson(join(buildDir, "manifests", "collection.json"), manifestCollectionJson);
   }
@@ -352,23 +372,26 @@ export async function indices(
   if (storeCollections) {
     await files.mkdir(join(buildDir, "stores"));
     const storeCollectionSnippets: Collection[] = [];
-    const storeCollectionsJson = Object.entries(storeCollections).map(async ([storeId, items]) => {
-      const storeCollectionSnippet = createCollection({
-        configUrl,
-        slug: `stores/${storeId}`,
-        label: storeId,
-      }) as Collection;
+    const storeCollectionsJson = Object.entries(storeCollections)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(async ([storeId, items]) => {
+        const storeCollectionSnippet = createCollection({
+          configUrl,
+          slug: `stores/${storeId}`,
+          label: storeId,
+        }) as Collection;
+        (storeCollectionSnippet as any)["hss:totalItems"] = items.length;
 
-      storeCollectionSnippets.push(storeCollectionSnippet);
-      topLevelCollection.push(storeCollectionSnippet);
+        storeCollectionSnippets.push(storeCollectionSnippet);
+        indexCollection[`stores/${storeId}`] = storeCollectionSnippet;
 
-      await files.mkdir(join(buildDir, "stores", storeId));
+        await files.mkdir(join(buildDir, "stores", storeId));
 
-      return writeJson(join(buildDir, "stores", `${storeId}/collection.json`), {
-        ...storeCollectionSnippet,
-        items,
+        return writeJson(join(buildDir, "stores", `${storeId}/collection.json`), {
+          ...storeCollectionSnippet,
+          items: [...items].sort(bySourceOrder),
+        });
       });
-    });
 
     const topLevelCollectionJson = createCollection({
       label: "Collections",
@@ -383,10 +406,20 @@ export async function indices(
       slug: "collections/stores",
       configUrl,
     }) as Collection;
-    storeCollectionsCollectionJson.items = storeCollectionSnippets;
+    storeCollectionsCollectionJson.items = storeCollectionSnippets.sort(byLabel);
+    (storeCollectionsCollectionJson as any)["hss:totalItems"] = storeCollectionSnippets.length;
     topLevelCollection.push(storeCollectionsCollectionJson);
+    indexCollection["collections/stores"] = {
+      ...storeCollectionsCollectionJson,
+      items: undefined,
+    };
 
-    topLevelCollectionJson.items = topLevelCollection;
+    topLevelCollectionJson.items = topLevelCollection.sort(byLabel);
+    (topLevelCollectionJson as any)["hss:totalItems"] = topLevelCollection.length;
+    indexCollection.collections = {
+      ...topLevelCollectionJson,
+      items: undefined,
+    };
     await files.mkdir(join(buildDir, "collections"));
     await writeJson(join(buildDir, "collections/collection.json"), topLevelCollectionJson);
     await files.mkdir(join(buildDir, "collections", "stores"));
@@ -400,12 +433,13 @@ export async function indices(
     const searchRoot = join(buildDir, "meta/search");
     await files.mkdir(searchRoot);
 
-    const indexes = Object.keys(searchIndexes);
-    const allIndiciesKeys = Object.keys(allIndices || {});
+    const indexes = Object.keys(searchIndexes).sort();
+    const allIndiciesKeys = Object.keys(allIndices || {}).sort();
     for (const index of indexes) {
       const searchIndex = searchIndexes[index];
       const schema = join(searchRoot, `${index}.schema.json`);
       const data = join(searchRoot, `${index}.jsonl`);
+      const mapping = join(searchRoot, `${index}.mapping.json`);
       const indiciesToAddToIndex = searchIndex.allIndices ? allIndiciesKeys : searchIndex.indices || [];
 
       // Need to add dynamic indices.
@@ -425,8 +459,24 @@ export async function indices(
         ...searchIndex.schema,
       });
       if (searchIndex.emitCombined !== false) {
-        await files.writeFile(data, searchIndex.records.map((record) => JSON.stringify(record)).join("\n"));
+        await files.writeFile(
+          data,
+          [...searchIndex.records]
+            .sort((a, b) => String(a.slug || a.id || "").localeCompare(String(b.slug || b.id || "")))
+            .map((record) => JSON.stringify(record))
+            .join("\n")
+        );
       }
+      await writeJson(mapping, {
+        name: index,
+        format: "record-jsonl",
+        scope: "resource",
+        idStrategy: "resource-id",
+        schema: `meta/search/${index}.schema.json`,
+        data: searchIndex.emitCombined === false ? undefined : `meta/search/${index}.jsonl`,
+        facets: searchIndex.schema.fields.filter((field) => field.facet).map((field) => field.name),
+        canvasRegistry: "meta/canvas-search-index.json",
+      });
     }
   }
 
@@ -434,7 +484,9 @@ export async function indices(
   await files.mkdir(join(buildDir, "config"));
   await writeJson(join(buildDir, "config", "slugs.json"), config.slugs || {});
 
-  await writeJson(join(buildDir, "config", "stores.json"), config.stores);
+  if (config.output?.includeSourceConfig) {
+    await writeJson(join(buildDir, "config", "stores.json"), config.stores);
+  }
 
   await writeJson(join(buildDir, "meta/all-indices.json"), allIndices);
 
@@ -442,12 +494,19 @@ export async function indices(
     await writeJson(join(buildDir, "meta/sitemap.json"), siteMap);
   }
 
-  if (editable) {
+  if (editable && config.output?.includeDebugMetadata) {
     await writeJson(join(buildDir, "meta/editable.json"), editable);
   }
 
-  if (overrides) {
+  if (overrides && config.output?.includeDebugMetadata) {
     await writeJson(join(buildDir, "meta/overrides.json"), overrides);
+  }
+
+  if (indexCollection) {
+    await writeJson(
+      join(buildDir, "meta", "resources.json"),
+      Object.fromEntries(Object.entries(indexCollection).sort(([a], [b]) => a.localeCompare(b)))
+    );
   }
 
   // if (options.client || options.html) {

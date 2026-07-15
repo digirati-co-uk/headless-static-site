@@ -61,7 +61,7 @@ describe("build indices", () => {
           topics: false,
           debug: false,
         },
-        server: "https://example.org/iiif",
+        configUrl: "https://example.org/iiif",
         buildDir,
         cacheDir,
         topicsDir,
@@ -81,5 +81,7 @@ describe("build indices", () => {
     expect(topicsCollection["hss:slug"]).toBe("topics");
     expect(topicsCollection["hss:totalItems"]).toBe(0);
     expect(topicsCollection.items).toEqual([]);
+    expect(JSON.parse(await readFile(join(buildDir, "meta", "resources.json"), "utf-8"))).toHaveProperty("topics");
+    await expect(readFile(join(buildDir, "config", "stores.json"), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

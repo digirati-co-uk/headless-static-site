@@ -255,18 +255,49 @@ describe("linker integration", () => {
     await mkdir(join(testDir, ".iiif", "build", "removed"), { recursive: true });
     await writeFile(stalePath, "stale");
 
-    await build(
-      { emit: true, cache: false, debug: false, ui: false },
-      defaultBuiltIns,
-      {
-        customConfig: {
-          stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
-          server: { url: "http://localhost:7111" },
-        },
-        fileHandler: new FileHandler(fs as any, testDir, false),
-      }
-    );
+    const output = await build({ emit: true, cache: false, debug: false, ui: false }, defaultBuiltIns, {
+      customConfig: {
+        stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+        server: { url: "http://localhost:7111" },
+      },
+      fileHandler: new FileHandler(fs as any, testDir, false),
+    });
 
     await expect(readFile(stalePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+    const buildManifest = JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "build.json"), "utf-8"));
+    expect(buildManifest).toMatchObject({
+      formatVersion: 1,
+      mode: "full",
+      canonicalBaseUrl: "http://localhost:7111",
+      resources: { manifests: 1, canvases: 0 },
+    });
+    expect(buildManifest.files).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "meta/sitemap.json", sha256: expect.any(String) })])
+    );
+    expect(buildManifest.files.some((file: any) => file.path === "meta/build.json")).toBe(false);
+    const manifestsCollection = JSON.parse(
+      await readFile(join(testDir, ".iiif", "build", "manifests", "collection.json"), "utf-8")
+    );
+    expect(manifestsCollection["hss:totalItems"]).toBe(1);
+    const navigationCollection = JSON.parse(
+      await readFile(join(testDir, ".iiif", "build", "collections", "collection.json"), "utf-8")
+    );
+    expect(navigationCollection.items.map((item: any) => item["hss:slug"])).toEqual([
+      "collections/stores",
+      "topics",
+    ]);
+    const sitemap = JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "sitemap.json"), "utf-8"));
+    expect(Object.values(sitemap)[0]).not.toHaveProperty("source");
+    await expect(readFile(join(testDir, ".iiif", "build", "config", "stores.json"), "utf-8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(
+      JSON.parse(
+        await readFile(
+          join(testDir, ".iiif", "build", output.stores.allResources[0].slug, "canvases", "index.json"),
+          "utf-8"
+        )
+      )
+    ).toEqual([]);
   });
 });

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/resource-indices.schema.json",
+  "title": "IIIF HSS per-resource indices",
+  "type": "object",
+  "additionalProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+}

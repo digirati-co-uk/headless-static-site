@@ -271,7 +271,10 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
 
   const topicsDir = join(cwd, topicFolder);
   const configUrl =
-    typeof server === "string" ? resolveHostUrl(server) : server?.url ? resolveHostUrl(server.url) : server?.url;
+    (typeof server === "string" ? resolveHostUrl(server) : server?.url ? resolveHostUrl(server.url) : server?.url)?.replace(
+      /\/+$/,
+      ""
+    );
   if (options.emit && !configUrl) {
     throw new Error(
       "A canonical server URL is required when emitting output. Set server.url in the IIIF configuration or SERVER_URL."
