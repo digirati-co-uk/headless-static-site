@@ -27,6 +27,8 @@ export interface IIIFJSONStore {
   base?: string;
   destination?: string;
   config?: any;
+  /** Maps an absolute or store-relative source file path to an opaque public caller key. */
+  inputKeys?: Record<string, string>;
 }
 
 export const IIIFJSONStore: Store<IIIFJSONStore> = {
@@ -140,6 +142,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
           subFiles: subFileMap[fileWithoutExtension],
           source: source,
           saveToDisk: true,
+          inputKey: store.inputKeys?.[file] || store.inputKeys?.[relative(store.path, file)],
           virtual: true,
         });
         continue;
@@ -153,6 +156,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
         subFiles: subFileMap[fileWithoutExtension],
         source: source,
         saveToDisk: true,
+        inputKey: store.inputKeys?.[file] || store.inputKeys?.[relative(store.path, file)],
       });
     }
 
@@ -260,6 +264,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
           storeId: resource.storeId,
           subResources: (res.items || []).length,
           saveToDisk: true,
+          inputKey: resource.inputKey,
           source: resource.source,
           virtual: resource.virtual,
         },

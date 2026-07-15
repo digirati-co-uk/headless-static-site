@@ -65,9 +65,9 @@ export async function parseStores(
   const effectiveStores = Array.from(new Set(stores));
   let estimatedResources = 0;
 
-  const publishEstimatedResources = () => {
+  const publishEstimatedResources = async () => {
     const parsedResources = Object.values(storeResources).reduce((total, all) => total + all.length, 0);
-    progress?.onResourcesDiscovered?.({
+    await progress?.onResourcesDiscovered?.({
       total: Math.max(parsedResources, estimatedResources),
     });
   };
@@ -109,8 +109,8 @@ export async function parseStores(
             !useNetworkCache,
             customFs,
             network,
-            (event) => {
-              progress?.onFetch?.({
+            async (event) => {
+              await progress?.onFetch?.({
                 ...event,
                 phase: "parse-stores",
               });
@@ -123,7 +123,7 @@ export async function parseStores(
     const rootUrls = getRemoteStoreRootUrls(storeConfig);
     if (rootUrls.length) {
       estimatedResources += rootUrls.length;
-      publishEstimatedResources();
+      await publishEstimatedResources();
     }
 
     const storeType: Store<any> = (storeTypes as any)[storeConfig.type];
@@ -141,12 +141,12 @@ export async function parseStores(
       build: buildConfig,
       files: files,
       progress,
-      reportEstimatedResources: (delta: number) => {
+      reportEstimatedResources: async (delta: number) => {
         if (delta <= 0) {
           return;
         }
         estimatedResources += delta;
-        publishEstimatedResources();
+        await publishEstimatedResources();
       },
     });
 
@@ -180,7 +180,7 @@ export async function parseStores(
       storeResources[storeId].push(resource);
     }
     const totalDiscovered = Object.values(storeResources).reduce((total, all) => total + all.length, 0);
-    progress?.onResourcesDiscovered?.({
+    await progress?.onResourcesDiscovered?.({
       total: totalDiscovered,
       storeId,
     });

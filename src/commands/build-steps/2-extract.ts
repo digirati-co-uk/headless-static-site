@@ -44,8 +44,8 @@ export async function extract(
     !useNetworkCache,
     undefined,
     buildConfig.network,
-    (event) => {
-      progressEvents?.onFetch?.({
+    async (event) => {
+      await progressEvents?.onFetch?.({
         ...event,
         phase: "extract-resources",
       });

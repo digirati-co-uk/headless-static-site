@@ -39,11 +39,18 @@ Programmatic callers can inject a fetch-compatible request function. Every build
 ```ts
 import { build } from "iiif-hss/library";
 
-await build(options, builtIns, {
+await build({ ...options, cacheRoot: "/var/cache/iiif-hss" }, builtIns, {
   fetch: secureFetch,
+  async onEvent(event) {
+    await persistBuildEvent(event);
+  },
 });
 ```
 
-## Schema status
+`build()` keeps its existing detailed pipeline return for compatibility and exposes the portable contract as `output.result`. A result with `status: "not-emitted"` is never deployable. Use `readBuildResult()` or `validateBuildOutput()` from `iiif-hss/library` to read and validate an emitted tree; checksum verification is enabled with `{ sha256: true }`.
 
-The published schemas currently retain placeholder `$id` values. Selecting and publishing canonical stable schema URLs is release-blocking debt before those identifiers are treated as stable.
+Already-loaded resources can use the programmatic `iiif-memory` store. Each input accepts either `resource` or `url`, plus an optional publishable `inputKey` and `saveToDisk` policy. URL inputs and every downstream build request use the injected `fetch`.
+
+## Schema and compatibility policy
+
+Output schemas have canonical `https://iiif-hss.dev/schemas/output-v1/` IDs and are available offline through `iiif-hss/schemas/output-v1/*`. `formatVersion` changes only for incompatible tree or semantic changes. Additive contract changes retain the format version and increment `contractVersion`; consumers must ignore unknown fields. `resultVersion` independently versions the portable programmatic build result. Readers and validators shipped by a release enforce that release's declared contract.

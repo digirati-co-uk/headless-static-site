@@ -177,6 +177,19 @@ describe("getBuildConfig search indexNames", () => {
     expect(devConfig.cacheDir).toBe(".iiif/dev/cache");
   });
 
+  test("owns a versioned layout beneath an external cache root", async () => {
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here", cacheRoot: "/shared/hss-cache" },
+      {
+        ...defaultBuiltIns,
+        customConfig: { stores: { local: { type: "iiif-json", path: "./content" } } } as any,
+      }
+    );
+
+    expect(result.cacheDir).toMatch(/^\/shared\/hss-cache\/output-v1\/hss-[^/]+\/build$/);
+    expect(result.requestCacheDir).toBe(join(result.cacheDir, "_requests"));
+  });
+
   test("uses the injected fetch for image service requests", async () => {
     const config = {
       stores: {

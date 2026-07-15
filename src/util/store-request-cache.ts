@@ -83,7 +83,7 @@ export function createStoreRequestCache(
   noCache = false,
   customFs?: IFS,
   networkConfig?: NetworkConfig,
-  onProgress?: (event: StoreRequestCacheProgressEvent) => void,
+  onProgress?: (event: StoreRequestCacheProgressEvent) => void | Promise<void>,
   request: typeof globalThis.fetch = globalThis.fetch
 ) {
   const network = resolveNetworkConfig(networkConfig);
@@ -248,7 +248,7 @@ export function createStoreRequestCache(
       if (!noCache) {
         const data = await readCached(url);
         if (data) {
-          onProgress?.({
+          await onProgress?.({
             type: "cache-hit",
             url,
             storeId: storeKey,
@@ -261,14 +261,13 @@ export function createStoreRequestCache(
         return inFlight.get(url);
       }
 
-      onProgress?.({
-        type: "queued",
-        url,
-        storeId: storeKey,
-      });
-
       const requestPromise = (async () => {
-        onProgress?.({
+        await onProgress?.({
+          type: "queued",
+          url,
+          storeId: storeKey,
+        });
+        await onProgress?.({
           type: "started",
           url,
           storeId: storeKey,
@@ -277,14 +276,14 @@ export function createStoreRequestCache(
           const data = await requestJson(url, options);
           cache.set(url, data as any);
           await writeCached(url, data);
-          onProgress?.({
+          await onProgress?.({
             type: "completed",
             url,
             storeId: storeKey,
           });
           return data;
         } catch (e) {
-          onProgress?.({
+          await onProgress?.({
             type: "failed",
             url,
             storeId: storeKey,

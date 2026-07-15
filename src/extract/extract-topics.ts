@@ -24,7 +24,7 @@ export const extractTopics: Extraction<ExtractTopicsConfig> = {
     const latestResource = resource.vault?.get(api.resource);
     const metadata = latestResource?.metadata || [];
     const metadataLabels: string[] = await Promise.all(
-      metadata.map((item: any) => getSingleLabel(item.label, { language, translate }))
+      metadata.map((item: any) => getSingleLabel(item.label, { language, translate, fetch: api.build?.fetch }))
     );
 
     const indices: Record<string, string[]> = {};

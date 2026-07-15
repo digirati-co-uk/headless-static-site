@@ -20,6 +20,7 @@ export interface EnrichmentHandlerApi {
   requestCache: ReturnType<typeof createStoreRequestCache>;
   fileHandler: FileHandler;
   resourceFiles: ResourceFilesApi;
+  fetch: typeof globalThis.fetch;
 }
 
 interface EnrichmentInvalidateApi {

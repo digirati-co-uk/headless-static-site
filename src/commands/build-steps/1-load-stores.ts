@@ -63,8 +63,8 @@ export async function loadStores(
       !useNetworkCache,
       undefined,
       network,
-      (event) => {
-        progressEvents?.onFetch?.({
+      async (event) => {
+        await progressEvents?.onFetch?.({
           ...event,
           phase: "load-stores",
         });
@@ -130,6 +130,9 @@ export async function loadStores(
       } else {
         validCount++;
         const data = await files.loadJson(join(resourceDir, "resource.json"));
+        if (resource.inputKey) {
+          data.inputKey = resource.inputKey;
+        }
 
         if (data.id && data.saveToDisk) {
           idsToSlugs[data.id] = {
@@ -159,7 +162,7 @@ export async function loadStores(
       }
 
       progress.increment();
-      progressEvents?.onResourceProcessed?.({
+      await progressEvents?.onResourceProcessed?.({
         slug: resource.slug,
         storeId: store,
       });

@@ -4,7 +4,7 @@
   "description": "IIIF Headless Static Site",
   "type": "module",
   "keywords": [],
-  "files": ["src", "build", "lib", "schemas", "CONFIG.md"],
+  "files": ["src", "build", "lib", "schemas", "CONFIG.md", "FILE-OUTPUT.md"],
   "engines": {
     "node": ">=20"
   },
@@ -54,6 +54,7 @@
         "default": "./build/library.js"
       }
     },
+    "./schemas/output-v1/*": "./schemas/output-v1/*",
     "./client": {
       "import": {
         "types": "./build/client.d.ts",
@@ -101,6 +102,7 @@
   "typesVersions": {
     "*": {
       "*": ["lib/scripts.d.ts"],
+      "library": ["build/library.d.ts"],
       "client": ["build/client.d.ts"],
       "vite/client": ["build/vite/client.d.ts"],
       "astro": ["build/astro-integration.d.ts"],
@@ -136,7 +138,6 @@
     "pdiiif": "^0.1.9",
     "slug": "^8.2.3",
     "sqlite": "^5.1.1",
-    "translate": "^2.0.2",
     "typesense": "1.7.2",
     "unionfs": "^4.5.4",
     "yaml": "^2.6.1",

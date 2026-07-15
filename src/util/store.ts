@@ -13,7 +13,7 @@ export interface StoreApi {
   };
   files: FileHandler;
   progress?: BuildProgressCallbacks;
-  reportEstimatedResources?: (delta: number) => void;
+  reportEstimatedResources?: (delta: number) => void | Promise<void>;
   // Escape hatch, all config.
   build: BuildConfig;
 }
@@ -60,6 +60,8 @@ export interface ProtoResourceDirectory {
      * If this should be saved to disk, or remain as a remote resource.
      */
     saveToDisk?: boolean;
+    /** Opaque, publishable identity supplied by a programmatic caller. */
+    inputKey?: string;
     /**
      * Number of sub-resources (only used for estimation)
      */
@@ -76,7 +78,8 @@ export interface ProtoResourceDirectory {
           relativePath?: string;
           filePath: string;
         }
-      | { type: "remote"; url: string; overrides?: string };
+      | { type: "remote"; url: string; overrides?: string }
+      | { type: "memory"; index: number };
   };
   "vault.json": IIIFStore;
   "meta.json": {

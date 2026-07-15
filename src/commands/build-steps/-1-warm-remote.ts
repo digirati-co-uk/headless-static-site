@@ -57,8 +57,8 @@ export async function warmRemoteStores(
             !useNetworkCache,
             undefined,
             network,
-            (event) => {
-              progress?.onFetch?.({
+            async (event) => {
+              await progress?.onFetch?.({
                 ...event,
                 phase: "warm-remote",
               });

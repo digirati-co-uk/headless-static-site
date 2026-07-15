@@ -1,12 +1,14 @@
 import fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chdir, cwd } from "node:process";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { linker } from "../../lib/scripts.js";
 import { build, defaultBuiltIns } from "../../src/commands/build.ts";
+import { validateBuildOutput } from "../../src/output-validation.ts";
 import { FileHandler } from "../../src/util/file-handler.ts";
+import type { HssBuildEvent } from "../../src/util/build-progress.ts";
 
 describe("linker integration", () => {
   const originalCwd = cwd();
@@ -257,7 +259,14 @@ describe("linker integration", () => {
 
     const output = await build({ emit: true, cache: false, debug: false, ui: false }, defaultBuiltIns, {
       customConfig: {
-        stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+        stores: {
+          local: {
+            type: "iiif-json",
+            path: "./content",
+            pattern: "**/*.json",
+            inputKeys: { "demo.json": "site-resource-1" },
+          },
+        },
         server: { url: "http://localhost:7111" },
       },
       fileHandler: new FileHandler(fs as any, testDir, false),
@@ -267,9 +276,38 @@ describe("linker integration", () => {
     const buildManifest = JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "build.json"), "utf-8"));
     expect(buildManifest).toMatchObject({
       formatVersion: 1,
+      contractVersion: "1.1",
       mode: "full",
       canonicalBaseUrl: "http://localhost:7111",
       resources: { manifests: 1, canvases: 0 },
+      entrypoints: {
+        rootCollection: "collection.json",
+        resources: "meta/resources.json",
+        resourceDescriptors: "meta/resource-descriptors.json",
+      },
+    });
+    expect(output.result).toMatchObject({
+      resultVersion: 1,
+      status: "complete",
+      manifestPath: "meta/build.json",
+      manifest: buildManifest,
+    });
+    await expect(validateBuildOutput(join(testDir, ".iiif", "build"), { sha256: true })).resolves.toMatchObject({
+      status: "complete",
+    });
+    const descriptors = JSON.parse(
+      await readFile(join(testDir, ".iiif", "build", "meta", "resource-descriptors.json"), "utf-8")
+    );
+    const outputSlug = output.stores.allResources[0].slug.replace(/^\/+/, "");
+    expect(descriptors[output.stores.allResources[0].slug]).toMatchObject({
+      inputKey: "site-resource-1",
+      origin: "source",
+      saved: true,
+      files: {
+        iiif: `${outputSlug}/manifest.json`,
+        meta: `${outputSlug}/meta.json`,
+        indices: `${outputSlug}/indices.json`,
+      },
     });
     expect(buildManifest.files).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: "meta/sitemap.json", sha256: expect.any(String) })])
@@ -313,6 +351,114 @@ describe("linker integration", () => {
     ).toEqual([]);
   });
 
+  test("programmatic inputs use injected fetch and emit awaited structured events", async () => {
+    const remoteUrl = "https://example.org/remote/manifest.json";
+    const request = async (url: string | URL | Request) => {
+      expect(String(url)).toBe(remoteUrl);
+      return new Response(JSON.stringify({ id: "https://example.org/remote/manifest", type: "Manifest", items: [] }), {
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const events: HssBuildEvent[] = [];
+    let handlingEvent = false;
+    const output = await build(
+      { emit: true, cache: false, networkCache: false, debug: false, ui: false },
+      defaultBuiltIns,
+      {
+        customConfig: {
+          stores: {
+            supplied: {
+              type: "iiif-memory",
+              inputs: [
+                {
+                  resource: { id: "https://example.org/local/manifest", type: "Manifest", items: [] },
+                  inputKey: "local-1",
+                },
+                { url: remoteUrl, inputKey: "remote-1", saveToDisk: false },
+              ],
+            },
+          },
+          server: { url: "https://site.example" },
+        },
+        fetch: request as typeof fetch,
+        fileHandler: new FileHandler(fs as any, testDir, false),
+        async onEvent(event) {
+          expect(handlingEvent).toBe(false);
+          handlingEvent = true;
+          await Promise.resolve();
+          events.push(event);
+          handlingEvent = false;
+        },
+      }
+    );
+
+    expect(events[0]?.type).toBe("build-started");
+    expect(events.at(-1)).toMatchObject({ type: "build-completed", result: output.result });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "phase-started", phase: "parse-stores" }),
+        expect.objectContaining({ type: "phase-completed", phase: "save-files" }),
+        expect.objectContaining({ type: "resource-progress", processed: 2, total: 2 }),
+      ])
+    );
+    const descriptors = JSON.parse(
+      await readFile(join(testDir, ".iiif", "build", "meta", "resource-descriptors.json"), "utf8")
+    );
+    expect(Object.values(descriptors).map((descriptor: any) => descriptor.inputKey)).toEqual(["local-1", "remote-1"]);
+    expect(Object.values(descriptors).map((descriptor: any) => descriptor.saved)).toEqual([true, false]);
+  });
+
+  test("emit false returns a non-deployable result", async () => {
+    const events: HssBuildEvent[] = [];
+    const output = await build(
+      { emit: false, cache: false, networkCache: false, ui: false },
+      defaultBuiltIns,
+      {
+        customConfig: {
+          stores: {
+            supplied: {
+              type: "iiif-memory",
+              inputs: [{ resource: { id: "https://example.org/manifest", type: "Manifest", items: [] } }],
+            },
+          },
+        },
+        fileHandler: new FileHandler(fs as any, testDir, false),
+        onEvent(event) {
+          events.push(event);
+        },
+      }
+    );
+
+    expect(output.result).toEqual({ resultVersion: 1, status: "not-emitted" });
+    expect(events.at(-1)).toMatchObject({ type: "build-completed", result: output.result });
+    await expect(readFile(join(testDir, ".iiif", "build", "meta", "build.json"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  test("structured failure events preserve the build error", async () => {
+    const events: HssBuildEvent[] = [];
+    const promise = build(
+      { emit: false, cache: false, networkCache: false, ui: false },
+      defaultBuiltIns,
+      {
+        customConfig: {
+          stores: { supplied: { type: "iiif-memory", inputs: [{ resource: { type: "Manifest" } }] } },
+        },
+        fileHandler: new FileHandler(fs as any, testDir, false),
+        onEvent(event) {
+          events.push(event);
+        },
+      }
+    );
+
+    await expect(promise).rejects.toThrow("Programmatic IIIF inputs must have an id");
+    expect(events.at(-1)).toMatchObject({
+      type: "build-failed",
+      error: { message: "Programmatic IIIF inputs must have an id and Presentation resource type" },
+    });
+  });
+
   test("selected-store builds preserve existing output and declare partial mode", async () => {
     const retainedPath = join(testDir, ".iiif", "build", "retained.json");
     await mkdir(join(testDir, ".iiif", "build"), { recursive: true });
@@ -330,5 +476,25 @@ describe("linker integration", () => {
     expect(JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "build.json"), "utf-8")).mode).toBe(
       "partial"
     );
+  });
+
+  test("builds with a caller-owned external cache", async () => {
+    const cacheRoot = join(testDir, "shared-cache");
+    const output = await build(
+      { emit: true, cache: true, cacheRoot, networkCache: true, debug: false, ui: false },
+      defaultBuiltIns,
+      {
+        customConfig: {
+          stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+          server: { url: "http://localhost:7111" },
+        },
+        fileHandler: new FileHandler(fs as any, testDir, false),
+      }
+    );
+
+    expect(output.result).toMatchObject({ status: "complete", diagnostics: { cache: "enabled" } });
+    expect(output.buildConfig.cacheDir).toMatch(new RegExp(`^${cacheRoot}/output-v1/hss-[^/]+/build$`));
+    await expect(stat(join(output.buildConfig.cacheDir, "file-types.json"))).resolves.toBeDefined();
+    await expect(stat(join(output.buildConfig.cacheDir, ".build-lock"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

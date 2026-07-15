@@ -135,8 +135,8 @@ export async function enrich(
     !useNetworkCache,
     undefined,
     buildConfig.network,
-    (event) => {
-      progressEvents?.onFetch?.({
+    async (event) => {
+      await progressEvents?.onFetch?.({
         ...event,
         phase: "enrich-resources",
       });
@@ -238,6 +238,7 @@ export async function enrich(
           requestCache,
           fileHandler: files,
           resourceFiles,
+          fetch: buildConfig.fetch,
         },
         enrichmentConfig
       );
@@ -320,6 +321,7 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
                 config,
                 files: cachedCanvasResource.filesDir,
                 resourceFiles,
+                fetch: buildConfig.fetch,
                 fileHandler: files,
               },
               enrichmentConfig

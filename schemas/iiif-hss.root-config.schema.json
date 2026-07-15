@@ -162,7 +162,8 @@
         "slugTemplates": { "$ref": "#/$defs/stringArray" },
         "skip": { "$ref": "#/$defs/stringArray" },
         "run": { "$ref": "#/$defs/stringArray" },
-        "config": { "type": "object", "additionalProperties": true }
+        "config": { "type": "object", "additionalProperties": true },
+        "inputKeys": { "type": "object", "additionalProperties": { "type": "string" } }
       }
     },
     "iiifRemoteStore": {
@@ -198,7 +199,8 @@
         "run": { "$ref": "#/$defs/stringArray" },
         "config": { "type": "object", "additionalProperties": true },
         "destination": { "type": "string" },
-        "network": { "$ref": "#/$defs/networkConfig" }
+        "network": { "$ref": "#/$defs/networkConfig" },
+        "inputKeys": { "type": "object", "additionalProperties": { "type": "string" } }
       }
     },
     "store": {

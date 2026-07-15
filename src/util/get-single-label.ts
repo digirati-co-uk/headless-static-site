@@ -7,6 +7,7 @@ export async function getSingleLabel(
   options: {
     language: string;
     translate?: boolean;
+    fetch?: typeof globalThis.fetch;
   },
 ) {
   const labelLanguages = Object.keys(label || {});
@@ -30,6 +31,7 @@ export async function getSingleLabel(
           firstLabelValues,
           firstLabelLanguage,
           options.language,
+          options.fetch
         );
       }
     }

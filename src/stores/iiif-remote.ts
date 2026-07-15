@@ -19,6 +19,8 @@ export interface IIIFRemoteStore {
   slugTemplates?: string[];
   config?: any;
   network?: NetworkConfig;
+  /** Maps a source URL to an opaque public caller key. */
+  inputKeys?: Record<string, string>;
 }
 
 export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
@@ -83,6 +85,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
           storeId: api.storeId,
           source,
           saveToDisk: store.saveManifests || false,
+          inputKey: store.inputKeys?.[store.url],
         },
       ];
     }
@@ -96,6 +99,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         storeId: api.storeId,
         saveToDisk: store.saveManifests || false,
         source: { type: "remote", url: store.url, overrides: store.overrides },
+        inputKey: store.inputKeys?.[store.url],
       },
     ];
     const children = await discoverCollectionChildren(
@@ -106,7 +110,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         api.build.log(`Warning: failed to load collection page ${url}`, error);
       }
     );
-    api.reportEstimatedResources?.(children.length);
+    await api.reportEstimatedResources?.(children.length);
     for (const child of children) {
       const parsed = await IIIFRemoteStore.parse({ ...store, url: child.id }, api);
       allResources.push(...parsed);
@@ -125,7 +129,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
       return key !== caches.load;
     }
 
-    if (caches.urls && resource.source.url) {
+    if (caches.urls && resource.source.type === "remote" && resource.source.url) {
       return !caches.urls.includes(resource.source.url);
     }
 
@@ -179,6 +183,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
         slugSource: resource.slugSource,
         subResources: (res?.items || []).length,
         saveToDisk: resource.source.type === "disk" || store.saveManifests || false,
+        inputKey: resource.inputKey,
         source: resource.source,
       },
       vault,

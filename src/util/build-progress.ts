@@ -20,12 +20,24 @@ export type BuildFetchProgressEvent = {
   phase?: BuildStepId;
 };
 
+export type HssBuildEvent =
+  | { type: "build-started"; at: string }
+  | { type: "phase-started"; phase: BuildStepId; label: string; index: number; total: number; at: string }
+  | { type: "phase-completed"; phase: BuildStepId; durationMs: number; at: string }
+  | { type: "resources-discovered"; total: number; storeId?: string; at: string }
+  | { type: "resource-progress"; processed: number; total: number; slug: string; storeId?: string; at: string }
+  | { type: "diagnostic"; level: "info" | "warning"; message: string; code?: string; at: string }
+  | { type: "build-completed"; result: import("../output-contract.ts").HssBuildResult; at: string }
+  | { type: "build-failed"; error: { name: string; message: string }; at: string };
+
+type MaybePromise = void | Promise<void>;
+
 export type BuildProgressCallbacks = {
-  onPhase?: (details: { id: BuildStepId; label: string; index: number; total: number }) => void;
-  onResourcesDiscovered?: (details: { total: number; storeId?: string }) => void;
-  onResourceProcessed?: (details: { slug: string; storeId?: string }) => void;
-  onFetch?: (event: BuildFetchProgressEvent) => void;
-  onMessage?: (message: string) => void;
+  onPhase?: (details: { id: BuildStepId; label: string; index: number; total: number }) => MaybePromise;
+  onResourcesDiscovered?: (details: { total: number; storeId?: string }) => MaybePromise;
+  onResourceProcessed?: (details: { slug: string; storeId?: string }) => MaybePromise;
+  onFetch?: (event: BuildFetchProgressEvent) => MaybePromise;
+  onMessage?: (message: string) => MaybePromise;
 };
 
 export type BuildProgressSnapshot = {

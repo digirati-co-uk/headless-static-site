@@ -6,6 +6,7 @@ import type { Collection } from "@iiif/presentation-3";
 import { parse } from "yaml";
 import type { IIIFJSONStore } from "../stores/iiif-json.ts";
 import type { IIIFRemoteStore } from "../stores/iiif-remote.ts";
+import type { IIIFMemoryStore } from "../stores/iiif-memory.ts";
 import type { NetworkConfig } from "./network.ts";
 import type { SlugConfig } from "./slug-engine.ts";
 
@@ -27,7 +28,7 @@ export interface IIIFRC {
   };
   run?: string[];
   generators?: Record<string, GeneratorConfig>;
-  stores: Record<string, IIIFRemoteStore | IIIFJSONStore>;
+  stores: Record<string, IIIFRemoteStore | IIIFJSONStore | IIIFMemoryStore>;
   slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
   collections?: {

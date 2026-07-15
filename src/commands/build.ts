@@ -30,16 +30,30 @@ import { extractTopics } from "../extract/extract-topics.ts";
 import { flatManifests } from "../rewrite/flat-manifests.ts";
 import { IIIFJSONStore } from "../stores/iiif-json";
 import { IIIFRemoteStore } from "../stores/iiif-remote";
-import { BUILD_STEP_ORDER, type BuildProgressCallbacks, type BuildStepId } from "../util/build-progress.ts";
+import { IIIFMemoryStore } from "../stores/iiif-memory.ts";
+import {
+  BUILD_STEP_ORDER,
+  type BuildProgressCallbacks,
+  type BuildStepId,
+  type HssBuildEvent,
+} from "../util/build-progress.ts";
 import type { Enrichment } from "../util/enrich.ts";
 import type { Extraction } from "../util/extract.ts";
 import { FileHandler } from "../util/file-handler.ts";
-import { type BuildBuiltIns, getBuildConfig } from "../util/get-build-config.ts";
+import { type BuildBuiltIns, getBuildConfig, getExternalCacheDirectory } from "../util/get-build-config.ts";
+import { acquireCacheLock } from "../util/cache-lock.ts";
 import type { BuildConcurrencyConfig, IIIFRC, ResolvedConfigSource } from "../util/get-config.ts";
 import type { Linker } from "../util/linker.ts";
 import type { Rewrite } from "../util/rewrite.ts";
 import type { Tracer } from "../util/tracer.ts";
-import { OUTPUT_FORMAT_VERSION, type BuildManifest, type OutputFile } from "../output-contract.ts";
+import {
+  OUTPUT_CONTRACT_VERSION,
+  OUTPUT_FORMAT_VERSION,
+  type BuildManifest,
+  type OutputFile,
+} from "../output-contract.ts";
+import { BUILD_RESULT_VERSION, type BuildEntrypoints, type HssBuildResult } from "../output-contract.ts";
+import { createResourceOutputDescriptors } from "../util/resource-output-descriptors.ts";
 import { warmRemoteStores } from "./build-steps/-1-warm-remote.ts";
 import { parseStores } from "./build-steps/0-parse-stores.ts";
 import { link } from "./build-steps/1-link.ts";
@@ -55,6 +69,8 @@ export type BuildOptions = {
   cwd?: string;
   config?: string;
   cache?: boolean;
+  /** Programmatic external cache root. HSS owns the versioned layout below this directory. */
+  cacheRoot?: string;
   networkCache?: boolean;
   exact?: string;
   watch?: boolean;
@@ -155,6 +171,7 @@ const builtInExtractionsMap = {
 const storeTypes = {
   "iiif-json": IIIFJSONStore,
   "iiif-remote": IIIFRemoteStore,
+  "iiif-memory": IIIFMemoryStore,
 };
 
 export const defaultBuiltIns: BuildBuiltIns = {
@@ -317,7 +334,74 @@ export async function buildCommand(options: BuildOptions, command?: Command) {
   });
 }
 
-export async function build(
+export interface BuildContext {
+  fileHandler?: FileHandler;
+  pathCache?: { allPaths: Record<string, string> };
+  storeRequestCaches?: Record<string, any>;
+  tracer?: Tracer;
+  customConfig?: IIIFRC;
+  customConfigSource?: Omit<ResolvedConfigSource, "config">;
+  progress?: BuildProgressCallbacks;
+  onEvent?: (event: HssBuildEvent) => void | Promise<void>;
+  fetch?: typeof globalThis.fetch;
+}
+
+export async function build(options: BuildOptions, builtIns = defaultBuiltIns, context: BuildContext = {}) {
+  await context.onEvent?.({ type: "build-started", at: new Date().toISOString() });
+  try {
+    const output = await buildWithExternalCacheFallback(options, builtIns, context);
+    await context.onEvent?.({ type: "build-completed", result: output.result, at: new Date().toISOString() });
+    return output;
+  } catch (error) {
+    const buildError = error instanceof Error ? error : new Error(String(error));
+    try {
+      await context.onEvent?.({
+        type: "build-failed",
+        error: { name: buildError.name, message: buildError.message },
+        at: new Date().toISOString(),
+      });
+    } catch {
+      // Reporting failures must not replace the build failure.
+    }
+    throw error;
+  }
+}
+
+async function buildWithExternalCacheFallback(options: BuildOptions, builtIns: BuildBuiltIns, context: BuildContext) {
+  if (!options.cacheRoot) {
+    return buildInternal(options, builtIns, context);
+  }
+  const cacheDirectory = resolve(
+    options.cwd || cwd(),
+    getExternalCacheDirectory(options.cacheRoot, Boolean(options.dev))
+  );
+  let release: () => Promise<void>;
+  try {
+    release = await acquireCacheLock(cacheDirectory);
+  } catch (error) {
+    const cacheIoFailure = ["EACCES", "EROFS", "ENOSPC", "EIO", "ELOCKED"].includes(
+      String((error as NodeJS.ErrnoException).code || "")
+    );
+    if (!cacheIoFailure) {
+      throw error;
+    }
+    await context.onEvent?.({
+      type: "diagnostic",
+      level: "warning",
+      code: "CACHE_FALLBACK",
+      message: `External cache unavailable; retrying without cache: ${(error as Error).message}`,
+      at: new Date().toISOString(),
+    });
+    return buildInternal({ ...options, cacheRoot: undefined, cache: false, networkCache: false }, builtIns, context);
+  }
+  try {
+    return await buildInternal(options, builtIns, context);
+  } finally {
+    await release();
+  }
+}
+
+async function buildInternal(
   options: BuildOptions,
   builtIns: BuildBuiltIns = defaultBuiltIns,
   {
@@ -328,17 +412,9 @@ export async function build(
     customConfig,
     customConfigSource,
     progress,
+    onEvent,
     fetch,
-  }: {
-    fileHandler?: FileHandler;
-    pathCache?: { allPaths: Record<string, string> };
-    storeRequestCaches?: Record<string, any>;
-    tracer?: Tracer;
-    customConfig?: IIIFRC;
-    customConfigSource?: Omit<ResolvedConfigSource, "config">;
-    progress?: BuildProgressCallbacks;
-    fetch?: typeof globalThis.fetch;
-  } = {}
+  }: BuildContext = {}
 ) {
   const buildConfig = await getBuildConfig(
     {
@@ -361,6 +437,33 @@ export async function build(
     }
   );
 
+  let discoveredResources = 0;
+  let processedResources = 0;
+  const progressCallbacks: BuildProgressCallbacks = {
+    onPhase: (details) => progress?.onPhase?.(details),
+    async onResourcesDiscovered(details) {
+      discoveredResources = Math.max(discoveredResources, details.total);
+      await progress?.onResourcesDiscovered?.(details);
+      await onEvent?.({ type: "resources-discovered", ...details, at: new Date().toISOString() });
+    },
+    async onResourceProcessed(details) {
+      processedResources += 1;
+      await progress?.onResourceProcessed?.(details);
+      await onEvent?.({
+        type: "resource-progress",
+        processed: processedResources,
+        total: discoveredResources,
+        ...details,
+        at: new Date().toISOString(),
+      });
+    },
+    onFetch: (event) => progress?.onFetch?.(event),
+    async onMessage(message) {
+      await progress?.onMessage?.(message);
+      await onEvent?.({ type: "diagnostic", level: "info", message, at: new Date().toISOString() });
+    },
+  };
+
   if (buildConfig.options.generate) {
     await generateCommand({ ...buildConfig.options, fetch: buildConfig.fetch });
   }
@@ -381,26 +484,49 @@ export async function build(
 
   const parseState = { storeRequestCaches: storeRequestCaches || {} };
 
-  const enterPhase = (id: BuildStepId) => {
-    progress?.onPhase?.({
+  const enterPhase = async (id: BuildStepId) => {
+    const details = {
       id,
       label: BUILD_PHASE_LABELS[id],
       index: BUILD_STEP_ORDER.indexOf(id) + 1,
       total: BUILD_STEP_ORDER.length,
+    };
+    await progressCallbacks.onPhase?.(details);
+    await onEvent?.({
+      type: "phase-started",
+      phase: id,
+      label: details.label,
+      index: details.index,
+      total: details.total,
+      at: new Date().toISOString(),
     });
+    return Date.now();
+  };
+  const runPhase = async <T>(id: BuildStepId, label: string, task: () => Promise<T>) => {
+    const startedAt = await enterPhase(id);
+    const result = await time(label, task());
+    await onEvent?.({
+      type: "phase-completed",
+      phase: id,
+      durationMs: Date.now() - startedAt,
+      at: new Date().toISOString(),
+    });
+    return result;
   };
 
   const useNetworkCache = buildConfig.options.networkCache ?? true;
   if (buildConfig.network.prefetch && useNetworkCache) {
-    enterPhase("warm-remote");
-    await time("Warmed remote request cache", warmRemoteStores(buildConfig, parseState, progress));
+    await runPhase("warm-remote", "Warmed remote request cache", () =>
+      warmRemoteStores(buildConfig, parseState, progressCallbacks)
+    );
   } else {
-    progress?.onMessage?.("Skipping remote cache warmup");
+    await progressCallbacks.onMessage?.("Skipping remote cache warmup");
   }
 
   // Parse stores.
-  enterPhase("parse-stores");
-  const parsed = await time("Parsed stores", parseStores(buildConfig, parseState, undefined, progress));
+  const parsed = await runPhase("parse-stores", "Parsed stores", () =>
+    parseStores(buildConfig, parseState, undefined, progressCallbacks)
+  );
 
   const loadTargetTotal = Object.values(parsed.storeResources).reduce((total, resources) => {
     if (!buildConfig.options.exact) {
@@ -413,33 +539,31 @@ export async function build(
       ).length
     );
   }, 0);
-  progress?.onResourcesDiscovered?.({ total: loadTargetTotal });
+  await progressCallbacks.onResourcesDiscovered?.({ total: loadTargetTotal });
 
   // Load stores.
-  enterPhase("load-stores");
-  const stores = await time("Loaded stores", loadStores(parsed, buildConfig, undefined, progress));
+  const stores = await runPhase("load-stores", "Loaded stores", () =>
+    loadStores(parsed, buildConfig, undefined, progressCallbacks)
+  );
 
   pathCache.allPaths = { ...stores.allPaths };
 
-  enterPhase("link-resources");
-  const linked = await time("Linking resources", link(stores, buildConfig));
+  const linked = await runPhase("link-resources", "Linking resources", () => link(stores, buildConfig));
 
   // Extract.
-  enterPhase("extract-resources");
-  const extractions = await time("Extracting resources", extract(stores, buildConfig, progress));
+  const extractions = await runPhase("extract-resources", "Extracting resources", () =>
+    extract(stores, buildConfig, progressCallbacks)
+  );
 
-  enterPhase("enrich-resources");
-  const enrichments = await time("Enriching resources", enrich(stores, buildConfig, progress));
+  const enrichments = await runPhase("enrich-resources", "Enriching resources", () =>
+    enrich(stores, buildConfig, progressCallbacks)
+  );
 
-  enterPhase("emit-files");
-  const emitted = await time(
-    "Emitting files",
+  const emitted = await runPhase("emit-files", "Emitting files", () =>
     emit(stores, buildConfig, { canvasSearchIndex: enrichments.canvasSearchIndex })
   );
 
-  enterPhase("build-indices");
-  await time(
-    "Building indices",
+  await runPhase("build-indices", "Building indices", () =>
     indices(
       {
         allResources: stores.allResources,
@@ -459,8 +583,10 @@ export async function build(
 
   await buildConfig.fileTypeCache.save();
 
-  if (options.emit) {
-    enterPhase("save-files");
+  let manifest: BuildManifest | undefined;
+  let outputRoot: string | undefined;
+  if (buildConfig.options.emit) {
+    const saveStartedAt = await enterPhase("save-files");
     const { failedToWrite } = await fileHandler.saveAll(false, buildConfig.concurrency.write);
     if (failedToWrite.length) {
       const details = failedToWrite
@@ -470,7 +596,8 @@ export async function build(
       throw new Error(`Failed to write ${failedToWrite.length} output file(s):\n${details}`);
     }
 
-    const outputRoot = buildConfig.files.resolve(buildConfig.buildDir);
+    const resolvedOutputRoot = buildConfig.files.resolve(buildConfig.buildDir);
+    outputRoot = resolvedOutputRoot;
     const inventory: OutputFile[] = [];
     const visit = async (directory: string) => {
       const entries = await buildConfig.files.fs.promises.readdir(directory, { withFileTypes: true });
@@ -480,18 +607,30 @@ export async function build(
           await visit(filePath);
           continue;
         }
-        if (relative(outputRoot, filePath) === "meta/build.json") {
+        if (relative(resolvedOutputRoot, filePath) === "meta/build.json") {
           continue;
         }
         const data = await buildConfig.files.fs.promises.readFile(filePath);
         inventory.push({
-          path: relative(outputRoot, filePath).split("\\").join("/"),
+          path: relative(resolvedOutputRoot, filePath).split("\\").join("/"),
           bytes: data.byteLength,
           sha256: createHash("sha256").update(data).digest("hex"),
         });
       }
     };
-    await visit(outputRoot);
+    await visit(resolvedOutputRoot);
+    const resourceDescriptors = await createResourceOutputDescriptors(
+      resolvedOutputRoot,
+      stores.allResources,
+      inventory,
+      emitted.indexCollection
+    );
+    await buildConfig.files.writeFile(
+      join(buildConfig.buildDir, "meta", "resource-descriptors.json"),
+      JSON.stringify(resourceDescriptors, null, 2)
+    );
+    inventory.length = 0;
+    await visit(resolvedOutputRoot);
     inventory.sort((a, b) => a.path.localeCompare(b.path));
     const features = [
       inventory.some(({ path }) => path.startsWith("meta/search/")) && "search",
@@ -499,8 +638,24 @@ export async function build(
       inventory.some(({ path }) => path === "topics/collection.json") && "topics",
       buildConfig.options.debug && "debug",
     ].filter(Boolean) as string[];
-    const manifest: BuildManifest = {
+    const entrypointCandidates: Record<keyof BuildEntrypoints, string> = {
+      rootCollection: "collection.json",
+      manifestsCollection: "manifests/collection.json",
+      collectionsCollection: "collections/collection.json",
+      resources: "meta/resources.json",
+      resourceDescriptors: "meta/resource-descriptors.json",
+      sitemap: "meta/sitemap.json",
+      indices: "meta/indices.json",
+      facets: "meta/facets.json",
+      canvasSearch: "meta/canvas-search-index.json",
+    };
+    const inventoryPaths = new Set(inventory.map(({ path }) => path));
+    const entrypoints = Object.fromEntries(
+      Object.entries(entrypointCandidates).filter(([, path]) => inventoryPaths.has(path))
+    ) as BuildEntrypoints;
+    manifest = {
       formatVersion: OUTPUT_FORMAT_VERSION,
+      contractVersion: OUTPUT_CONTRACT_VERSION,
       hssVersion: packageJson.version,
       mode: isPartialBuild ? "partial" : "full",
       canonicalBaseUrl: buildConfig.configUrl as string,
@@ -509,6 +664,7 @@ export async function build(
       features,
       search: inventory.filter(({ path }) => path.endsWith(".mapping.json")).map(({ path }) => path),
       analysis: inventory.filter(({ path }) => /(^|\/)[^/]*analysis[^/]*\.json$/i.test(path)).map(({ path }) => path),
+      entrypoints,
       resources: {
         manifests: emitted.indexCollection
           ? Object.values(emitted.indexCollection).filter((item: any) => item.type === "Manifest").length
@@ -527,9 +683,27 @@ export async function build(
       join(buildConfig.buildDir, "meta", "build.json"),
       JSON.stringify(manifest, null, 2)
     );
+    await onEvent?.({
+      type: "phase-completed",
+      phase: "save-files",
+      durationMs: Date.now() - saveStartedAt,
+      at: new Date().toISOString(),
+    });
   }
 
+  const result: HssBuildResult = manifest
+    ? {
+        resultVersion: BUILD_RESULT_VERSION,
+        status: "complete",
+        directory: outputRoot as string,
+        manifestPath: "meta/build.json",
+        manifest,
+        diagnostics: { cache: buildConfig.options.cacheRoot || buildConfig.options.cache ? "enabled" : "disabled" },
+      }
+    : { resultVersion: BUILD_RESULT_VERSION, status: "not-emitted" };
+
   return {
+    result,
     emitted,
     enrichments,
     linked,

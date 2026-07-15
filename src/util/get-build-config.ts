@@ -5,8 +5,11 @@ import { cwd as nodeCwd } from "node:process";
 // @ts-ignore
 import { ImageServiceLoader } from "@atlas-viewer/iiif-image-api";
 import chalk from "chalk";
+import packageJson from "../../package.json";
+import { OUTPUT_FORMAT_VERSION } from "../output-contract.ts";
 import { IIIFJSONStore } from "../stores/iiif-json";
 import { IIIFRemoteStore } from "../stores/iiif-remote";
+import { IIIFMemoryStore } from "../stores/iiif-memory.ts";
 import { combineSearchConfigs } from "./combine-search-configs";
 import type { Enrichment } from "./enrich";
 import type { Extraction } from "./extract";
@@ -34,6 +37,7 @@ export type BuildOptions = {
   cwd?: string;
   config?: string;
   cache?: boolean;
+  cacheRoot?: string;
   networkCache?: boolean;
   exact?: string;
   watch?: boolean;
@@ -108,7 +112,12 @@ export interface BuildBuiltIns {
 const storeTypes = {
   "iiif-json": IIIFJSONStore,
   "iiif-remote": IIIFRemoteStore,
+  "iiif-memory": IIIFMemoryStore,
 };
+
+export function getExternalCacheDirectory(cacheRoot: string, dev: boolean) {
+  return join(cacheRoot, `output-v${OUTPUT_FORMAT_VERSION}`, `hss-${packageJson.version}`, dev ? "dev" : "build");
+}
 
 export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuiltIns) {
   const resolvedConfigSource = builtIns.customConfig
@@ -152,7 +161,11 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const allEnrichments = [...builtIns.enrichments];
   const allLinkers = [...builtIns.linkers];
 
-  const cacheDir = options.dev ? devCache : defaultCacheDir;
+  const cacheDir = options.cacheRoot
+    ? getExternalCacheDirectory(options.cacheRoot, Boolean(options.dev))
+    : options.dev
+      ? devCache
+      : defaultCacheDir;
   const buildDir = options.dev ? devBuild : options.out || defaultBuildDir;
   const filesDir = join(cacheDir, "files");
 
@@ -235,7 +248,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const canvasEnrichment = enrichments.filter((e) => e.types.includes("Canvas"));
 
   // Keep network request cache shared between dev and production builds.
-  const requestCacheDir = join(defaultCacheDir, "_requests");
+  const requestCacheDir = options.cacheRoot ? join(cacheDir, "_requests") : join(defaultCacheDir, "_requests");
   const virtualCacheDir = join(cacheDir, "_virtual");
 
   const server = options.dev
@@ -244,12 +257,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
 
   const time = async <T>(label: string, promise: Promise<T>): Promise<T> => {
     const startTime = Date.now();
-    const resp = await promise.catch((e) => {
-      console.log("");
-      console.log(chalk.red(e));
-      console.log(e);
-      process.exit(1);
-    });
+    const resp = await promise;
     log(chalk.blue(label) + chalk.grey(` (${Date.now() - startTime}ms)`));
     return resp;
   };

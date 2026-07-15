@@ -17,7 +17,7 @@ export const canvasThumbnail: Enrichment = {
       const thumb = await helper.getBestThumbnailAtSize(api.resource, {});
 
       if (thumb.best?.id && (thumb.best.id.endsWith(".jpg") || thumb.best.id.endsWith(".jpeg"))) {
-        const data = await fetch(thumb.best.id).then((r) => r.arrayBuffer());
+        const data = await api.fetch(thumb.best.id).then((r) => r.arrayBuffer());
         await fs.promises.mkdir(api.files, { recursive: true });
         await fs.promises.writeFile(join(api.files, "thumb.jpg"), data as any);
       }

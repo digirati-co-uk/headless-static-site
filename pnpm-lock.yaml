@@ -89,9 +89,6 @@ importers:
       sqlite:
         specifier: ^5.1.1
         version: 5.1.1
-      translate:
-        specifier: ^2.0.2
-        version: 2.0.2
       typesense:
         specifier: 1.7.2
         version: 1.7.2(@babel/runtime@7.26.0)
@@ -2305,9 +2302,6 @@ packages:
     resolution: {integrity: sha512-2lv/66T7e5yNyhAAC4NaKe5nVavzuGJQVVtRYLyQ2OI8tsJ61PMLlelehb0wi2Hx6+hT/OJUWZcw8MjlSRnxvw==}
     engines: {node: '>=14'}
 
-  translate@2.0.2:
-    resolution: {integrity: sha512-K07zjM146c2RYbdlG0xCNGkE6WPdcWjdWX55SOpHzgIq9Elj+LvvXDAfbeQ8gSfkrluaGahnNv2pYfq82UiBDQ==}
-
   tree-kill@1.2.2:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
@@ -4429,8 +4423,6 @@ snapshots:
   tr46@4.1.1:
     dependencies:
       punycode: 2.3.1
-
-  translate@2.0.2: {}
 
   tree-kill@1.2.2: {}
 
