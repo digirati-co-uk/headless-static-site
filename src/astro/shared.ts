@@ -38,6 +38,23 @@ export type ExtractItemSlugsOptions = {
   routes?: AstroIiifRoutes;
 };
 
+export function pagePathForResource(resource: Record<string, any>, routes?: AstroIiifRoutes) {
+  const type = normalizeItemType(resource?.type || resource?.["@type"]);
+  const resolvedRoutes = resolveAstroIiifRoutes(routes);
+  const route = type === "Collection" ? resolvedRoutes.collections : resolvedRoutes.manifests;
+  const slug = normalizeSlugForStaticPath(extractSlugFromResource(resource), {
+    type: type || undefined,
+    stripPrefix: true,
+    routes,
+  });
+  const encoded = slug
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `/${[route, encoded].filter(Boolean).join("/")}`;
+}
+
 export function normalizeSlug(input: string) {
   return input
     .replace(/^\/+/, "")

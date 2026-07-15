@@ -12,6 +12,7 @@ import {
   normalizeSlugForStaticPath,
   resolveAstroIiifRoutes,
   runtimeHintFromMeta,
+  pagePathForResource,
   slugFromParams,
 } from "./shared.ts";
 
@@ -43,6 +44,7 @@ export interface AstroIiifStaticPathOptions {
   split?: boolean;
   type?: IIIFResourceType;
   stripPrefix?: StaticPathStripPrefix;
+  props?: boolean;
 }
 
 function asObject(value: unknown) {
@@ -160,6 +162,20 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
     const loaded = await tryGetJsonWithBaseFallback("/meta/sitemap.json");
     return (asObject(loaded?.json) || {}) as Record<string, IIIFSitemapEntry>;
   }
+
+  const loadOutputJson = async (path: string) => (await tryGetJsonWithBaseFallback(path))?.json || null;
+  const getBuildManifest = () => loadOutputJson("meta/build.json");
+  const getResources = () => loadOutputJson("meta/resources.json");
+  const getIndices = () => loadOutputJson("meta/indices.json");
+  const getIndex = async (type: string) => (asObject(await getIndices()) || {})[type] || {};
+  const getTopicCollection = (type?: string, topic?: string) =>
+    loadOutputJson(["topics", type, topic, "collection.json"].filter(Boolean).join("/"));
+  const getStoreCollection = (id: string) => loadOutputJson(`stores/${encodeURIComponent(id)}/collection.json`);
+  const getCanvasIndex = (slug: string) => loadOutputJson(`${normalizeSlug(slug)}/canvases/index.json`);
+  const getSearchDescriptors = async () => {
+    const manifest = asObject(await getBuildManifest());
+    return Promise.all((manifest?.search || []).map((path: string) => loadOutputJson(path)));
+  };
 
   async function loadTopCollection() {
     return asObject((await getJsonWithBaseFallback("/collection.json")).json);
@@ -415,7 +431,10 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
   }
 
   async function getStaticPaths(type: IIIFResourceType, options: AstroIiifStaticPathOptions = {}) {
-    const slugs = await listSlugs(type);
+    const sitemap = await getSitemap();
+    const slugs = Object.entries(sitemap)
+      .filter(([, entry]) => entry?.type === type)
+      .map(([slug]) => slug);
     const param = options.param || "slug";
     const seen = new Set<string>();
     const staticPaths = [];
@@ -434,6 +453,7 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
         params: {
           [param]: asAstroParam(normalized, options.split || false),
         },
+        ...(options.props ? { props: { sitemap: sitemap[slug], slug } } : {}),
       });
     }
 
@@ -447,11 +467,17 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
       routes,
     });
     const param = options.param || "slug";
-    return slugs.map((slug) => ({
-      params: {
-        [param]: asAstroParam(slug, options.split || false),
-      },
-    }));
+    return slugs.map((slug) => {
+      const snippet = (collection.items || []).find((item: JsonObject) =>
+        extractItemSlugs({ items: [item] }, { type: options.type, stripPrefix: options.stripPrefix, routes }).includes(
+          slug
+        )
+      );
+      return {
+        params: { [param]: asAstroParam(slug, options.split || false) },
+        ...(options.props ? { props: { snippet } } : {}),
+      };
+    });
   }
 
   function getManifestStaticPathsFromCollection(collection: JsonObject, options: AstroIiifStaticPathOptions = {}) {
@@ -474,6 +500,15 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
     clearCache: () => cache.clear(),
     slugFromParams,
     getSitemap,
+    getBuildManifest,
+    getResources,
+    getIndices,
+    getIndex,
+    getTopicCollection,
+    getStoreCollection,
+    getCanvasIndex,
+    getSearchDescriptors,
+    pagePathForResource: (resource: JsonObject) => pagePathForResource(resource, routes),
     listSlugs,
     getAllManifests,
     getAllCollections,

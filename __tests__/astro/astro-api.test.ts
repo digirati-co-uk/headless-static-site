@@ -44,10 +44,15 @@ describe("astro server/client API", () => {
     });
 
     const api = createIiifAstroServer({ root: testDir });
-    const staticPaths = await api.getManifestStaticPaths();
+    const staticPaths = await api.getManifestStaticPaths({ props: true });
     const loaded = await api.loadManifestFromParams({ slug: "content/demo" });
 
-    expect(staticPaths).toEqual([{ params: { slug: "content/demo" } }]);
+    expect(staticPaths).toEqual([
+      {
+        params: { slug: "content/demo" },
+        props: { sitemap: { type: "Manifest", source: { type: "disk", path: "./content" } }, slug: "content/demo" },
+      },
+    ]);
     expect(loaded.type).toBe("Manifest");
     expect(loaded.resource?.label?.en?.[0]).toBe("Demo");
     expect(loaded.meta?.totalItems).toBe(1);
@@ -143,16 +148,20 @@ describe("astro server/client API", () => {
     const manifests = await api.getAllManifests();
     const collections = await api.getAllCollections();
     const storeCollections = await api.getAllStoreCollections();
-    const manifestRoutePaths = api.getManifestStaticPathsFromCollection(manifests as any);
+    const manifestRoutePaths = api.getManifestStaticPathsFromCollection(manifests as any, { props: true });
     const loaded = await api.loadManifestFromParams({ slug: "demo-1" });
 
     expect(manifests?.id).toContain("/manifests/collection.json");
     expect(collections?.id).toContain("/collections/collection.json");
     expect(storeCollections?.id).toContain("/collections/stores/collection.json");
-    expect(manifestRoutePaths).toEqual([{ params: { slug: "demo-1" } }, { params: { slug: "demo-2" } }]);
+    expect(manifestRoutePaths).toEqual([
+      { params: { slug: "demo-1" }, props: { snippet: manifests?.items?.[0] } },
+      { params: { slug: "demo-2" }, props: { snippet: manifests?.items?.[1] } },
+    ]);
     expect(loaded.slug).toBe("manifests/demo-1");
     expect(loaded.resource?.label?.en?.[0]).toBe("Demo 1");
     expect(loaded.meta?.totalItems).toBe(12);
+    expect(api.pagePathForResource(manifests?.items?.[0] as any)).toBe("/manifests/demo-1");
   });
 
   test("server API supports custom route prefixes for static paths and params loading", async () => {
@@ -192,6 +201,35 @@ describe("astro server/client API", () => {
     expect(loaded.slug).toBe("manifests/item-a");
     expect(loaded.resource?.label?.en?.[0]).toBe("Item A");
     expect(loaded.meta?.totalItems).toBe(4);
+    expect(api.pagePathForResource(loaded.resource as any)).toBe("/objects/item-a");
+  });
+
+  test("server API exposes build, index, topic, store, search, and Canvas discovery files", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-astro-server-discovery-"));
+    const buildDir = join(testDir, ".iiif", "build");
+    await mkdir(join(buildDir, "meta", "search"), { recursive: true });
+    await mkdir(join(buildDir, "topics", "material"), { recursive: true });
+    await mkdir(join(buildDir, "stores", "local"), { recursive: true });
+    await mkdir(join(buildDir, "manifests", "demo", "canvases"), { recursive: true });
+    await writeJson(join(buildDir, "meta", "build.json"), {
+      formatVersion: 1,
+      search: ["meta/search/manifests.mapping.json"],
+    });
+    await writeJson(join(buildDir, "meta", "resources.json"), { "manifests/demo": { type: "Manifest" } });
+    await writeJson(join(buildDir, "meta", "indices.json"), { material: { paper: ["manifests/demo"] } });
+    await writeJson(join(buildDir, "meta", "search", "manifests.mapping.json"), { name: "manifests" });
+    await writeJson(join(buildDir, "topics", "material", "collection.json"), { type: "Collection", items: [] });
+    await writeJson(join(buildDir, "stores", "local", "collection.json"), { type: "Collection", items: [] });
+    await writeJson(join(buildDir, "manifests", "demo", "canvases", "index.json"), [{ id: "canvas-1" }]);
+
+    const api = createIiifAstroServer({ root: testDir });
+    expect(await api.getBuildManifest()).toMatchObject({ formatVersion: 1 });
+    expect(await api.getResources()).toHaveProperty("manifests/demo");
+    expect(await api.getIndex("material")).toEqual({ paper: ["manifests/demo"] });
+    expect(await api.getTopicCollection("material")).toMatchObject({ type: "Collection" });
+    expect(await api.getStoreCollection("local")).toMatchObject({ type: "Collection" });
+    expect(await api.getSearchDescriptors()).toEqual([{ name: "manifests" }]);
+    expect(await api.getCanvasIndex("manifests/demo")).toEqual([{ id: "canvas-1" }]);
   });
 
   test("server API getAll collections/manifests always return a collection object", async () => {

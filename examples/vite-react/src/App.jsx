@@ -30,12 +30,7 @@ export function App() {
   const items = data?.items || [];
 
   if (selectedManifest) {
-    return (
-      <Manifest
-        slug={selectedManifest}
-        onDeselect={() => setSelectedManifest(null)}
-      />
-    );
+    return <Manifest slug={selectedManifest} onDeselect={() => setSelectedManifest(null)} />;
   }
 
   return (
@@ -49,8 +44,7 @@ export function App() {
     >
       <h1>iiif-hss + Vite + React</h1>
       <p>
-        This example uses <code>iiif-hss/vite-plugin</code> with shorthand
-        configuration:
+        This example uses <code>iiif-hss/vite-plugin</code> with shorthand configuration:
         <code>iiifPlugin(&#123; collection: &quot;...&quot; &#125;)</code>.
       </p>
       <p>
@@ -61,9 +55,7 @@ export function App() {
         Browse debug tools at <a href="/iiif/_debug">/iiif/_debug</a>.
       </p>
 
-      {status === "loading" && (
-        <p>Loading manifests from /iiif/manifests/collection.json...</p>
-      )}
+      {status === "loading" && <p>Loading manifests from /iiif/manifests/collection.json...</p>}
 
       {status === "error" && (
         <p>
@@ -76,13 +68,27 @@ export function App() {
           {items.map((item) => {
             const slug = item["hss:slug"];
             const href = slug ? `/iiif/${slug}/meta.json` : item.id;
+            const label = getLabel(item.label);
+            const thumbnail = item.thumbnail?.[0]?.id;
             return (
-              <li key={item.id}>
-                <LocaleString>{item.label}</LocaleString>
-                <button onClick={() => setSelectedManifest(slug)}>View</button>
-                <a href={href} target="_blank" rel="noreferrer">
-                  (meta)
-                </a>
+              <li key={item.id} style={{ marginBlock: "1rem" }}>
+                <article style={{ display: "flex", gap: "1rem", alignItems: "start" }}>
+                  {thumbnail && (
+                    <img src={thumbnail} alt="" loading="lazy" width="120" style={{ height: 90, objectFit: "cover" }} />
+                  )}
+                  <div>
+                    <strong>{label}</strong>
+                    {item.summary && (
+                      <p>
+                        <LocaleString>{item.summary}</LocaleString>
+                      </p>
+                    )}
+                    <button onClick={() => setSelectedManifest(slug)}>View {label}</button>{" "}
+                    <a href={href} target="_blank" rel="noreferrer">
+                      Metadata
+                    </a>
+                  </div>
+                </article>
               </li>
             );
           })}

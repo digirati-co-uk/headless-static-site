@@ -9,10 +9,7 @@ export function Manifest(props) {
     queryFn: async () => {
       const manifest = await iiif.loadManifest(props.slug);
       if (manifest.resource) {
-        vault.loadManifestSync(
-          manifest.resource.id,
-          JSON.parse(JSON.stringify(manifest.resource)),
-        );
+        vault.loadManifestSync(manifest.resource.id, JSON.parse(JSON.stringify(manifest.resource)));
       }
       return manifest;
     },
@@ -21,6 +18,12 @@ export function Manifest(props) {
   return (
     <div>
       <button onClick={props.onDeselect}>back</button>
+      {data && (
+        <p>
+          Source: {data.links.localJson ? "local generated JSON" : "remote JSON"} —{" "}
+          <a href={data.links.json}>{data.links.json}</a>
+        </p>
+      )}
       {data?.resource && <CanvasPanel manifest={data?.resource?.id} />}
       <pre>{JSON.stringify(data, null, 2)}</pre>
     </div>

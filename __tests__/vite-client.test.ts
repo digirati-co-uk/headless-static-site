@@ -34,6 +34,18 @@ describe("vite client helpers", () => {
     const paths = iiif.getManifestStaticPathsFromCollection(manifests as any);
 
     expect(paths).toEqual([{ params: { slug: "demo-item" } }]);
+    expect(iiif.pagePathForResource(manifests?.items?.[0] as any)).toBe("/manifests/demo-item");
+  });
+
+  test("loads global indices through the public client", async () => {
+    const fetchFn = vi.fn(async (target: string) => {
+      if (String(target).endsWith("/meta/indices.json")) {
+        return new Response(JSON.stringify({ material: { paper: ["manifests/demo"] } }), { status: 200 });
+      }
+      return new Response("Not found", { status: 404 });
+    });
+    const iiif = createIiifViteClient({ baseUrl: "https://example.org/iiif", fetchFn: fetchFn as any });
+    expect(await iiif.getIndex("material")).toEqual({ paper: ["manifests/demo"] });
   });
 
   test("loads local manifest resources using route candidate helpers", async () => {
