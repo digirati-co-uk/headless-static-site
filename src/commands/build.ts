@@ -365,6 +365,10 @@ export async function build(
   const { time } = buildConfig;
 
   await buildConfig.files.mkdir(buildConfig.cacheDir);
+  const isPartialBuild = Boolean(buildConfig.options.exact || buildConfig.options.stores?.length);
+  if (buildConfig.options.emit && !buildConfig.options.dev && !isPartialBuild) {
+    await buildConfig.files.remove(buildConfig.buildDir);
+  }
   await buildConfig.files.mkdir(buildConfig.buildDir);
   await buildConfig.files.mkdir(buildConfig.requestCacheDir);
 
@@ -452,10 +456,11 @@ export async function build(
     enterPhase("save-files");
     const { failedToWrite } = await fileHandler.saveAll(false, buildConfig.concurrency.write);
     if (failedToWrite.length) {
-      buildConfig.log(`Failed to write ${failedToWrite.length} files`);
-      if (buildConfig.options.debug) {
-        buildConfig.log(failedToWrite);
-      }
+      const details = failedToWrite
+        .slice(0, 5)
+        .map(({ filePath, err }) => `${filePath}: ${err instanceof Error ? err.message : String(err)}`)
+        .join("\n");
+      throw new Error(`Failed to write ${failedToWrite.length} output file(s):\n${details}`);
     }
   }
 

@@ -188,13 +188,21 @@ export async function indices(
       items: [],
     };
     const topicTypeKeys = Object.keys(indexMap);
+    const normalizedTopicTypes = new Map<string, string>();
     for (const topicTypeKey of topicTypeKeys) {
       const topicTypeId = slug(topicTypeKey);
+      const existingTopicType = normalizedTopicTypes.get(topicTypeId);
+      if (existingTopicType && existingTopicType !== topicTypeKey) {
+        throw new Error(
+          `Topic type keys "${existingTopicType}" and "${topicTypeKey}" both normalize to "${topicTypeId}"`
+        );
+      }
+      normalizedTopicTypes.set(topicTypeId, topicTypeKey);
       const topicType = indexMap[topicTypeKey];
       const topicKeys = Object.keys(topicType);
 
       let baseTopicTypeMeta = {};
-      const topicTypeMetaDisk = join(topicsDir, topicTypeKey, "_meta.yaml");
+      const topicTypeMetaDisk = join(topicsDir, topicTypeId, "_meta.yaml");
       if (fs.existsSync(topicTypeMetaDisk)) {
         baseTopicTypeMeta = files.readYaml(topicTypeMetaDisk) || {};
       }
@@ -222,10 +230,18 @@ export async function indices(
         items: [],
       };
 
+      const normalizedTopics = new Map<string, string>();
       for (const topicKey of topicKeys) {
         const topic = topicType[topicKey];
         const topicId = slug(topicKey);
-        const topicMetaDisk = join(topicsDir, topicTypeKey, `${topicId}.yaml`);
+        const existingTopic = normalizedTopics.get(topicId);
+        if (existingTopic && existingTopic !== topicKey) {
+          throw new Error(
+            `Topics "${existingTopic}" and "${topicKey}" in "${topicTypeKey}" both normalize to "${topicId}"`
+          );
+        }
+        normalizedTopics.set(topicId, topicKey);
+        const topicMetaDisk = join(topicsDir, topicTypeId, `${topicId}.yaml`);
         let baseMeta = {};
         if (fs.existsSync(topicMetaDisk)) {
           baseMeta = files.readYaml(topicMetaDisk) || {};
@@ -235,12 +251,12 @@ export async function indices(
           {
             id: topicId,
             label: topicKey,
-            slug: `topics/${topicTypeKey}/${topicId}`,
+            slug: `topics/${topicTypeId}/${topicId}`,
           },
           baseMeta
         );
         if (options.topics) {
-          await fs.promises.mkdir(join(topicsDir, topicTypeKey), { recursive: true });
+          await fs.promises.mkdir(join(topicsDir, topicTypeId), { recursive: true });
           await write(topicMetaDisk, stringify(topicMeta));
         }
 
@@ -272,19 +288,19 @@ export async function indices(
             .filter((e) => e),
         };
 
-        await files.mkdir(join(buildDir, "topics", topicTypeKey, topicId));
+        await files.mkdir(join(buildDir, "topics", topicTypeId, topicId));
 
         (topicCollection as any)["hss:totalItems"] = topicCollection.items.length;
         (topicCollectionSnippet as any)["hss:totalItems"] = topicCollection.items.length;
-        await writeJson(join(buildDir, "topics", topicTypeKey, topicId, "collection.json"), topicCollection);
-        await writeJson(join(buildDir, "topics", topicTypeKey, topicId, "meta.json"), topicMeta);
+        await writeJson(join(buildDir, "topics", topicTypeId, topicId, "collection.json"), topicCollection);
+        await writeJson(join(buildDir, "topics", topicTypeId, topicId, "meta.json"), topicMeta);
       }
 
-      await files.mkdir(join(buildDir, "topics", topicTypeKey));
+      await files.mkdir(join(buildDir, "topics", topicTypeId));
       (topicTypeCollection as any)["hss:totalItems"] = topicTypeCollection.items.length;
       (topicTypeCollectionSnippet as any)["hss:totalItems"] = topicTypeCollection.items.length;
-      await writeJson(join(buildDir, "topics", topicTypeKey, "collection.json"), topicTypeCollection);
-      await writeJson(join(buildDir, "topics", topicTypeKey, "meta.json"), topicTypeMeta);
+      await writeJson(join(buildDir, "topics", topicTypeId, "collection.json"), topicTypeCollection);
+      await writeJson(join(buildDir, "topics", topicTypeId, "meta.json"), topicTypeMeta);
     }
 
     await files.mkdir(join(buildDir, "topics"));

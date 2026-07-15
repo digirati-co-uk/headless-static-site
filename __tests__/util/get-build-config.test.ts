@@ -19,6 +19,21 @@ describe("getBuildConfig search indexNames", () => {
     (global as any).__hss = undefined;
   });
 
+  test("requires a canonical URL before emitting", async () => {
+    await expect(
+      getBuildConfig(
+        { cwd: testDir, scripts: "./no-scripts-here", emit: true },
+        {
+          ...defaultBuiltIns,
+          env: {},
+          customConfig: {
+            stores: { local: { type: "iiif-json", path: "./content" } },
+          } as any,
+        }
+      )
+    ).rejects.toThrow(/canonical server URL/);
+  });
+
   test("preserves explicit index names when defaultIndex is inferred", async () => {
     const config = {
       stores: {

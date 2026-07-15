@@ -249,4 +249,24 @@ describe("linker integration", () => {
     expect(second.linked?.stats?.linked).toBe(0);
     expect(second.linked?.stats?.cacheHit).toBe(1);
   });
+
+  test("full builds remove stale output", async () => {
+    const stalePath = join(testDir, ".iiif", "build", "removed", "manifest.json");
+    await mkdir(join(testDir, ".iiif", "build", "removed"), { recursive: true });
+    await writeFile(stalePath, "stale");
+
+    await build(
+      { emit: true, cache: false, debug: false, ui: false },
+      defaultBuiltIns,
+      {
+        customConfig: {
+          stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+          server: { url: "http://localhost:7111" },
+        },
+        fileHandler: new FileHandler(fs as any, testDir, false),
+      }
+    );
+
+    await expect(readFile(stalePath, "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
