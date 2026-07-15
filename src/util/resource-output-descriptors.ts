@@ -68,8 +68,12 @@ export async function createResourceOutputDescriptors(
     try {
       const collection = collectionResource.vault?.getObject(collectionResource.id);
       const children: string[] = (collection?.items || [])
-        .map((item: any) => item?.["hss:slug"] || slugById.get(item?.id || item?.["@id"]) || slugByPath.get(item?.path))
-        .filter((slug: unknown): slug is string => typeof slug === "string" && Boolean(descriptors[slug]));
+        .map((item: any) =>
+          [item?.["hss:slug"], slugById.get(item?.id || item?.["@id"]), slugByPath.get(item?.path)].find(
+            (slug) => typeof slug === "string" && Boolean(descriptors[slug])
+          )
+        )
+        .filter((slug: unknown): slug is string => typeof slug === "string");
       if (children.length) {
         const uniqueChildren = [...new Set(children)].sort();
         const descriptor = descriptors[collectionResource.slug];

@@ -28,7 +28,7 @@ describe("resource output descriptors", () => {
     const root = {
       id: "https://upstream.example/root",
       type: "Collection",
-      items: [{ id: nested.id, type: "Collection" }],
+      items: [{ id: nested.id, type: "Collection", "hss:slug": "upstream/nested" }],
     };
     const resources = await Promise.all([
       resource(root, "collections/root", { type: "remote", url: root.id }),
