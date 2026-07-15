@@ -28,6 +28,8 @@ export default defineConfig({
 
 During development, the IIIF routes are mounted at `/iiif` and the inspection UI is available at `/iiif/_debug/`. Configure local and remote stores in `.iiifrc.yml`, `iiif.config.js`, or an `iiif-config` folder; see [CONFIG.md](./CONFIG.md).
 
+For the complete generated directory and file contract, including conditional outputs and consumption patterns, see [FILE-OUTPUT.md](./FILE-OUTPUT.md).
+
 The Vite-only `onBuild` callback is awaited for production and development builds. It receives `start`, `success`, `error`, or `skipped` events; development events include initial, watched, and debug-triggered rebuilds.
 
 ## Programmatic builds

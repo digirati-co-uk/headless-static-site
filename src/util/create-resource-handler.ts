@@ -9,7 +9,7 @@ export interface ResourceFilesApi {
   saveJson(path: string, data: object): Promise<void>;
 }
 
-export function createResourceHandler(filesDirectory: string, files: FileHandler): ResourceFilesApi {
+export function createResourceHandler(filesDirectory: string, files: FileHandler, producer?: string): ResourceFilesApi {
   return {
     exists: async (path: string) => files.exists(join(filesDirectory, path)),
     readFile: async (path: string) => {
@@ -19,7 +19,8 @@ export function createResourceHandler(filesDirectory: string, files: FileHandler
       }
       return files.readFile(join(filesDirectory, path));
     },
-    writeFile: async (path: string, data: string | Buffer) => files.writeFile(join(filesDirectory, path), data),
+    writeFile: async (path: string, data: string | Buffer) =>
+      files.writeFile(join(filesDirectory, path), data, producer),
     loadJson: async (path: string) => {
       const fullPath = join(filesDirectory, path);
       if (!files.exists(fullPath)) {
@@ -27,6 +28,6 @@ export function createResourceHandler(filesDirectory: string, files: FileHandler
       }
       return files.loadJson(fullPath);
     },
-    saveJson: async (path: string, data: object) => files.saveJson(join(filesDirectory, path), data),
+    saveJson: async (path: string, data: object) => files.saveJson(join(filesDirectory, path), data, false, producer),
   };
 }

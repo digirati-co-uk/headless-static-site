@@ -217,6 +217,7 @@ describe("astro server/client API", () => {
     });
     await writeJson(join(buildDir, "meta", "resources.json"), { "manifests/demo": { type: "Manifest" } });
     await writeJson(join(buildDir, "meta", "indices.json"), { material: { paper: ["manifests/demo"] } });
+    await writeJson(join(buildDir, "meta", "facets.json"), { material: { paper: 1 } });
     await writeJson(join(buildDir, "meta", "search", "manifests.mapping.json"), { name: "manifests" });
     await writeJson(join(buildDir, "topics", "material", "collection.json"), { type: "Collection", items: [] });
     await writeJson(join(buildDir, "stores", "local", "collection.json"), { type: "Collection", items: [] });
@@ -226,6 +227,7 @@ describe("astro server/client API", () => {
     expect(await api.getBuildManifest()).toMatchObject({ formatVersion: 1 });
     expect(await api.getResources()).toHaveProperty("manifests/demo");
     expect(await api.getIndex("material")).toEqual({ paper: ["manifests/demo"] });
+    expect(await api.getFacetCounts()).toEqual({ material: { paper: 1 } });
     expect(await api.getTopicCollection("material")).toMatchObject({ type: "Collection" });
     expect(await api.getStoreCollection("local")).toMatchObject({ type: "Collection" });
     expect(await api.getSearchDescriptors()).toEqual([{ name: "manifests" }]);

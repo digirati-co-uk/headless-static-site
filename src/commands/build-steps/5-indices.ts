@@ -326,6 +326,15 @@ export async function indices(
   await files.mkdir(join(buildDir, "meta"));
 
   await writeJson(join(buildDir, "meta", "indices.json"), indexMap);
+  await writeJson(
+    join(buildDir, "meta", "facets.json"),
+    Object.fromEntries(
+      Object.entries(indexMap).map(([type, values]) => [
+        type,
+        Object.fromEntries(Object.entries(values).map(([value, slugs]) => [value, slugs.length])),
+      ])
+    )
+  );
 
   if (trace && options.debug) {
     await writeJson(join(buildDir, "meta", "trace.json"), trace.toJSON());
@@ -378,7 +387,7 @@ export async function indices(
         const storeCollectionSnippet = createCollection({
           configUrl,
           slug: `stores/${storeId}`,
-          label: storeId,
+          label: config.stores[storeId]?.metadata?.label || storeId,
         }) as Collection;
         (storeCollectionSnippet as any)["hss:totalItems"] = items.length;
 

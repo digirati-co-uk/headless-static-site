@@ -12,6 +12,13 @@ import type { BuildConfig } from "../build.ts";
 import type { extract } from "./2-extract.ts";
 import type { enrich } from "./3-enrich.ts";
 
+function listRelativeFiles(directory: string, prefix = ""): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? listRelativeFiles(join(directory, entry.name), path) : [path];
+  });
+}
+
 export async function emit(
   {
     allResources,
@@ -387,9 +394,7 @@ export async function emit(
             const canvasFilesDirectory = join(canvasCacheDirectory, "files");
             const outputPrefix = `canvases/${position}`;
             const artifactFiles = files.dirExists(canvasFilesDirectory)
-              ? readdirSync(files.resolve(canvasFilesDirectory), { withFileTypes: true })
-                  .filter((entry) => entry.isFile())
-                  .map((entry) => `${outputPrefix}/${entry.name}`)
+              ? listRelativeFiles(files.resolve(canvasFilesDirectory)).map((path) => `${outputPrefix}/${path}`)
               : [];
             const searchEntries: any[] = [];
             for (const [index, details] of Object.entries(canvasSearchIndex?.[manifest.slug] || {})) {

@@ -366,6 +366,7 @@ export async function build(
   }
 
   const { time } = buildConfig;
+  buildConfig.files.clearProducerClaims();
 
   await buildConfig.files.mkdir(buildConfig.cacheDir);
   const isPartialBuild = Boolean(buildConfig.options.exact || buildConfig.options.stores?.length);
@@ -507,7 +508,7 @@ export async function build(
       stores: [...buildConfig.stores].sort(),
       features,
       search: inventory.filter(({ path }) => path.endsWith(".mapping.json")).map(({ path }) => path),
-      analysis: inventory.filter(({ path }) => /(^|\/)analysis[^/]*\.json$/i.test(path)).map(({ path }) => path),
+      analysis: inventory.filter(({ path }) => /(^|\/)[^/]*analysis[^/]*\.json$/i.test(path)).map(({ path }) => path),
       resources: {
         manifests: emitted.indexCollection
           ? Object.values(emitted.indexCollection).filter((item: any) => item.type === "Manifest").length

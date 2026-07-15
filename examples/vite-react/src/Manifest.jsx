@@ -11,7 +11,10 @@ export function Manifest(props) {
       if (manifest.resource) {
         vault.loadManifestSync(manifest.resource.id, JSON.parse(JSON.stringify(manifest.resource)));
       }
-      return manifest;
+      return {
+        ...manifest,
+        canvasOutput: (await iiif.getCanvasIndex(props.slug)) || [],
+      };
     },
   });
 
@@ -23,6 +26,23 @@ export function Manifest(props) {
           Source: {data.links.localJson ? "local generated JSON" : "remote JSON"} —{" "}
           <a href={data.links.json}>{data.links.json}</a>
         </p>
+      )}
+      {data?.canvasOutput?.some((canvas) => canvas.meta || canvas.files?.length) && (
+        <section>
+          <h2>Canvas output</h2>
+          <ul>
+            {data.canvasOutput.map((canvas) => (
+              <li key={canvas.id}>
+                Canvas {canvas.position + 1}:{" "}
+                {[canvas.meta, ...canvas.files].filter(Boolean).map((path) => (
+                  <a key={path} href={`/iiif/${props.slug}/${path}`}>
+                    {path.split("/").at(-1)}{" "}
+                  </a>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {data?.resource && <CanvasPanel manifest={data?.resource?.id} />}
       <pre>{JSON.stringify(data, null, 2)}</pre>

@@ -255,12 +255,12 @@ export async function link(
       const resource = await cachedResource.attachVault();
       const builder = await cachedResource.getVaultBuilder();
       const filesDir = join(cacheDir, activeResource.slug, "files");
-      const resourceFiles = createResourceHandler(filesDir, files);
 
       for (const linker of resourceLinkers) {
         if (skipSteps.includes(linker.id)) {
           continue;
         }
+        const resourceFiles = createResourceHandler(filesDir, files, `linker:${linker.id}`);
 
         const linkerConfig = Object.assign(
           {},

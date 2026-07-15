@@ -90,8 +90,6 @@ export async function extract(
       const runSteps = resourceStoreConfig.run;
 
       const filesDir = join(cacheDir, manifest.slug, "files");
-      const manifestResourceFiles = createResourceHandler(filesDir, files);
-      const resourceFiles = createResourceHandler(filesDir, files);
 
       buildConfig.trace?.startExtractions(manifest);
 
@@ -129,6 +127,7 @@ export async function extract(
           continue;
         }
         const extractionConfig = config.config?.[extraction.id];
+        const resourceFiles = createResourceHandler(filesDir, files, `extraction:${extraction.id}`);
         const storeConfig = extractionConfigs[extraction.id] || {};
         const extractConfig = Object.assign(
           {},
@@ -218,7 +217,16 @@ export async function extract(
               storeConfig,
               resourceStoreConfig.config?.[canvasExtraction.id] || {}
             );
-            const resourceFiles = createResourceHandler(canvasCache.filesDir, files);
+            const resourceFiles = createResourceHandler(
+              canvasCache.filesDir,
+              files,
+              `canvas-extraction:${canvasExtraction.id}`
+            );
+            const manifestResourceFiles = createResourceHandler(
+              filesDir,
+              files,
+              `canvas-extraction:${canvasExtraction.id}`
+            );
             const valid =
               !options.cache ||
               (await canvasExtraction.invalidate(

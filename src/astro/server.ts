@@ -144,6 +144,7 @@ export function createIiifAstroServer(options: AstroIiifServerOptions = {}) {
   const getBuildManifest = () => loadOutputJson("meta/build.json");
   const getResources = () => loadOutputJson("meta/resources.json");
   const getIndices = () => loadOutputJson("meta/indices.json");
+  const getFacetCounts = () => loadOutputJson("meta/facets.json");
   const getIndex = async (type: string) => (asObject(await getIndices()) || {})[type] || {};
   const getTopicCollection = (type?: string, topic?: string) =>
     loadOutputJson(["topics", type, topic, "collection.json"].filter(Boolean).join("/"));
@@ -513,6 +514,7 @@ export function createIiifAstroServer(options: AstroIiifServerOptions = {}) {
     getBuildManifest,
     getResources,
     getIndices,
+    getFacetCounts,
     getIndex,
     getTopicCollection,
     getStoreCollection,

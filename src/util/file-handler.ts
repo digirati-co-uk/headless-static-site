@@ -17,6 +17,7 @@ export class FileHandler {
   root: string;
   copyTargets: Array<{ from: string; to: string; options: any }> = [];
   writtenFiles: Set<string> = new Set();
+  producers: Map<string, string> = new Map();
   ui: boolean;
 
   constructor(fs: IFS, root: string, ui = false) {
@@ -138,7 +139,22 @@ export class FileHandler {
     }
   }
 
-  async saveJson(path: string, data: object, force = false) {
+  private claim(path: string, producer?: string) {
+    if (!producer) return;
+    const filePath = this.resolve(path);
+    const existing = this.producers.get(filePath);
+    if (existing && existing !== producer) {
+      throw new Error(`Output collision at ${filePath}: ${existing} conflicts with ${producer}`);
+    }
+    this.producers.set(filePath, producer);
+  }
+
+  clearProducerClaims() {
+    this.producers.clear();
+  }
+
+  async saveJson(path: string, data: object, force = false, producer?: string) {
+    this.claim(path, producer);
     const filePath = this.resolve(path);
     const existing = this.openJsonMap.get(filePath);
     if (!existing) {
@@ -157,7 +173,8 @@ export class FileHandler {
     this.openJsonChanged.set(filePath, true);
   }
 
-  async writeFile(path: string, data: any) {
+  async writeFile(path: string, data: any, producer?: string) {
+    this.claim(path, producer);
     const filePath = this.resolve(path);
     const dirName = dirname(filePath);
     await this.fs.promises.mkdir(dirName, { recursive: true });
@@ -182,7 +199,11 @@ export class FileHandler {
     const failedToWrite: any[] = [];
 
     const reserved = new Map<string, string>();
-    for (const filePath of [...this.writtenFiles, ...files.map(([filePath]) => filePath), ...binaryFiles.map(([filePath]) => filePath)]) {
+    for (const filePath of [
+      ...this.writtenFiles,
+      ...files.map(([filePath]) => filePath),
+      ...binaryFiles.map(([filePath]) => filePath),
+    ]) {
       reserved.set(filePath, "generated output");
     }
     const reserveCopy = (filePath: string, source: string) => {
@@ -205,9 +226,7 @@ export class FileHandler {
       }
       const entries = await this.fs.promises.readdir(source, { withFileTypes: true });
       await Promise.all(
-        entries.map((entry) =>
-          reserveCopyTree(join(source, entry.name), join(destination, entry.name))
-        )
+        entries.map((entry) => reserveCopyTree(join(source, entry.name), join(destination, entry.name)))
       );
     };
     for (const target of this.copyTargets) {

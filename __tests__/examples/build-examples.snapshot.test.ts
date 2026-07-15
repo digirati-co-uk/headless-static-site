@@ -12,6 +12,7 @@ const HASH_SEGMENT_PATTERN = /([._-])[A-Za-z0-9_-]{8,}(?=\.)/g;
 const SEARCH_TIME_PATTERN =
   /"searchTime"\s*:\s*[-+]?\d*\.?\d+(?:e[-+]?\d+)?/gi;
 const DURATION_PATTERN = /"duration"\s*:\s*[-+]?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+const COMPLETED_AT_PATTERN = /"completedAt"\s*:\s*"[^"]+"/gi;
 
 const EXAMPLES_TO_BUILD = [
   "astro",
@@ -28,7 +29,8 @@ function normalizePathHashSegments(filePath: string) {
 function normalizeDynamicMetrics(content: string) {
   return content
     .replace(SEARCH_TIME_PATTERN, '"searchTime":"<normalized>"')
-    .replace(DURATION_PATTERN, '"duration":"<normalized>"');
+    .replace(DURATION_PATTERN, '"duration":"<normalized>"')
+    .replace(COMPLETED_AT_PATTERN, '"completedAt":"<normalized>"');
 }
 
 async function getAllFiles(directory: string, root = directory): Promise<string[]> {
@@ -74,20 +76,27 @@ async function buildExample(exampleName: (typeof EXAMPLES_TO_BUILD)[number]) {
   const exampleDirectory = join(EXAMPLES_DIR, exampleName);
   const outputDirectory = join(exampleDirectory, EXAMPLE_BUILD_DIR);
   await rm(outputDirectory, { recursive: true, force: true });
+  await rm(join(exampleDirectory, ".iiif", "build"), { recursive: true, force: true });
+  await rm(join(exampleDirectory, ".iiif", "dev", "build"), { recursive: true, force: true });
+  const commandEnv = {
+    ...process.env,
+    ASTRO_TELEMETRY_DISABLED: "1",
+    FORCE_COLOR: "0",
+    NO_COLOR: "1",
+    NODE_ENV: "production",
+    MODE: "production",
+  };
+  delete commandEnv.VITEST;
+  delete commandEnv.VITEST_WORKER_ID;
   try {
     const buildTool = exampleName === "vite-react" ? "vite" : "astro";
     await runCommand(
       "pnpm",
-      ["--dir", exampleDirectory, "exec", buildTool, "build", "--outDir", EXAMPLE_BUILD_DIR],
+      ["--dir", exampleDirectory, "exec", buildTool, "build", "--mode", "production", "--outDir", EXAMPLE_BUILD_DIR],
       {
         cwd: process.cwd(),
         maxBuffer: 10 * 1024 * 1024,
-        env: {
-          ...process.env,
-          ASTRO_TELEMETRY_DISABLED: "1",
-          FORCE_COLOR: "0",
-          NO_COLOR: "1",
-        },
+        env: commandEnv,
       }
     );
   } catch (error) {

@@ -200,7 +200,7 @@ export async function enrich(
     const runEnrichment = async (enrichment: Enrichment) => {
       const startTime = performance.now();
       const filesDir = join(cacheDir, manifest.slug, "files");
-      const resourceFiles = createResourceHandler(filesDir, files);
+      const resourceFiles = createResourceHandler(filesDir, files, `enrichment:${enrichment.id}`);
       const storeConfig = enrichmentConfigs[enrichment.id] || {};
       const enrichmentConfig = Object.assign({}, storeConfig, resourceStoreConfig.config?.[enrichment.id] || {});
 
@@ -304,7 +304,11 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
           const startTime = performance.now();
           const storeConfig = enrichmentConfigs[enrichment.id] || {};
           const enrichmentConfig = Object.assign({}, storeConfig, resourceStoreConfig.config?.[enrichment.id] || {});
-          const resourceFiles = createResourceHandler(cachedCanvasResource.filesDir, files);
+          const resourceFiles = createResourceHandler(
+            cachedCanvasResource.filesDir,
+            files,
+            `canvas-enrichment:${enrichment.id}`
+          );
 
           const valid =
             !options.cache ||

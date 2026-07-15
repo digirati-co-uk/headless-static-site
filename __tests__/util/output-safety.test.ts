@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createCollection } from "../../src/util/create-collection.ts";
+import { createResourceHandler } from "../../src/util/create-resource-handler.ts";
 import { FileHandler } from "../../src/util/file-handler.ts";
 
 describe("output safety", () => {
@@ -28,6 +29,15 @@ describe("output safety", () => {
     await files.copy(customDir, "build", { overwrite: true });
 
     await expect(files.saveAll()).rejects.toThrow(/Output collision.*sitemap\.json/);
+  });
+
+  test("rejects two plugins producing the same resource file", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-plugin-collision-"));
+    const files = new FileHandler(fs as any, testDir);
+    await createResourceHandler("cache/files", files, "extraction:first").writeFile("data.json", "first");
+    await expect(
+      createResourceHandler("cache/files", files, "enrichment:second").writeFile("data.json", "second")
+    ).rejects.toThrow(/extraction:first conflicts with enrichment:second/);
   });
 
   test("reports failed buffered writes", async () => {

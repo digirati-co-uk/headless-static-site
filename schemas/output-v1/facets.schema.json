@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/facets.schema.json",
+  "title": "IIIF HSS facet counts",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": { "type": "integer", "minimum": 0 }
+  }
+}

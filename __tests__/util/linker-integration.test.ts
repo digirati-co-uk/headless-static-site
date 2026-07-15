@@ -282,10 +282,7 @@ describe("linker integration", () => {
     const navigationCollection = JSON.parse(
       await readFile(join(testDir, ".iiif", "build", "collections", "collection.json"), "utf-8")
     );
-    expect(navigationCollection.items.map((item: any) => item["hss:slug"])).toEqual([
-      "collections/stores",
-      "topics",
-    ]);
+    expect(navigationCollection.items.map((item: any) => item["hss:slug"])).toEqual(["collections/stores", "topics"]);
     const sitemap = JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "sitemap.json"), "utf-8"));
     expect(Object.values(sitemap)[0]).not.toHaveProperty("source");
     await expect(readFile(join(testDir, ".iiif", "build", "config", "stores.json"), "utf-8")).rejects.toMatchObject({
@@ -299,5 +296,24 @@ describe("linker integration", () => {
         )
       )
     ).toEqual([]);
+  });
+
+  test("selected-store builds preserve existing output and declare partial mode", async () => {
+    const retainedPath = join(testDir, ".iiif", "build", "retained.json");
+    await mkdir(join(testDir, ".iiif", "build"), { recursive: true });
+    await writeFile(retainedPath, "retained");
+
+    await build({ emit: true, cache: false, debug: false, ui: false, stores: ["local"] }, defaultBuiltIns, {
+      customConfig: {
+        stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+        server: { url: "http://localhost:7111" },
+      },
+      fileHandler: new FileHandler(fs as any, testDir, false),
+    });
+
+    expect(await readFile(retainedPath, "utf-8")).toBe("retained");
+    expect(JSON.parse(await readFile(join(testDir, ".iiif", "build", "meta", "build.json"), "utf-8")).mode).toBe(
+      "partial"
+    );
   });
 });

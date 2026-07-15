@@ -84,4 +84,52 @@ describe("build indices", () => {
     expect(JSON.parse(await readFile(join(buildDir, "meta", "resources.json"), "utf-8"))).toHaveProperty("topics");
     await expect(readFile(join(buildDir, "config", "stores.json"), "utf-8")).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  test("rejects topic type normalization collisions", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-topic-collision-"));
+    const files = {
+      async writeFile(path: string, content: string) {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, content);
+      },
+      async saveJson(path: string, content: unknown) {
+        await writeJson(path, content);
+      },
+      async loadJson(path: string) {
+        return path.includes("first") ? { "Topic Type": ["One"] } : { "topic-type": ["Two"] };
+      },
+      async mkdir(path: string) {
+        await mkdir(path, { recursive: true });
+      },
+      readYaml() {
+        return {};
+      },
+    };
+
+    await expect(
+      indices(
+        {
+          allResources: [
+            { slug: "first", source: { type: "disk" } },
+            { slug: "second", source: { type: "disk" } },
+          ] as any,
+          indexCollection: {
+            first: { id: "https://example.org/first", type: "Manifest", "hss:slug": "first" },
+            second: { id: "https://example.org/second", type: "Manifest", "hss:slug": "second" },
+          },
+          allIndices: {},
+        },
+        {
+          options: {},
+          configUrl: "https://example.org/iiif",
+          buildDir: join(testDir, "build"),
+          cacheDir: join(testDir, "cache"),
+          topicsDir: join(testDir, "topics"),
+          collectionRewrites: [],
+          files,
+          config: { stores: {}, collections: {} },
+        } as any
+      )
+    ).rejects.toThrow(/both normalize to "topic-type"/);
+  });
 });
