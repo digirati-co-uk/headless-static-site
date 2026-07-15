@@ -186,7 +186,7 @@ describe("getBuildConfig search indexNames", () => {
       }
     );
 
-    expect(result.cacheDir).toMatch(/^\/shared\/hss-cache\/output-v1\/hss-[^/]+\/build$/);
+    expect(result.cacheDir).toMatch(/^\/shared\/hss-cache\/cache-v1\/output-v1\/hss-[^/]+\/build$/);
     expect(result.requestCacheDir).toBe(join(result.cacheDir, "_requests"));
   });
 

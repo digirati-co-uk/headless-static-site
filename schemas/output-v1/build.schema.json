@@ -20,7 +20,7 @@
   ],
   "properties": {
     "formatVersion": { "const": 1 },
-    "contractVersion": { "const": "1.1" },
+    "contractVersion": { "const": "1.2" },
     "hssVersion": { "type": "string" },
     "mode": { "enum": ["full", "partial"] },
     "canonicalBaseUrl": { "type": "string", "format": "uri" },

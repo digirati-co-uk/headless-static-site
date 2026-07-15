@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { watch as watchFs } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cwd, env } from "node:process";
 import type { Command } from "commander";
 import packageJson from "../../package.json";
@@ -379,26 +379,57 @@ async function buildWithExternalCacheFallback(options: BuildOptions, builtIns: B
   try {
     release = await acquireCacheLock(cacheDirectory);
   } catch (error) {
-    const cacheIoFailure = ["EACCES", "EROFS", "ENOSPC", "EIO", "ELOCKED"].includes(
-      String((error as NodeJS.ErrnoException).code || "")
-    );
-    if (!cacheIoFailure) {
+    if (!isExternalCacheIoFailure(error, cacheDirectory)) {
       throw error;
     }
-    await context.onEvent?.({
-      type: "diagnostic",
-      level: "warning",
-      code: "CACHE_FALLBACK",
-      message: `External cache unavailable; retrying without cache: ${(error as Error).message}`,
-      at: new Date().toISOString(),
-    });
+    await reportCacheFallback(context, error);
     return buildInternal({ ...options, cacheRoot: undefined, cache: false, networkCache: false }, builtIns, context);
   }
   try {
     return await buildInternal(options, builtIns, context);
+  } catch (error) {
+    if (!isExternalCacheIoFailure(error, cacheDirectory)) {
+      throw error;
+    }
+    await reportCacheFallback(context, error);
+    return buildInternal({ ...options, cacheRoot: undefined, cache: false, networkCache: false }, builtIns, context);
   } finally {
-    await release();
+    try {
+      await release();
+    } catch (error) {
+      await context.onEvent?.({
+        type: "diagnostic",
+        level: "warning",
+        code: "CACHE_LOCK_RELEASE_FAILED",
+        message: `External cache lock cleanup failed: ${(error as Error).message}`,
+        at: new Date().toISOString(),
+      });
+    }
   }
+}
+
+const CACHE_IO_ERROR_CODES = new Set(["EACCES", "EPERM", "EROFS", "ENOSPC", "EDQUOT", "EIO", "EMFILE", "ENFILE", "ELOCKED"]);
+
+function isExternalCacheIoFailure(error: unknown, cacheDirectory: string) {
+  let current: any = error;
+  while (current) {
+    if (CACHE_IO_ERROR_CODES.has(String(current.code || ""))) {
+      const errorPath = current.path ? resolve(String(current.path)) : null;
+      return !errorPath || errorPath === cacheDirectory || errorPath.startsWith(`${cacheDirectory}${sep}`);
+    }
+    current = current.cause;
+  }
+  return false;
+}
+
+async function reportCacheFallback(context: BuildContext, error: unknown) {
+  await context.onEvent?.({
+    type: "diagnostic",
+    level: "warning",
+    code: "CACHE_FALLBACK",
+    message: `External cache unavailable; retrying without cache: ${(error as Error).message}`,
+    at: new Date().toISOString(),
+  });
 }
 
 async function buildInternal(
@@ -593,7 +624,11 @@ async function buildInternal(
         .slice(0, 5)
         .map(({ filePath, err }) => `${filePath}: ${err instanceof Error ? err.message : String(err)}`)
         .join("\n");
-      throw new Error(`Failed to write ${failedToWrite.length} output file(s):\n${details}`);
+      const cause = failedToWrite[0].err;
+      throw Object.assign(new Error(`Failed to write ${failedToWrite.length} output file(s):\n${details}`, { cause }), {
+        code: (cause as NodeJS.ErrnoException)?.code,
+        path: failedToWrite[0].filePath,
+      });
     }
 
     const resolvedOutputRoot = buildConfig.files.resolve(buildConfig.buildDir);

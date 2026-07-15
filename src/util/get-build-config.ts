@@ -115,8 +115,16 @@ const storeTypes = {
   "iiif-memory": IIIFMemoryStore,
 };
 
+export const CACHE_FORMAT_VERSION = 1;
+
 export function getExternalCacheDirectory(cacheRoot: string, dev: boolean) {
-  return join(cacheRoot, `output-v${OUTPUT_FORMAT_VERSION}`, `hss-${packageJson.version}`, dev ? "dev" : "build");
+  return join(
+    cacheRoot,
+    `cache-v${CACHE_FORMAT_VERSION}`,
+    `output-v${OUTPUT_FORMAT_VERSION}`,
+    `hss-${packageJson.version}`,
+    dev ? "dev" : "build"
+  );
 }
 
 export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuiltIns) {

@@ -60,6 +60,40 @@ function requireStringArray(value: unknown, file: string, field: string) {
   }
 }
 
+function requireUrl(value: unknown, file: string, field: string) {
+  requireString(value, file, field);
+  try {
+    new URL(value as string);
+  } catch {
+    fail(file, field, "must be an absolute URL");
+  }
+}
+
+function validatePortableRuntimeHints(value: unknown, file: string) {
+  if (!value || typeof value !== "object" || !("hss:runtime" in value)) {
+    return;
+  }
+  const runtime = requireObject((value as Record<string, any>)["hss:runtime"], file, "hss:runtime");
+  if (typeof runtime.source === "undefined") {
+    return;
+  }
+  const source = requireObject(runtime.source, file, "hss:runtime.source");
+  if (source.type === "disk") {
+    if (Object.keys(source).some((key) => key !== "type")) {
+      fail(file, "hss:runtime.source", "disk runtime hints must not expose source paths");
+    }
+    return;
+  }
+  if (source.type === "remote") {
+    if (Object.keys(source).some((key) => key !== "type" && key !== "url")) {
+      fail(file, "hss:runtime.source", "remote runtime hints may contain only type and url");
+    }
+    requireUrl(source.url, file, "hss:runtime.source.url");
+    return;
+  }
+  fail(file, "hss:runtime.source.type", 'must be "disk" or "remote"');
+}
+
 export function validateBuildManifest(value: unknown, file = "meta/build.json"): BuildManifest {
   const manifest = requireObject(value, file, "$");
   if (manifest.formatVersion !== OUTPUT_FORMAT_VERSION) {
@@ -205,6 +239,24 @@ function validateResourceDescriptors(value: unknown, file: string) {
     if (descriptor.origin !== "source" && descriptor.origin !== "generated") {
       fail(file, `${slug}.origin`, 'must be "source" or "generated"');
     }
+    const provenance = requireObject(descriptor.provenance, file, `${slug}.provenance`);
+    if (provenance.type === "local") {
+      if (Object.keys(provenance).some((key) => key !== "type")) {
+        fail(file, `${slug}.provenance`, "local provenance must not expose source details");
+      }
+    } else if (provenance.type === "remote") {
+      if (Object.keys(provenance).some((key) => key !== "type" && key !== "url")) {
+        fail(file, `${slug}.provenance`, "remote provenance may contain only type and url");
+      }
+      requireUrl(provenance.url, file, `${slug}.provenance.url`);
+    } else if (provenance.type === "override") {
+      if (Object.keys(provenance).some((key) => key !== "type" && key !== "upstream")) {
+        fail(file, `${slug}.provenance`, "override provenance may contain only type and upstream");
+      }
+      requireUrl(provenance.upstream, file, `${slug}.provenance.upstream`);
+    } else {
+      fail(file, `${slug}.provenance.type`, 'must be "local", "remote", or "override"');
+    }
     if (typeof descriptor.saved !== "boolean") {
       fail(file, `${slug}.saved`, "must be a boolean");
     }
@@ -250,13 +302,22 @@ export async function validateBuildOutput(
     if (stats!.size !== item.bytes) {
       fail(item.path, `files[${index}].bytes`, `expected ${item.bytes}, found ${stats!.size}`);
     }
-    if (options.sha256) {
-      const digest = createHash("sha256")
-        .update(await readFile(absolutePath))
-        .digest("hex");
+    const isMeta = item.path.endsWith("/meta.json");
+    const data = options.sha256 || isMeta ? await readFile(absolutePath) : null;
+    if (options.sha256 && data) {
+      const digest = createHash("sha256").update(data).digest("hex");
       if (digest !== item.sha256) {
         fail(item.path, `files[${index}].sha256`, `expected ${item.sha256}, found ${digest}`);
       }
+    }
+    if (isMeta && data) {
+      let meta: unknown;
+      try {
+        meta = JSON.parse(data.toString("utf8"));
+      } catch (error) {
+        fail(item.path, "$", `invalid JSON: ${(error as Error).message}`);
+      }
+      validatePortableRuntimeHints(meta, item.path);
     }
   }
 

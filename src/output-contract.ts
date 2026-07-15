@@ -1,5 +1,5 @@
 export const OUTPUT_FORMAT_VERSION = 1;
-export const OUTPUT_CONTRACT_VERSION = "1.1";
+export const OUTPUT_CONTRACT_VERSION = "1.2";
 export const BUILD_RESULT_VERSION = 1;
 
 export interface OutputFile {
@@ -70,6 +70,10 @@ export interface ResourceOutputDescriptor {
   type: "Manifest" | "Collection";
   inputKey?: string;
   origin: "source" | "generated";
+  provenance:
+    | { type: "local" }
+    | { type: "remote"; url: string }
+    | { type: "override"; upstream: string };
   saved: boolean;
   files: ResourceOutputFiles;
   parents?: string[];

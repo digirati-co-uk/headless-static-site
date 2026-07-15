@@ -47,9 +47,11 @@ await build({ ...options, cacheRoot: "/var/cache/iiif-hss" }, builtIns, {
 });
 ```
 
+The external cache path includes an HSS cache-format generation as well as output and package versions, so preview builds do not reuse an older implementation's cache layout. Cache I/O failures emit `CACHE_FALLBACK` and retry once with both resource and network caches disabled.
+
 `build()` keeps its existing detailed pipeline return for compatibility and exposes the portable contract as `output.result`. A result with `status: "not-emitted"` is never deployable. Use `readBuildResult()` or `validateBuildOutput()` from `iiif-hss/library` to read and validate an emitted tree; checksum verification is enabled with `{ sha256: true }`.
 
-Already-loaded resources can use the programmatic `iiif-memory` store. Each input accepts either `resource` or `url`, plus an optional publishable `inputKey` and `saveToDisk` policy. URL inputs and every downstream build request use the injected `fetch`.
+Already-loaded resources can use the programmatic `iiif-memory` store. Each input accepts `resource` or `url`, plus an optional publishable `inputKey` and `saveToDisk` policy. Supplying both `resource` and its upstream `url` declares a local override. URL fetches and every downstream build request use the injected `fetch`.
 
 ## Schema and compatibility policy
 

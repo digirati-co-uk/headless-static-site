@@ -3,7 +3,7 @@ import objectHash from "object-hash";
 import { type ParsedResource, type ProtoResourceDirectory, type Store, createProtoDirectory } from "../util/store.ts";
 
 export type HssProgrammaticInput =
-  | { resource: Record<string, any>; url?: never; inputKey?: string; saveToDisk?: boolean }
+  | { resource: Record<string, any>; url?: string; inputKey?: string; saveToDisk?: boolean }
   | { url: string; resource?: never; inputKey?: string; saveToDisk?: boolean };
 
 export interface IIIFMemoryStore {
@@ -42,8 +42,10 @@ export const IIIFMemoryStore: Store<IIIFMemoryStore> = {
         slugSource,
         path: input.url || `memory:${index}:${id}`,
         storeId: api.storeId,
-        source: input.url ? { type: "remote", url: input.url } : { type: "memory", index },
-        saveToDisk: input.saveToDisk ?? !input.url,
+        source: input.resource
+          ? { type: "memory", index, ...(input.url ? { upstream: input.url } : {}) }
+          : { type: "remote", url: input.url },
+        saveToDisk: input.saveToDisk ?? Boolean(input.resource),
         inputKey: input.inputKey,
       });
     }
@@ -51,6 +53,10 @@ export const IIIFMemoryStore: Store<IIIFMemoryStore> = {
   },
 
   async invalidate(store, resource, caches) {
+    const policy = objectHash({ inputKey: resource.inputKey ?? null, saveToDisk: Boolean(resource.saveToDisk) });
+    if (caches.policy !== policy) {
+      return true;
+    }
     if (resource.source.type === "remote") {
       return !caches.urls?.includes(resource.source.url);
     }
@@ -64,10 +70,11 @@ export const IIIFMemoryStore: Store<IIIFMemoryStore> = {
     const { id, type } = getIdentity(json);
     const vault = new Vault();
     const loaded: any = await vault.load(id, json);
+    const policy = objectHash({ inputKey: resource.inputKey ?? null, saveToDisk: Boolean(resource.saveToDisk) });
     const caches =
       resource.source.type === "remote"
-        ? { urls: [resource.source.url] }
-        : { load: objectHash(input?.resource || null) };
+        ? { urls: [resource.source.url], policy }
+        : { load: objectHash(input?.resource || null), policy };
     return createProtoDirectory(
       {
         id,

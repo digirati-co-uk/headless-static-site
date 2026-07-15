@@ -77,9 +77,10 @@ export interface ProtoResourceDirectory {
           alias?: string;
           relativePath?: string;
           filePath: string;
+          upstream?: string;
         }
       | { type: "remote"; url: string; overrides?: string }
-      | { type: "memory"; index: number };
+      | { type: "memory"; index: number; upstream?: string };
   };
   "vault.json": IIIFStore;
   "meta.json": {

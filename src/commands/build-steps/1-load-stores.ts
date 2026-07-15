@@ -130,9 +130,9 @@ export async function loadStores(
       } else {
         validCount++;
         const data = await files.loadJson(join(resourceDir, "resource.json"));
-        if (resource.inputKey) {
-          data.inputKey = resource.inputKey;
-        }
+        data.inputKey = resource.inputKey;
+        data.saveToDisk = resource.saveToDisk;
+        await files.saveJson(join(resourceDir, "resource.json"), data);
 
         if (data.id && data.saveToDisk) {
           idsToSlugs[data.id] = {

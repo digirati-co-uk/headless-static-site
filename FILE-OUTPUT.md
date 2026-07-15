@@ -183,7 +183,7 @@ Common built-in keys include:
 | `partOfCollections` | optional collection extraction  | Compact parent Collection references.                                                               |
 | `files`             | files-list extraction           | Relative names of emitted resource files.                                                           |
 | `filesDetail`       | files-list extraction           | Configured metadata for known emitted files.                                                        |
-| `hss:runtime`       | always-on runtime hints         | Resource type, source descriptor, and whether full JSON is saved locally.                           |
+| `hss:runtime`       | always-on runtime hints         | Resource type, portable source descriptor, and whether full JSON is saved locally.                  |
 | `hss:thumbnail`     | thumbnail extraction            | Stable `{ source, image }` thumbnail shape. The legacy `thumbnail` field remains for compatibility. |
 
 The `hss:runtime` value has this shape:
@@ -196,7 +196,7 @@ The `hss:runtime` value has this shape:
 }
 ```
 
-Astro server/client helpers use it to choose local JSON or the remote source. This makes `meta.json` part of the runtime resolution contract, not merely display metadata.
+Astro server/client helpers use it to choose local JSON or the remote source. Disk hints contain only `{ "type": "disk" }`; absolute and relative source paths are never published. This makes `meta.json` part of the runtime resolution contract, not merely display metadata.
 
 ### `<slug>/indices.json`
 
@@ -296,7 +296,7 @@ This final slug-to-snippet lookup includes parsed and synthetic resources. It re
 
 ### `meta/resource-descriptors.json`
 
-This lookup contains one descriptor per parsed source resource. Each descriptor records `hss:slug`, canonical IIIF ID, type, optional opaque caller `inputKey`, local-save status, exact emitted file links, and known parent/child source slugs. `origin: "source"` distinguishes these entries from HSS-generated navigation and topic Collections in `meta/resources.json`. It never includes source paths, headers, credentials, or store configuration.
+This lookup contains one descriptor per parsed source resource. Each descriptor records `hss:slug`, canonical IIIF ID, type, optional opaque caller `inputKey`, local-save status, exact emitted file links, and known parent/child source slugs. Portable `provenance` distinguishes local, remote, and locally overridden resources; overrides include only their upstream URL. `origin: "source"` distinguishes these entries from HSS-generated navigation and topic Collections in `meta/resources.json`. It never includes source paths, headers, credentials, or store configuration.
 
 All descriptor links are normalized paths relative to the output root and occur in the build manifest inventory. Use this file for caller correlation and per-resource artifact lists instead of recursively scanning output JSON.
 

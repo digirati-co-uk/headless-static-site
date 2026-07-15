@@ -59,7 +59,7 @@ describe("extractRuntimeHints", () => {
         caches: {
           value: Promise.resolve({
             [extractRuntimeHints.id]:
-              '{"type":"Collection","source":{"type":"disk","path":"./content","filePath":"content/demo.json"},"saveToDisk":true}',
+              '{"type":"Collection","source":{"type":"disk"},"saveToDisk":true}',
           }),
         },
       } as any,
@@ -68,5 +68,25 @@ describe("extractRuntimeHints", () => {
 
     expect(missingCache).toBe(true);
     expect(matchingCache).toBe(false);
+  });
+
+  test("never publishes disk source paths", async () => {
+    const result = await extractRuntimeHints.handler(
+      {
+        type: "Manifest",
+        source: {
+          type: "disk",
+          path: "/Users/private/content",
+          filePath: "/Users/private/content/manifest.json",
+        },
+      } as any,
+      {} as any,
+      {}
+    );
+
+    expect(result.meta).toEqual({
+      "hss:runtime": { type: "Manifest", source: { type: "disk" }, saveToDisk: true },
+    });
+    expect(JSON.stringify(result)).not.toContain("/Users/private");
   });
 });

@@ -23,7 +23,7 @@ describe("output contract schemas", () => {
     try {
       validateBuildManifest({
         formatVersion: 1,
-        contractVersion: "1.1",
+        contractVersion: "1.2",
         hssVersion: "test",
         mode: "full",
         canonicalBaseUrl: "https://example.org",

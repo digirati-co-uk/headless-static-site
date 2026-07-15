@@ -7,7 +7,7 @@ type RuntimeSource = {
 
 type RuntimeHints = {
   type: "Manifest" | "Collection";
-  source: RuntimeSource;
+  source?: RuntimeSource;
   saveToDisk: boolean;
 };
 
@@ -21,13 +21,17 @@ function toRuntimeHints(resource: { type: string; source: any; saveToDisk?: bool
   if (!source || typeof source !== "object") {
     return null;
   }
-  if (source.type !== "disk" && source.type !== "remote") {
-    return null;
-  }
+
+  const portableSource =
+    source.type === "remote" && typeof source.url === "string"
+      ? { type: "remote" as const, url: source.url }
+      : source.type === "disk"
+        ? { type: "disk" as const }
+        : undefined;
 
   return {
     type,
-    source: { ...source },
+    ...(portableSource ? { source: portableSource } : {}),
     saveToDisk: source.type === "disk" || Boolean(resource.saveToDisk),
   };
 }

@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": {
     "type": "object",
-    "required": ["hss:slug", "id", "type", "origin", "saved", "files"],
+    "required": ["hss:slug", "id", "type", "origin", "provenance", "saved", "files"],
     "additionalProperties": false,
     "properties": {
       "hss:slug": { "type": "string", "minLength": 1 },
@@ -13,6 +13,31 @@
       "type": { "enum": ["Manifest", "Collection"] },
       "inputKey": { "type": "string" },
       "origin": { "enum": ["source", "generated"] },
+      "provenance": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": { "type": { "const": "local" } }
+          },
+          {
+            "type": "object",
+            "required": ["type", "url"],
+            "additionalProperties": false,
+            "properties": { "type": { "const": "remote" }, "url": { "type": "string", "format": "uri" } }
+          },
+          {
+            "type": "object",
+            "required": ["type", "upstream"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "const": "override" },
+              "upstream": { "type": "string", "format": "uri" }
+            }
+          }
+        ]
+      },
       "saved": { "type": "boolean" },
       "parents": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
       "children": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },

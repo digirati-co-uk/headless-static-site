@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { OutputFile, ResourceOutputDescriptor } from "../output-contract.ts";
 import type { ActiveResourceJson } from "./store.ts";
 
@@ -8,13 +6,23 @@ function pick(paths: Set<string>, candidate: string) {
 }
 
 export async function createResourceOutputDescriptors(
-  outputRoot: string,
+  _outputRoot: string,
   resources: ActiveResourceJson[],
   inventory: OutputFile[],
   snippets: Record<string, any> = {}
 ) {
   const inventoryPaths = new Set(inventory.map(({ path }) => path));
   const descriptors: Record<string, ResourceOutputDescriptor> = {};
+
+  const provenanceFor = (resource: ActiveResourceJson): ResourceOutputDescriptor["provenance"] => {
+    if (resource.source.type === "remote") {
+      return { type: "remote", url: resource.source.url };
+    }
+    if (resource.source.upstream) {
+      return { type: "override", upstream: resource.source.upstream };
+    }
+    return { type: "local" };
+  };
 
   for (const resource of resources) {
     const outputSlug = resource.slug.split("\\").join("/").replace(/^\/+/, "");
@@ -37,6 +45,7 @@ export async function createResourceOutputDescriptors(
       type: resource.type as "Manifest" | "Collection",
       inputKey: resource.inputKey,
       origin: "source",
+      provenance: provenanceFor(resource),
       saved: Boolean(iiif),
       files: {
         iiif,
@@ -50,18 +59,20 @@ export async function createResourceOutputDescriptors(
     };
   }
 
-  const descriptorSlugs = new Set(Object.keys(descriptors));
-  for (const descriptor of Object.values(descriptors)) {
-    if (!descriptor.files.iiif || descriptor.type !== "Collection") {
+  const slugById = new Map(resources.map((resource) => [resource.id, resource.slug]));
+  const slugByPath = new Map(resources.map((resource) => [resource.path, resource.slug]));
+  for (const collectionResource of resources) {
+    if (collectionResource.type !== "Collection") {
       continue;
     }
     try {
-      const collection = JSON.parse(await readFile(join(outputRoot, descriptor.files.iiif), "utf8"));
-      const children: string[] = (collection.items || [])
-        .map((item: any) => item?.["hss:slug"])
-        .filter((slug: unknown): slug is string => typeof slug === "string" && descriptorSlugs.has(slug));
+      const collection = collectionResource.vault?.getObject(collectionResource.id);
+      const children: string[] = (collection?.items || [])
+        .map((item: any) => item?.["hss:slug"] || slugById.get(item?.id || item?.["@id"]) || slugByPath.get(item?.path))
+        .filter((slug: unknown): slug is string => typeof slug === "string" && Boolean(descriptors[slug]));
       if (children.length) {
         const uniqueChildren = [...new Set(children)].sort();
+        const descriptor = descriptors[collectionResource.slug];
         descriptor.children = uniqueChildren;
         for (const child of uniqueChildren) {
           descriptors[child].parents = [
@@ -70,7 +81,7 @@ export async function createResourceOutputDescriptors(
         }
       }
     } catch {
-      // The inventory validator reports unreadable files; relationships are optional.
+      // A malformed source graph does not make otherwise valid output unusable.
     }
   }
 

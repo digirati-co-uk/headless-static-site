@@ -73,6 +73,7 @@ export const IIIFRemoteStore: Store<IIIFRemoteStore> = {
           path: override,
           alias: slug,
           filePath: override,
+          upstream: store.url,
         };
       }
       // This is a manifest, probably shouldn't have requested it...
