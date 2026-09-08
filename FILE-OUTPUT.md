@@ -449,3 +449,28 @@ Output format 1 is declared by `meta/build.json` and schemas in `schemas/output-
 - Existing `<index>.search.jsonl` Canvas names remain supported; new code should use descriptors rather than infer meaning from names.
 
 Pagination and streaming of aggregate IIIF Collections remain threshold-gated: format 1 keeps compatible single-file Collections until profiling demonstrates a real memory or payload limit.
+
+### `featured/collection.json` (opt-in)
+
+Enabled by `collections.featured`. This is a IIIF Collection with page metadata,
+selected section collections and their immediate members embedded as rich
+references. Card references include `metadata`, custom `behavior`, descriptions,
+thumbnails and `hss:totalItems` where known. Their own `items` are omitted, bounding
+expansion even when source collections contain cycles.
+
+`hss:totalItems` always counts immediate members of the represented collection,
+not recursive objects or physical holdings. User-authored holdings can be displayed
+through IIIF `metadata`; do not infer them from the online member count. Unknown
+external members retain available descriptions without fetching them or inventing
+counts. Final known resource descriptions take precedence over stale references.
+
+The compact `featured` reference appears in `meta/resources.json` and resource
+descriptors; `meta/build.json` advertises the optional `featuredCollection`
+entrypoint. Existing clients can resolve the slug `featured`. The root collection's
+default membership remains unchanged; include `featured` explicitly in
+`collections.index.items` to link to it.
+
+Folder collections now exist before extraction/enrichment and can include immediate
+child collections as well as direct Manifests. Their original slugs and collection
+rewrite rules are retained. The public `collections/collection.json` catalogue
+continues to link to them.

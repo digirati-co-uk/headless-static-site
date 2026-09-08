@@ -20,6 +20,7 @@ function parseObject(input: string, name: string) {
 
 export function CollectionsConfigPage({ debugBase }: { debugBase: string }) {
   const [data, setData] = useState<CollectionsConfigResponse | null>(null);
+  const [featuredValue, setFeaturedValue] = useState("");
   const [indexValue, setIndexValue] = useState("{}");
   const [manifestsValue, setManifestsValue] = useState("{}");
   const [collectionsValue, setCollectionsValue] = useState("{}");
@@ -34,6 +35,7 @@ export function CollectionsConfigPage({ debugBase }: { debugBase: string }) {
       .then((json: CollectionsConfigResponse) => {
         if (cancelled) return;
         setData(json);
+        setFeaturedValue(json.collections?.featured === undefined ? "" : pretty(json.collections.featured));
         setIndexValue(pretty(json.collections?.index || {}));
         setManifestsValue(pretty(json.collections?.manifests || {}));
         setCollectionsValue(pretty(json.collections?.collections || {}));
@@ -53,6 +55,7 @@ export function CollectionsConfigPage({ debugBase }: { debugBase: string }) {
     try {
       const collections = {
         index: parseObject(indexValue, "index"),
+        ...(featuredValue.trim() ? { featured: parseObject(featuredValue, "featured") } : {}),
         manifests: parseObject(manifestsValue, "manifests"),
         collections: parseObject(collectionsValue, "collections"),
         topics: parseObject(topicsValue, "topics"),
@@ -88,7 +91,7 @@ export function CollectionsConfigPage({ debugBase }: { debugBase: string }) {
         <h2 className="text-2xl font-semibold">Collection Surface Editor</h2>
         <p className="text-slate-500 mt-1">
           Edit labels and summaries for top-level
-          index/manifests/collections/topics surfaces.
+          index/featured/manifests/collections/topics surfaces.
         </p>
       </section>
 
@@ -106,6 +109,14 @@ export function CollectionsConfigPage({ debugBase }: { debugBase: string }) {
               className="mt-1 h-28 w-full rounded border border-gray-300 p-2 font-mono text-xs"
               value={indexValue}
               onChange={(event) => setIndexValue(event.target.value)}
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            featured (leave blank to disable)
+            <textarea
+              className="mt-1 h-28 w-full rounded border border-gray-300 p-2 font-mono text-xs"
+              value={featuredValue}
+              onChange={(event) => setFeaturedValue(event.target.value)}
             />
           </label>
           <label className="text-sm text-slate-700">

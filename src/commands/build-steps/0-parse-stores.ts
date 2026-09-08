@@ -64,6 +64,7 @@ export async function parseStores(
   );
   const effectiveStores = Array.from(new Set(stores));
   let estimatedResources = 0;
+  const parsedSlugs = new Map<string, ParsedResource>();
 
   const publishEstimatedResources = async () => {
     const parsedResources = Object.values(storeResources).reduce((total, all) => total + all.length, 0);
@@ -174,7 +175,13 @@ export async function parseStores(
         }
       }
 
-      if (resource.source?.type === "disk") {
+      const previous = parsedSlugs.get(resource.slug);
+      if (previous && (previous.virtual || resource.virtual)) {
+        throw new Error(`Conflicting collection slug "${resource.slug}": ${previous.path} and ${resource.path}`);
+      }
+      parsedSlugs.set(resource.slug, resource);
+
+      if (resource.source?.type === "disk" && !resource.virtual) {
         filesToWatch.push(resource.path);
       }
       storeResources[storeId].push(resource);

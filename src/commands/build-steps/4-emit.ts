@@ -88,7 +88,7 @@ export async function emit(
   }
 
   const indexCollection: Record<string, any> = {};
-  const indexCollectionMap: Record<string, any> = {};
+  const collectionItems: Record<string, any[]> = {};
   const storeCollections: Record<string, Array<any>> = {};
   const manifestCollection: any[] = [];
   const snippets: Record<string, any> = {};
@@ -267,6 +267,7 @@ export async function emit(
           type: resource.type,
           label: resource.label,
           summary: resource.summary,
+          metadata: resource.metadata,
           rights: resource.rights,
           requiredStatement: resource.requiredStatement,
           provider: resource.provider,
@@ -385,6 +386,10 @@ export async function emit(
           }
 
           files.saveJson(join(manifestBuildDirectory, fileName), resource);
+        }
+
+        if (resource.type === "Collection") {
+          collectionItems[slug] = resource.items || [];
         }
 
         if (resource.type === "Manifest" && config.output?.includeCanvasIndex) {
@@ -534,6 +539,29 @@ export async function emit(
     }
   }
 
+  // Resolve collection references only after every final snippet is available.
+  const finalById = new Map(allResources.map((resource) => [resource.id, indexCollection[resource.slug]]));
+  for (const resource of allResources.filter((resource) => resource.type === "Collection")) {
+    const members = collectionItems[resource.slug];
+    if (!members) continue;
+    collectionItems[resource.slug] = members.map((item) => ({
+      ...item,
+      ...(finalById.get(item.id) || indexCollection[item["hss:slug"]] || snippets[item.id]),
+    }));
+    const snippet = indexCollection[resource.slug];
+    if (!snippet) continue;
+    snippet["hss:totalItems"] = members.length;
+    snippet.thumbnail ||= collectionItems[resource.slug].find((item) => item.thumbnail?.length)?.thumbnail;
+    if (resource.saveToDisk) {
+      const path = join(buildDir, resource.slug, "collection.json");
+      const collection = await files.loadJson(path);
+      collection.items = collectionItems[resource.slug];
+      collection.thumbnail ||= snippet.thumbnail;
+      collection["hss:totalItems"] = members.length;
+      await files.saveJson(path, collection);
+    }
+  }
+
   const startCanvases = Date.now();
   canvasQueue.start();
   await canvasQueue.onIdle();
@@ -558,6 +586,7 @@ export async function emit(
   return {
     stats,
     indexCollection,
+    collectionItems,
     storeCollections,
     manifestCollection,
     siteMap,

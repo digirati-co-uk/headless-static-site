@@ -198,6 +198,7 @@ export type SlugCollisionPreviewResponse = {
 export type CollectionsConfigResponse = ConfigWorkspaceState & {
   collections: {
     index?: Record<string, any>;
+    featured?: Record<string, any>;
     manifests?: Record<string, any>;
     collections?: Record<string, any>;
     topics?: Record<string, any>;

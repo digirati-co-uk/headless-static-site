@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { Collection, InternationalString } from "@iiif/presentation-3";
 import slug from "slug";
 import { stringify } from "yaml";
+import { createFeaturedCollection } from "../../util/create-featured-collection.ts";
 import { createCollection } from "../../util/create-collection.ts";
 import type { SearchIndexes } from "../../util/extract.ts";
 import { loadJson } from "../../util/load-json.ts";
@@ -14,6 +15,7 @@ export async function indices(
   {
     allResources,
     indexCollection,
+    collectionItems = {},
     manifestCollection,
     storeCollections,
     siteMap,
@@ -25,6 +27,7 @@ export async function indices(
   }: {
     allResources: Array<ActiveResourceJson>;
     indexCollection?: Record<string, any>;
+    collectionItems?: Record<string, any[]>;
     manifestCollection?: any[];
     storeCollections?: Record<string, Array<any>>;
     siteMap?: Record<
@@ -48,13 +51,18 @@ export async function indices(
     return files.writeFile(file, content);
   }
   function writeJson(file: string, content: any) {
+    if (content?.type === "Collection" && content["hss:slug"] && content.items) {
+      collectionItems[content["hss:slug"]] = content.items;
+    }
     return files.saveJson(file, content);
   }
   async function readJson(path: string) {
     return await files.loadJson(path);
   }
 
-  const topLevelCollection: any[] = [];
+  const topLevelCollection: any[] = allResources
+    .filter((resource) => resource.virtual && resource.type === "Collection")
+    .map((resource) => indexCollection?.[resource.slug]).filter(Boolean);
   const resourcesBySlug = new Map(allResources.map((resource) => [resource.slug, resource]));
   const resourceOrdinal = new Map(allResources.map((resource, index) => [resource.slug, index]));
   const bySourceOrder = (a: any, b: any) =>
@@ -123,6 +131,9 @@ export async function indices(
   if (collections && indexCollection) {
     const collectionSlugs = Object.keys(collections).sort();
     for (const originalCollectionSlug of collectionSlugs) {
+      // Disk folder resources already passed through extraction and enrichment.
+      if (allResources.some((resource) => resource.virtual && resource.type === "Collection" &&
+        resource.source.type === "disk" && resource.source.relativePath === originalCollectionSlug)) continue;
       const manifestSlugs = collections[originalCollectionSlug];
       let collectionSlug = originalCollectionSlug; // @todo rewrite
       if (!collectionSlug.startsWith("collections/")) {
@@ -426,6 +437,16 @@ export async function indices(
     await writeJson(join(buildDir, "collections", "stores", "collection.json"), storeCollectionsCollectionJson);
 
     await Promise.all(storeCollectionsJson);
+  }
+
+  if (indexCollection && config.collections?.featured !== undefined) {
+    if (Object.prototype.hasOwnProperty.call(indexCollection, "featured")) {
+      throw new Error('The slug "featured" is reserved when collections.featured is configured');
+    }
+    const featured = createFeaturedCollection(config.collections.featured, configUrl, indexCollection, collectionItems);
+    await files.mkdir(join(buildDir, "featured"));
+    await writeJson(join(buildDir, "featured", "collection.json"), featured);
+    indexCollection.featured = { ...featured, items: undefined };
   }
 
   if (indexCollection) {

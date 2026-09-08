@@ -36,6 +36,7 @@
         "rootCollection": { "$ref": "#/$defs/relativePath" },
         "manifestsCollection": { "$ref": "#/$defs/relativePath" },
         "collectionsCollection": { "$ref": "#/$defs/relativePath" },
+        "featuredCollection": { "$ref": "#/$defs/relativePath" },
         "resources": { "$ref": "#/$defs/relativePath" },
         "resourceDescriptors": { "$ref": "#/$defs/relativePath" },
         "sitemap": { "$ref": "#/$defs/relativePath" },

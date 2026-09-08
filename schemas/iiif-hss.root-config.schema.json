@@ -53,6 +53,18 @@
             }
           }
         },
+        "featured": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "items": {
+              "description": "Ordered collection slugs replacing automatic hss:featured selection.",
+              "type": "array",
+              "items": { "type": "string" },
+              "uniqueItems": true
+            }
+          }
+        },
         "manifests": { "type": "object", "additionalProperties": true },
         "collections": {
           "type": "object",

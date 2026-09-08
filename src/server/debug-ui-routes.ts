@@ -108,11 +108,14 @@ function toAbsoluteUrl(base: string, path: string) {
   return new URL(trimSlashes(path), ensureTrailingSlash(base)).toString();
 }
 
-function findUpwardNodeModulesDebugUiDir(startDir: string) {
+function findUpwardDebugUiDir(startDir: string) {
   let currentDir = resolve(startDir);
   while (true) {
-    const candidate = join(currentDir, "node_modules", "iiif-hss", "build", "dev-ui");
-    if (existsSync(candidate)) {
+    const candidate = [
+      join(currentDir, "node_modules", "iiif-hss", "build", "dev-ui"),
+      join(currentDir, "build", "dev-ui"),
+    ].find((path) => existsSync(path));
+    if (candidate) {
       return candidate;
     }
     const parentDir = dirname(currentDir);
@@ -177,7 +180,7 @@ export function findDebugUiDir(currentWorkingDirectory: string, resolveModule?: 
     return localTraceBuild;
   }
 
-  const packageNodeModulesBuild = findUpwardNodeModulesDebugUiDir(currentWorkingDirectory);
+  const packageNodeModulesBuild = findUpwardDebugUiDir(currentWorkingDirectory);
   if (packageNodeModulesBuild) {
     return packageNodeModulesBuild;
   }
@@ -1177,6 +1180,9 @@ export function registerDebugUiRoutes({
 
     const normalizedCollections = {
       index: normalizeCollectionSurfaceValue(payload.collections.index),
+      ...(payload.collections.featured === undefined ? {} : {
+        featured: normalizeCollectionSurfaceValue(payload.collections.featured),
+      }),
       manifests: normalizeCollectionSurfaceValue(payload.collections.manifests),
       collections: normalizeCollectionSurfaceValue(payload.collections.collections),
       topics: normalizeCollectionSurfaceValue(payload.collections.topics),

@@ -151,6 +151,7 @@ export function validateBuildManifest(value: unknown, file = "meta/build.json"):
     "rootCollection",
     "manifestsCollection",
     "collectionsCollection",
+    "featuredCollection",
     "resources",
     "resourceDescriptors",
     "sitemap",
@@ -159,7 +160,7 @@ export function validateBuildManifest(value: unknown, file = "meta/build.json"):
     "canvasSearch",
   ]) {
     const path = entrypoints[field];
-    if (typeof path === "undefined" && manifest.mode === "partial") {
+    if (typeof path === "undefined" && (manifest.mode === "partial" || field === "featuredCollection")) {
       continue;
     }
     if (!isSafeOutputPath(path)) {

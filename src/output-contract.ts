@@ -12,6 +12,7 @@ export interface BuildEntrypoints {
   rootCollection?: string;
   manifestsCollection?: string;
   collectionsCollection?: string;
+  featuredCollection?: string;
   resources?: string;
   resourceDescriptors?: string;
   sitemap?: string;
