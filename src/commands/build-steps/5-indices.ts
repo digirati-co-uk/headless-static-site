@@ -242,17 +242,20 @@ export async function indices(
         items: [],
       };
 
-      const normalizedTopics = new Map<string, string>();
+      const normalizedTopics = new Map<string, string[]>();
       for (const topicKey of topicKeys) {
-        const topic = topicType[topicKey];
         const topicId = slug(topicKey);
         const existingTopic = normalizedTopics.get(topicId);
-        if (existingTopic && existingTopic !== topicKey) {
+        if (existingTopic && config.output?.topicSlugCollisions !== "merge") {
           throw new Error(
-            `Topics "${existingTopic}" and "${topicKey}" in "${topicTypeKey}" both normalize to "${topicId}"`
+            `Topics "${existingTopic[0]}" and "${topicKey}" in "${topicTypeKey}" both normalize to "${topicId}"`
           );
         }
-        normalizedTopics.set(topicId, topicKey);
+        normalizedTopics.set(topicId, [...(existingTopic || []), topicKey]);
+      }
+      for (const [topicId, labels] of normalizedTopics) {
+        const topicKey = labels[0];
+        const topic = [...new Set(labels.flatMap((label) => topicType[label]))];
         const topicMetaDisk = join(topicsDir, topicTypeId, `${topicId}.yaml`);
         let baseMeta = {};
         if (fs.existsSync(topicMetaDisk)) {
@@ -263,6 +266,7 @@ export async function indices(
           {
             id: topicId,
             label: topicKey,
+            ...(labels.length > 1 ? { aliases: labels.slice(1) } : {}),
             slug: `topics/${topicTypeId}/${topicId}`,
           },
           baseMeta

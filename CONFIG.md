@@ -29,6 +29,7 @@ Typical keys:
 
 - `server`
 - `run`
+- `builtInScripts`
 - `generators`
 - `stores`
 - `slugs`
@@ -39,6 +40,13 @@ Typical keys:
 - `concurrency`
 - `fileTemplates`
 - `output`
+
+Set `builtInScripts: false` to use only project scripts from the scripts directory.
+This removes all built-in extractions (including runtime hints), enrichments, rewrites,
+and linkers, and disables the default run list. Select project scripts explicitly in
+`run` or each store's `run`. Within each build phase, scripts run in `run` order;
+store-only steps follow the global steps. Projects using runtime helpers should provide their own
+`extract-runtime-hints` step to emit `hss:runtime` metadata.
 
 Production output omits source store configuration, editable source paths, and overrides by default. Opt in only when those operational details are safe to publish:
 
@@ -54,6 +62,12 @@ Per-Manifest Canvas indexes are also disabled by default because they can add si
 output:
   includeCanvasIndex: true
 ```
+
+Topic labels that normalize to the same URL fail by default. For legacy datasets,
+`output.topicSlugCollisions: merge` combines their resources into one topic collection,
+deduplicates members, and records alternate labels in the topic metadata's `aliases`.
+The first label in sorted order is displayed; raw indices and search facets retain
+the original labels. Topic type collisions still fail.
 
 YAML example:
 

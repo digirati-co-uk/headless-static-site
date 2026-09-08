@@ -19,6 +19,8 @@ import {
 import { stringToLang } from "../util/string-to-lang.ts";
 
 export interface IIIFJSONStore {
+  run?: string[];
+  skip?: string[];
   type: "iiif-json";
   path: string;
   pattern?: string;

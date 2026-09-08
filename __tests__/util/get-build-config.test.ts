@@ -34,6 +34,60 @@ describe("getBuildConfig search indexNames", () => {
     ).rejects.toThrow(/canonical server URL/);
   });
 
+  test("disables built-in scripts while retaining project and store scripts", async () => {
+    const custom = { id: "extract-runtime-hints", types: ["Manifest"], handler: async () => ({}) };
+    const storeOnly = { ...custom, id: "store-only" };
+    const unused = { ...custom, id: "unused" };
+    (global as any).__hss = { extractions: [custom, storeOnly, unused] };
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          builtInScripts: false,
+          run: [custom.id],
+          stores: { local: { type: "iiif-json", path: "./content", run: [storeOnly.id] } },
+        },
+      }
+    );
+    expect(result.allExtractions).toEqual([custom, storeOnly]);
+    expect(result.extractions).toEqual([custom]);
+    expect(result.allEnrichments).toEqual([]);
+    expect(result.allRewrites).toEqual([]);
+    expect(result.allLinkers).toEqual([]);
+
+    (global as any).__hss = undefined;
+    const empty = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          builtInScripts: false,
+          stores: { local: { type: "iiif-json", path: "./content" } },
+        },
+      }
+    );
+    expect(empty.extractions).toEqual([]);
+    expect(empty.enrichments).toEqual([]);
+    expect(empty.allRewrites).toEqual([]);
+  });
+
+  test("runs scripts in configured order within each phase", async () => {
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          run: ["extract-thumbnail", "extract-slug-source", "extract-label-string"],
+          stores: { local: { type: "iiif-json", path: "./content" } },
+        },
+      }
+    );
+    expect(result.extractions.map((step) => step.id)).toEqual([
+      "extract-thumbnail", "extract-slug-source", "extract-label-string", "extract-runtime-hints",
+    ]);
+  });
+
   test("preserves explicit index names when defaultIndex is inferred", async () => {
     const config = {
       stores: {

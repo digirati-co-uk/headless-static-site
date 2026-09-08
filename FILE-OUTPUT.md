@@ -163,7 +163,7 @@ topics/<topic-type>/<topic>/collection.json
 topics/<topic-type>/<topic>/meta.json
 ```
 
-`topics/collection.json` lists topic types. A topic-type Collection lists its topic values. A leaf topic Collection lists the resource snippets tagged with that value. Topic keys, YAML directories, advertised slugs, IDs, and output directories all use the same normalized path; collisions fail the build. Topic and topic-type Collections include direct `hss:totalItems` counts.
+`topics/collection.json` lists topic types. A topic-type Collection lists its topic values. A leaf topic Collection lists the resource snippets tagged with that value. Topic keys, YAML directories, advertised slugs, IDs, and output directories all use the same normalized path; collisions fail the build by default. With `output.topicSlugCollisions: merge`, colliding topic labels share a collection with deduplicated members; the first sorted label is displayed and other labels appear in its metadata's `aliases` array. Raw indices and facets retain the original labels. Topic type collisions still fail. Topic and topic-type Collections include direct `hss:totalItems` counts.
 
 ## Per-resource application data
 

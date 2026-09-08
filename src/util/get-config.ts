@@ -27,6 +27,7 @@ export interface IIIFRC {
     url: string;
   };
   run?: string[];
+  builtInScripts?: boolean;
   generators?: Record<string, GeneratorConfig>;
   stores: Record<string, IIIFRemoteStore | IIIFJSONStore | IIIFMemoryStore>;
   slugs?: Record<string, SlugConfig>;
@@ -46,6 +47,7 @@ export interface IIIFRC {
   concurrency?: BuildConcurrencyConfig;
   fileTemplates?: Record<string, any>;
   output?: {
+    topicSlugCollisions?: "error" | "merge";
     includeCanvasIndex?: boolean;
     includeDebugMetadata?: boolean;
     includeSourceConfig?: boolean;

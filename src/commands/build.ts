@@ -4,6 +4,7 @@ import { watch as watchFs } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cwd, env } from "node:process";
 import type { Command } from "commander";
+import PQueue from "p-queue";
 import packageJson from "../../package.json";
 import { canvasThumbnail } from "../enrich/canvas-thumbnail.ts";
 import { filesRewrite } from "../enrich/files-rewrite.ts";
@@ -634,24 +635,28 @@ async function buildInternal(
     const resolvedOutputRoot = buildConfig.files.resolve(buildConfig.buildDir);
     outputRoot = resolvedOutputRoot;
     const inventory: OutputFile[] = [];
+    const inventoryQueue = new PQueue({ concurrency: buildConfig.concurrency.write });
     const visit = async (directory: string) => {
       const entries = await buildConfig.files.fs.promises.readdir(directory, { withFileTypes: true });
-      for (const entry of entries) {
+      await Promise.all(entries.map(async (entry) => {
         const filePath = join(directory, entry.name);
         if (entry.isDirectory()) {
           await visit(filePath);
-          continue;
+          return;
         }
-        if (relative(resolvedOutputRoot, filePath) === "meta/build.json") {
-          continue;
+        const outputPath = relative(resolvedOutputRoot, filePath).split("\\").join("/");
+        if (outputPath === "meta/build.json" || outputPath === "meta/resource-descriptors.json") {
+          return;
         }
-        const data = await buildConfig.files.fs.promises.readFile(filePath);
-        inventory.push({
-          path: relative(resolvedOutputRoot, filePath).split("\\").join("/"),
-          bytes: data.byteLength,
-          sha256: createHash("sha256").update(data).digest("hex"),
+        await inventoryQueue.add(async () => {
+          const data = await buildConfig.files.fs.promises.readFile(filePath);
+          inventory.push({
+            path: outputPath,
+            bytes: data.byteLength,
+            sha256: createHash("sha256").update(data).digest("hex"),
+          });
         });
-      }
+      }));
     };
     await visit(resolvedOutputRoot);
     const resourceDescriptors = await createResourceOutputDescriptors(
@@ -660,12 +665,16 @@ async function buildInternal(
       inventory,
       emitted.indexCollection
     );
+    const descriptorJson = JSON.stringify(resourceDescriptors, null, 2);
     await buildConfig.files.writeFile(
       join(buildConfig.buildDir, "meta", "resource-descriptors.json"),
-      JSON.stringify(resourceDescriptors, null, 2)
+      descriptorJson
     );
-    inventory.length = 0;
-    await visit(resolvedOutputRoot);
+    inventory.push({
+      path: "meta/resource-descriptors.json",
+      bytes: Buffer.byteLength(descriptorJson),
+      sha256: createHash("sha256").update(descriptorJson).digest("hex"),
+    });
     inventory.sort((a, b) => a.path.localeCompare(b.path));
     const features = [
       inventory.some(({ path }) => path.startsWith("meta/search/")) && "search",

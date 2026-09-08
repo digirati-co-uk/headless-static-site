@@ -164,10 +164,11 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
 
   const files = builtIns.fileHandler || new FileHandler(fs, cwd);
 
-  const allRewrites = [...builtIns.rewrites];
-  const allExtractions = [...builtIns.extractions];
-  const allEnrichments = [...builtIns.enrichments];
-  const allLinkers = [...builtIns.linkers];
+  const useBuiltInScripts = config.builtInScripts !== false;
+  const allRewrites = useBuiltInScripts ? [...builtIns.rewrites] : [];
+  const allExtractions = useBuiltInScripts ? [...builtIns.extractions] : [];
+  const allEnrichments = useBuiltInScripts ? [...builtIns.enrichments] : [];
+  const allLinkers = useBuiltInScripts ? [...builtIns.linkers] : [];
 
   const cacheDir = options.cacheRoot
     ? getExternalCacheDirectory(options.cacheRoot, Boolean(options.dev))
@@ -226,7 +227,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   log("Available rewrites:", allRewrites.map((e) => e.id).join(", "));
 
   // We manually skip some.
-  const toRun = new Set(config.run || builtIns.defaultRun);
+  const toRun = new Set(config.run || (useBuiltInScripts ? builtIns.defaultRun : []));
   // If topic extraction is configured, ensure the step runs even when omitted from `run`.
   if (config.config?.["extract-topics"]) {
     toRun.add("extract-topics");
@@ -240,10 +241,19 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
       toRun.add(extraction.id);
     }
   }
-  const rewrites = allRewrites.filter((e) => toRun.has(e.id));
-  const extractions = allExtractions.filter((e) => toRun.has(e.id));
-  const enrichments = allEnrichments.filter((e) => toRun.has(e.id));
-  const linkers = allLinkers.filter((e) => toRun.has(e.id));
+  const selectScripts = <T extends { id: string }>(scripts: T[]) =>
+    Array.from(toRun).flatMap((id) => scripts.filter((script) => script.id === id));
+  const rewrites = selectScripts(allRewrites);
+  const extractions = selectScripts(allExtractions);
+  const enrichments = selectScripts(allEnrichments);
+  const linkers = selectScripts(allLinkers);
+  // Store-only steps need lifecycle hooks too; unselected project scripts must not run setup/collect.
+  const activeScriptIds = new Set([
+    ...toRun,
+    ...stores.flatMap((store) => config.stores[store].run || []),
+  ]);
+  const availableScripts = <T extends { id: string }>(scripts: T[]) =>
+    useBuiltInScripts ? scripts : scripts.filter((script) => activeScriptIds.has(script.id));
 
   const manifestRewrites = rewrites.filter((e) => e.types.includes("Manifest"));
   const collectionRewrites = rewrites.filter((e) => e.types.includes("Collection"));
@@ -353,10 +363,10 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     config,
     extractions,
     linkers,
-    allRewrites,
-    allExtractions,
-    allEnrichments,
-    allLinkers,
+    allRewrites: availableScripts(allRewrites),
+    allExtractions: availableScripts(allExtractions),
+    allEnrichments: availableScripts(allEnrichments),
+    allLinkers: availableScripts(allLinkers),
     canvasExtractions,
     manifestExtractions,
     collectionExtractions,

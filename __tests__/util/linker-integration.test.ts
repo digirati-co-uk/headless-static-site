@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,6 +105,16 @@ describe("linker integration", () => {
     expect(meta.resourceId).toBe("https://example.org/iiif/demo/manifest");
     expect(linkedContent).toBe("raw-linked-data");
     expect(linkerCache.resources[slug]).toBeDefined();
+    const inventory = JSON.parse(await readFile(join(testDir, ".iiif/build/meta/build.json"), "utf8")).files;
+    expect(inventory.map((file: any) => file.path)).toEqual(
+      inventory.map((file: any) => file.path).sort((a: string, b: string) => a.localeCompare(b))
+    );
+    expect(inventory.filter((file: any) => file.path === "meta/resource-descriptors.json")).toHaveLength(1);
+    for (const file of inventory) {
+      const bytes = await readFile(join(testDir, ".iiif/build", file.path));
+      expect(file.bytes).toBe(bytes.byteLength);
+      expect(file.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    }
   });
 
   test("linker prepare can map raw data to manifest before per-resource handler", async () => {

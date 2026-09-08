@@ -10,6 +10,8 @@ import { type ParsedResource, type ProtoResourceDirectory, type Store, createPro
 import { discoverCollectionChildren } from "./iiif-remote-discovery.ts";
 
 export interface IIIFRemoteStore {
+  run?: string[];
+  skip?: string[];
   type: "iiif-remote";
   url?: string;
   urls?: string[];

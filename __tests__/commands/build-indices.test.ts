@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { FileHandler } from "../../src/util/file-handler.ts";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -131,6 +133,37 @@ describe("build indices", () => {
         } as any
       )
     ).rejects.toThrow(/both normalize to "topic-type"/);
+  });
+
+  test("merges topic URL collisions only when opted in, preserving aliases and members", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-topic-merge-"));
+    const buildDir = join(testDir, "build");
+    const cacheDir = join(testDir, "cache");
+    await writeJson(join(cacheDir, "first", "indices.json"), { date: ["1912", "1912?"] });
+    await writeJson(join(cacheDir, "second", "indices.json"), { date: ["1912?"] });
+    const data = {
+      allResources: ["first", "second"].map((slug) => ({ slug, source: { type: "disk" } })) as any,
+      indexCollection: Object.fromEntries(["first", "second"].map((slug) => [slug, {
+        id: `https://example.org/${slug}`, type: "Manifest", "hss:slug": slug,
+      }])),
+      allIndices: {},
+    };
+    const config = {
+      options: {}, configUrl: "https://example.org/iiif", buildDir, cacheDir,
+      topicsDir: join(testDir, "topics"), collectionRewrites: [],
+      files: new FileHandler(fs, testDir), config: { stores: {}, collections: {}, output: {} },
+    } as any;
+    await expect(indices(data, config)).rejects.toThrow(/both normalize to "1912"/);
+    config.config.output.topicSlugCollisions = "merge";
+    await indices(data, config);
+    await config.files.saveAll();
+    const collection = JSON.parse(await readFile(join(buildDir, "topics/date/1912/collection.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(buildDir, "topics/date/1912/meta.json"), "utf8"));
+    expect(collection.items.map((item: any) => item["hss:slug"])).toEqual(["first", "second"]);
+    expect(meta.label).toBe("1912");
+    expect(meta.aliases).toEqual(["1912?"]);
+    const rawIndices = JSON.parse(await readFile(join(buildDir, "meta/indices.json"), "utf8"));
+    expect(rawIndices.date["1912?"]).toEqual(["first", "second"]);
   });
 
   test("uses normalized topic paths for spaces, punctuation, and Unicode", async () => {
