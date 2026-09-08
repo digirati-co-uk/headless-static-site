@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { IFS } from "unionfs";
 import type { BuildProgressCallbacks } from "../../util/build-progress.ts";
 import { makeGetSlugHelper } from "../../util/make-slug-helper.ts";
@@ -151,6 +151,8 @@ export async function parseStores(
       },
     });
 
+    const folderAliases = new Map<string, string>();
+
     // Loop through the resources.
     for (const resource of resources) {
       // Rewrite the slug.
@@ -177,6 +179,20 @@ export async function parseStores(
 
       const previous = parsedSlugs.get(resource.slug);
       if (previous && (previous.virtual || resource.virtual)) {
+        const folder = resource.source.type === "disk" ? resource.source.filePath : null;
+        const isAutomaticFolder = resource.virtual && resource.source.type === "disk" &&
+          folder === join(resource.source.path, resource.source.relativePath || "");
+        if (isAutomaticFolder && previous.type === "Collection" && !previous.virtual &&
+          previous.storeId === resource.storeId && previous.source.type === "disk" &&
+          (dirname(previous.source.filePath) === folder || previous.source.filePath.replace(/\.json$/i, "") === folder)) {
+          // An authored collection owns this folder; retain its membership and metadata.
+          const authored = await files.loadJson(previous.path, true);
+          const generated = await files.loadJson(resource.path, true);
+          const id = authored.id || authored["@id"];
+          if (!id) throw new Error(`Missing IIIF id in ${previous.path}`);
+          folderAliases.set(generated.id, id);
+          continue;
+        }
         throw new Error(`Conflicting collection slug "${resource.slug}": ${previous.path} and ${resource.path}`);
       }
       parsedSlugs.set(resource.slug, resource);
@@ -185,6 +201,21 @@ export async function parseStores(
         filesToWatch.push(resource.path);
       }
       storeResources[storeId].push(resource);
+    }
+    if (folderAliases.size) {
+      for (const resource of storeResources[storeId]) {
+        if (!resource.virtual) continue;
+        const collection = await files.loadJson(resource.path, true);
+        const seen = new Set<string>();
+        collection.items = (collection.items || []).filter((item: any) => {
+          item.id = folderAliases.get(item.id) || item.id;
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+        // Virtual collections are loaded fresh from disk in the next build phase.
+        await files.fs.promises.writeFile(files.resolve(resource.path), JSON.stringify(collection));
+      }
     }
     const totalDiscovered = Object.values(storeResources).reduce((total, all) => total + all.length, 0);
     await progress?.onResourcesDiscovered?.({

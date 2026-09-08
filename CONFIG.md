@@ -244,8 +244,11 @@ folder grouping is disabled.
 Folder collections include direct resources and immediate child folder collections.
 This adds parent-child navigation and can increase direct item counts compared
 with the earlier flat folder grouping. Sidecars and source resource changes are
-picked up by normal builds and watch mode. Conflicting generated slugs fail instead
-of silently choosing one folder.
+picked up by normal builds and watch mode. If an automatic folder shares its final
+slug with an authored collection inside that folder (or an adjacent JSON file with
+the same name), the authored collection supplies the membership and metadata.
+Generated parents link to that collection without appending unlisted folder items.
+Explicit sidecar conflicts and unrelated generated slug collisions still fail.
 
 See [the Vite featured homepage example](examples/vite-featured/README.md) for a
 working page, authoring examples and one runnable build verification script.

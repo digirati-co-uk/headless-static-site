@@ -53,9 +53,8 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
     const relativePath = relative(store.path, folder).replaceAll("\\", "/");
     const slug =
       sidecar && (store.base || store.destination) ? rewritePath(store)(sidecar) : `collections/${relativePath}`;
-    if (sourceSlugs.has(slug)) {
-      if (sidecar) throw new Error(`Both a source collection and a sidecar define ${slug}`);
-      continue;
+    if (sourceSlugs.has(slug) && sidecar) {
+      throw new Error(`Both a source collection and a sidecar define ${slug}`);
     }
     const metadata = sidecar ? await api.files.readYaml(sidecar) : {};
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
@@ -75,7 +74,7 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
       metadata: fields?.map((field: any) => ({ label: stringToLang(field.label), value: stringToLang(field.value) })),
       items: [],
     };
-    const path = join(api.build.virtualCacheDir, api.storeId, `${relativePath || "_root"}.json`);
+    const path = api.files.resolve(join(api.build.virtualCacheDir, api.storeId, `${relativePath || "_root"}.json`));
     generated.push({
       folder,
       json,
