@@ -2,7 +2,6 @@ node_modules
 .iiif
 .idea
 content
-examples
 delft
 build/hss.js
 build/client.d.ts

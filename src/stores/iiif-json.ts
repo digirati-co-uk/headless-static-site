@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
-import { cwd } from "node:process";
 import { Vault } from "@iiif/helpers";
 import type { Manifest } from "@iiif/presentation-3";
 import { copy, pathExists } from "fs-extra/esm";
@@ -17,9 +16,11 @@ import {
   type StoreApi,
   createProtoDirectory,
 } from "../util/store";
-import { stringToLang } from "../util/string-to-lang.ts";
+import { materializeFolderCollections } from "../util/materialize-folder-collections.ts";
 
 export interface IIIFJSONStore {
+  run?: string[];
+  skip?: string[];
   type: "iiif-json";
   path: string;
   pattern?: string;
@@ -27,16 +28,18 @@ export interface IIIFJSONStore {
   subFiles?: boolean;
   base?: string;
   destination?: string;
+  config?: any;
+  /** Maps an absolute or store-relative source file path to an opaque public caller key. */
+  inputKeys?: Record<string, string>;
 }
 
 export const IIIFJSONStore: Store<IIIFJSONStore> = {
   async parse(store: IIIFJSONStore, api: StoreApi): Promise<ParsedResource[]> {
-    const allFiles = readFilteredFiles(store);
+    const allFiles = readFilteredFiles(store).filter((file) => !/_collection\.ya?ml$/.test(file));
     const fileNameToPath = rewritePath(store);
     const newAllFiles: Array<[string, string]> = [];
     const subFileMap: Record<string, string[]> = {};
-    const virtualCollectionsPath = join(api.build.virtualCacheDir, api.storeId);
-    const fs = api.files;
+
 
     if (store.subFiles) {
       // Check for sub-files.
@@ -46,7 +49,8 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
       //
       // All files that are in a folder with the same name as the file, are considered sub-files if this
       // option is enabled. This allows for relative links to resources such as Annotation Lists to work.
-      const allFilesWithoutExtension = allFiles.map(fileNameToPath);
+      const allFilteredFiles = allFiles;
+      const allFilesWithoutExtension = allFilteredFiles.map(fileNameToPath);
       for (let i = 0; i < allFilesWithoutExtension.length; i++) {
         const file = allFilesWithoutExtension[i];
         let dupe = false;
@@ -57,12 +61,12 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
             if (!subFileMap[toCompare]) {
               subFileMap[toCompare] = [];
             }
-            subFileMap[toCompare].push(allFiles[i]);
+            subFileMap[toCompare].push(allFilteredFiles[i]);
             break;
           }
         }
         if (!dupe) {
-          newAllFiles.push([allFiles[i], allFilesWithoutExtension[i]]);
+          newAllFiles.push([allFilteredFiles[i], allFilesWithoutExtension[i]]);
         }
       }
     } else {
@@ -90,77 +94,6 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
         }
       }
 
-      // Virtual resource.
-      if (
-        file.endsWith("/_collection.yml") ||
-        file.endsWith("/_collection.yaml")
-      ) {
-        const manifestsToInclude = newAllFiles.filter(
-          ([manifestFile, full]) => {
-            if (!full.startsWith(fileWithoutExtension)) return false;
-            if (manifestFile === file) return false;
-            // We only want ones one level down.
-            const relativeDir = relative(dirname(file), manifestFile);
-            return !relativeDir.includes("/");
-          },
-        );
-
-        const loadedMetadata = await fs.readYaml(file);
-        const {
-          label,
-          summary,
-          metadata,
-          type: _1,
-          items: _2,
-          ...rest
-        } = loadedMetadata;
-        const virtualCollection = {
-          id: `virtual://${fileWithoutExtension}`,
-          type: "Collection",
-          label: label
-            ? stringToLang(label)
-            : fileWithoutExtension.split("/").pop() || fileWithoutExtension,
-          summary: summary ? stringToLang(summary) : undefined,
-          metadata: metadata
-            ? metadata.map((item: any) => ({
-                label: stringToLang(item.label),
-                value: stringToLang(item.value),
-              }))
-            : undefined,
-          // @todo metadata.
-          items: manifestsToInclude.map(
-            ([manifestFile, fileWithoutExtension]) => {
-              const relativePath = relative(dirname(file), manifestFile);
-              return {
-                id: `./${relativePath}`,
-                type: "Manifest",
-              };
-            },
-          ),
-          ...rest,
-        };
-
-        const filePath = join(
-          virtualCollectionsPath,
-          `${fileWithoutExtension}.json`,
-        );
-        await mkdir(dirname(filePath), { recursive: true });
-        await writeFile(filePath, JSON.stringify(virtualCollection, null, 2));
-        await fs.loadJson(filePath);
-
-        manifests.push({
-          path: filePath,
-          slug: fileWithoutExtension,
-          type: "Collection",
-          storeId: api.storeId,
-          subFiles: subFileMap[fileWithoutExtension],
-          source: source,
-          saveToDisk: true,
-          virtual: true,
-        });
-        continue;
-      }
-
       manifests.push({
         path: file,
         slug: fileWithoutExtension,
@@ -169,17 +102,14 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
         subFiles: subFileMap[fileWithoutExtension],
         source: source,
         saveToDisk: true,
+        inputKey: store.inputKeys?.[file] || store.inputKeys?.[relative(store.path, file)],
       });
     }
 
-    return manifests;
+    return materializeFolderCollections(store, api, manifests);
   },
 
-  async invalidate(
-    store: IIIFJSONStore,
-    resource: ParsedResource,
-    caches: ProtoResourceDirectory["caches.json"],
-  ) {
+  async invalidate(store: IIIFJSONStore, resource: ParsedResource, caches: ProtoResourceDirectory["caches.json"]) {
     if (!caches.load) {
       return true;
     }
@@ -188,12 +118,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
     return key !== caches.load;
   },
 
-  async load(
-    store: IIIFJSONStore,
-    resource,
-    directory,
-    api,
-  ): Promise<ProtoResourceDirectory> {
+  async load(store: IIIFJSONStore, resource, directory, api): Promise<ProtoResourceDirectory | null> {
     const files = api.files;
     const cacheKey = await getKey(store, resource);
     const json = await files.loadJson(resource.path, true);
@@ -204,88 +129,81 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
       throw new Error(`No id found in json${resource.path}`);
     }
 
-    if (store.subFiles) {
+    if (store.subFiles && !resource.virtual) {
       const subFilesFolderPath = resource.path.replace(".json", "");
       const subFilesFolder = existsSync(subFilesFolderPath);
       if (subFilesFolder) {
-        if (
-          subFilesFolder &&
-          (await pathExists(subFilesFolderPath)) &&
-          !isEmpty(subFilesFolderPath)
-        ) {
-          const destination = join(cwd(), directory, "files");
-          await copy(subFilesFolderPath, destination, { overwrite: true });
-        }
-      }
-    }
-
-    // Mapping real Manifests to virtual IDs.
-    if (resource.virtual) {
-      if (resource.source.type !== "disk") {
-        throw new Error("Virtual resources must be loaded from disk");
-      }
-      const newItems = [];
-      for (const item of json.items) {
-        try {
-          const { id, type, ...rest } = item;
-
-          const loadedManifest = await files.loadJson(
-            join(
-              cwd(),
-              resource.source.path,
-              resource.source.relativePath || "",
-              item.id,
-            ),
-          );
-          const newId = loadedManifest.id || loadedManifest["@id"];
-          const newType = loadedManifest.type || loadedManifest["@type"];
-          newItems.push({
-            id: newId,
-            type: newType.includes("Collection") ? "Collection" : "Manifest",
-            ...rest,
+        if (subFilesFolder && (await pathExists(subFilesFolderPath)) && !isEmpty(subFilesFolderPath)) {
+          const destination = files.resolve(join(directory, "files"));
+          await copy(subFilesFolderPath, destination, {
+            overwrite: true,
+            filter: (file) => {
+              return file !== "canvases";
+            },
           });
-        } catch (err) {
-          console.error(
-            "Warning: error loading virtual collection item",
-            item.id,
-            err,
-          );
+          const canvasesOriginDir = join(subFilesFolderPath, "canvases");
+          if (await pathExists(canvasesOriginDir)) {
+            const canvasesDir = files.resolve(join(directory, "canvases"));
+            await copy(canvasesOriginDir, canvasesDir, { overwrite: true });
+            // /canvases/0/some-file.json -> /canvases/0/files/some-file.json
+            const canvasIndexes = await readdir(canvasesDir);
+            for (const canvasIndex of canvasIndexes) {
+              const canvasPath = join(canvasesDir, canvasIndex);
+              // Move files individually.
+              const filesDir = join(canvasPath, "files");
+              const files = await readdir(canvasPath);
+              await mkdir(filesDir, { recursive: true });
+              for (const file of files) {
+                const filePath = join(canvasPath, file);
+                // Check if directory or files
+                const isFile = (await stat(filePath)).isFile();
+                if (isFile) {
+                  const destination = join(filesDir, file);
+                  await copy(filePath, destination, { overwrite: true });
+                }
+              }
+            }
+          }
         }
       }
-      json.items = newItems;
     }
 
-    const res = await vault.load<Manifest>(id, json);
-    if (!res) {
-      throw new Error(`Failed to load resource: ${id}`);
-    }
 
-    return createProtoDirectory(
-      {
-        id,
-        type: resource.type,
-        path: resource.path,
-        slug: resource.slug,
-        storeId: resource.storeId,
-        subResources: (res.items || []).length,
-        saveToDisk: true,
-        source: resource.source,
-        virtual: resource.virtual,
-      },
-      vault,
-      { load: cacheKey },
-    );
+    try {
+      const res = await vault.load<Manifest>(id, json);
+      if (!res) {
+        throw new Error(`Failed to load resource: ${id}`);
+      }
+
+      return createProtoDirectory(
+        {
+          id,
+          type: resource.type,
+          path: resource.path,
+          slug: resource.slug,
+          storeId: resource.storeId,
+          subResources: (res.items || []).length,
+          saveToDisk: true,
+          inputKey: resource.inputKey,
+          source: resource.source,
+          virtual: resource.virtual,
+        },
+        vault,
+        { load: cacheKey }
+      );
+    } catch (err) {
+      console.log("\n\n");
+      console.error("Warning: error loading resource\n\n", id, "\n", resource.path, "\n", err, "\n");
+      return null;
+    }
   },
 };
 
-export async function getKey(
-  store: { subFiles?: boolean },
-  resource: ParsedResource,
-) {
+export async function getKey(store: { subFiles?: boolean }, resource: ParsedResource) {
   const file = await stat(resource.path);
   const key = `${file.mtime}-${file.ctime}-${file.size}`;
 
-  if (store.subFiles) {
+  if (store.subFiles && !resource.virtual) {
     const subFilesFolderPath = resource.path.replace(".json", "");
     const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {

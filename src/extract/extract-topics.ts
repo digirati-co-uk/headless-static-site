@@ -24,14 +24,15 @@ export const extractTopics: Extraction<ExtractTopicsConfig> = {
     const latestResource = resource.vault?.get(api.resource);
     const metadata = latestResource?.metadata || [];
     const metadataLabels: string[] = await Promise.all(
-      metadata.map((item: any) => getSingleLabel(item.label, { language, translate }))
+      metadata.map((item: any) => getSingleLabel(item.label, { language, translate, fetch: api.build?.fetch }))
     );
 
     const indices: Record<string, string[]> = {};
 
     for (const topic of topicsToParse) {
-      const topicTypes = config.topicTypes[topic];
-      for (const topicType of topicTypes) {
+      const configuredLabels = config.topicTypes[topic];
+      const topicLabels = Array.isArray(configuredLabels) ? configuredLabels : [configuredLabels];
+      for (const topicType of topicLabels) {
         const index = metadataLabels.indexOf(topicType);
         if (index === -1) {
           continue;
@@ -50,6 +51,11 @@ export const extractTopics: Extraction<ExtractTopicsConfig> = {
             indices[topic].push(...value);
           }
         }
+      }
+      if (indices[topic]) {
+        indices[topic] = [
+          ...new Set(indices[topic].map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean)),
+        ];
       }
     }
 

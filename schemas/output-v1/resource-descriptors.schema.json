@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/resource-descriptors.schema.json",
+  "title": "IIIF HSS per-resource output descriptors",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "required": ["hss:slug", "id", "type", "origin", "provenance", "saved", "files"],
+    "additionalProperties": false,
+    "properties": {
+      "hss:slug": { "type": "string", "minLength": 1 },
+      "id": { "type": "string", "minLength": 1 },
+      "type": { "enum": ["Manifest", "Collection"] },
+      "inputKey": { "type": "string" },
+      "origin": { "enum": ["source", "generated"] },
+      "provenance": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": { "type": { "const": "local" } }
+          },
+          {
+            "type": "object",
+            "required": ["type", "url"],
+            "additionalProperties": false,
+            "properties": { "type": { "const": "remote" }, "url": { "type": "string", "format": "uri" } }
+          },
+          {
+            "type": "object",
+            "required": ["type", "upstream"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "const": "override" },
+              "upstream": { "type": "string", "format": "uri" }
+            }
+          }
+        ]
+      },
+      "saved": { "type": "boolean" },
+      "parents": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+      "children": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+      "files": {
+        "type": "object",
+        "required": ["searchData", "extracted"],
+        "additionalProperties": false,
+        "properties": {
+          "iiif": { "$ref": "#/$defs/relativePath" },
+          "meta": { "$ref": "#/$defs/relativePath" },
+          "indices": { "$ref": "#/$defs/relativePath" },
+          "canvasIndex": { "$ref": "#/$defs/relativePath" },
+          "searchRecord": { "$ref": "#/$defs/relativePath" },
+          "searchData": { "type": "array", "items": { "$ref": "#/$defs/relativePath" }, "uniqueItems": true },
+          "extracted": { "type": "array", "items": { "$ref": "#/$defs/relativePath" }, "uniqueItems": true }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    }
+  }
+}

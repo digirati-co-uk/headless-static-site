@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/build.schema.json",
+  "title": "IIIF HSS build manifest",
+  "type": "object",
+  "required": [
+    "formatVersion",
+    "contractVersion",
+    "hssVersion",
+    "mode",
+    "canonicalBaseUrl",
+    "completedAt",
+    "stores",
+    "features",
+    "search",
+    "analysis",
+    "entrypoints",
+    "resources",
+    "files"
+  ],
+  "properties": {
+    "formatVersion": { "const": 1 },
+    "contractVersion": { "const": "1.2" },
+    "hssVersion": { "type": "string" },
+    "mode": { "enum": ["full", "partial"] },
+    "canonicalBaseUrl": { "type": "string", "format": "uri" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "stores": { "type": "array", "items": { "type": "string" } },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "search": { "type": "array", "items": { "$ref": "#/$defs/relativePath" } },
+    "analysis": { "type": "array", "items": { "$ref": "#/$defs/relativePath" } },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rootCollection": { "$ref": "#/$defs/relativePath" },
+        "manifestsCollection": { "$ref": "#/$defs/relativePath" },
+        "collectionsCollection": { "$ref": "#/$defs/relativePath" },
+        "featuredCollection": { "$ref": "#/$defs/relativePath" },
+        "resources": { "$ref": "#/$defs/relativePath" },
+        "resourceDescriptors": { "$ref": "#/$defs/relativePath" },
+        "sitemap": { "$ref": "#/$defs/relativePath" },
+        "indices": { "$ref": "#/$defs/relativePath" },
+        "facets": { "$ref": "#/$defs/relativePath" },
+        "canvasSearch": { "$ref": "#/$defs/relativePath" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["manifests", "collections", "canvases"],
+      "additionalProperties": false,
+      "properties": {
+        "manifests": { "type": "integer", "minimum": 0 },
+        "collections": { "type": "integer", "minimum": 0 },
+        "canvases": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "$ref": "#/$defs/relativePath" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "full" } } },
+      "then": {
+        "properties": {
+          "entrypoints": {
+            "required": [
+              "rootCollection",
+              "manifestsCollection",
+              "collectionsCollection",
+              "resources",
+              "resourceDescriptors",
+              "sitemap",
+              "indices",
+              "facets",
+              "canvasSearch"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

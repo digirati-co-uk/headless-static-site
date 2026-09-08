@@ -1,0 +1,10 @@
+label:
+  en:
+    - Images & imagination
+summary:
+  en:
+    - Discover a selection of illustrated works from our teaching collection.
+behavior:
+  - hss:featured
+  - https://example.org/behaviors/theme-orange
+  - https://example.org/behaviors/carousel

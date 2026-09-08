@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/heritage/teaching",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Learning by looking \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Images made to share knowledge across generations."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/astronomy.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/heritage/teaching/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

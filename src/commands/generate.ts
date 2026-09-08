@@ -11,13 +11,17 @@ import { type LazyValue, lazyValue } from "../util/lazy-value.ts";
 import { loadJson } from "../util/load-json.ts";
 import { loadScripts } from "../util/load-scripts.ts";
 import { makeProgressBar } from "../util/make-progress-bar.ts";
+import { resolveNetworkConfig } from "../util/network.ts";
 import { createStoreRequestCache } from "../util/store-request-cache.ts";
 
 interface GenerateOptions {
+  cwd?: string;
   scripts?: string;
   debug?: boolean;
   cache?: boolean;
+  networkCache?: boolean;
   ui?: boolean;
+  fetch?: typeof globalThis.fetch;
 }
 
 const defaultGenerators: IIIFGenerator[] = [
@@ -28,12 +32,14 @@ const defaultGenerators: IIIFGenerator[] = [
 export const defaultCacheDir = "./.iiif/_generator";
 
 export async function generateCommand(options: GenerateOptions, command?: Command) {
-  const config = await getConfig();
+  const workingDirectory = options.cwd || cwd();
+  const config = await getConfig(undefined, workingDirectory);
   const { debug, ui } = options;
+  const network = resolveNetworkConfig(config.network);
 
-  await loadScripts(options);
+  await loadScripts({ ...options, cwd: workingDirectory });
   const globals = getNodeGlobals();
-  const generatorDirectory = join(cwd(), defaultCacheDir);
+  const generatorDirectory = join(workingDirectory, defaultCacheDir);
   const allGenerators = [...defaultGenerators, ...globals.generators];
 
   await fs.promises.mkdir(generatorDirectory, { recursive: true });
@@ -62,11 +68,20 @@ export async function generateCommand(options: GenerateOptions, command?: Comman
       }
 
       const buildDirectory = generator.output
-        ? join(cwd(), generator.output)
+        ? join(workingDirectory, generator.output)
         : join(generatorDirectory, generatorName, "build");
       const cacheDirectory = join(generatorDirectory, generatorName);
       const resourcesDirectory = join(cacheDirectory, "resources");
-      const requestCache = createStoreRequestCache("requests", cacheDirectory, !options.cache);
+      const useNetworkCache = options.networkCache ?? true;
+      const requestCache = createStoreRequestCache(
+        "requests",
+        cacheDirectory,
+        !useNetworkCache,
+        undefined,
+        network,
+        undefined,
+        options.fetch
+      );
 
       await fs.promises.mkdir(cacheDirectory, { recursive: true });
       await fs.promises.mkdir(buildDirectory, { recursive: true });

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/meta.schema.json",
+  "title": "IIIF HSS extensible resource metadata",
+  "type": "object",
+  "additionalProperties": true
+}

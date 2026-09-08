@@ -1,0 +1,512 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { defaultBuiltIns } from "../../src/commands/build";
+import { getBuildConfig } from "../../src/util/get-build-config";
+
+describe("getBuildConfig search indexNames", () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    (global as any).__hss = undefined;
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-build-config-"));
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await rm(testDir, { recursive: true, force: true });
+    (global as any).__hss = undefined;
+  });
+
+  test("requires a canonical URL before emitting", async () => {
+    await expect(
+      getBuildConfig(
+        { cwd: testDir, scripts: "./no-scripts-here", emit: true },
+        {
+          ...defaultBuiltIns,
+          env: {},
+          customConfig: {
+            stores: { local: { type: "iiif-json", path: "./content" } },
+          } as any,
+        }
+      )
+    ).rejects.toThrow(/canonical server URL/);
+  });
+
+  test("disables built-in scripts while retaining project and store scripts", async () => {
+    const custom = { id: "extract-runtime-hints", types: ["Manifest"], handler: async () => ({}) };
+    const storeOnly = { ...custom, id: "store-only" };
+    const unused = { ...custom, id: "unused" };
+    (global as any).__hss = { extractions: [custom, storeOnly, unused] };
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          builtInScripts: false,
+          run: [custom.id],
+          stores: { local: { type: "iiif-json", path: "./content", run: [storeOnly.id] } },
+        },
+      }
+    );
+    expect(result.allExtractions).toEqual([custom, storeOnly]);
+    expect(result.extractions).toEqual([custom]);
+    expect(result.allEnrichments).toEqual([]);
+    expect(result.allRewrites).toEqual([]);
+    expect(result.allLinkers).toEqual([]);
+
+    (global as any).__hss = undefined;
+    const empty = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          builtInScripts: false,
+          stores: { local: { type: "iiif-json", path: "./content" } },
+        },
+      }
+    );
+    expect(empty.extractions).toEqual([]);
+    expect(empty.enrichments).toEqual([]);
+    expect(empty.allRewrites).toEqual([]);
+  });
+
+  test("runs scripts in configured order within each phase", async () => {
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here" },
+      {
+        ...defaultBuiltIns,
+        customConfig: {
+          run: ["extract-thumbnail", "extract-slug-source", "extract-label-string"],
+          stores: { local: { type: "iiif-json", path: "./content" } },
+        },
+      }
+    );
+    expect(result.extractions.map((step) => step.id)).toEqual([
+      "extract-thumbnail", "extract-slug-source", "extract-label-string", "extract-runtime-hints",
+    ]);
+  });
+
+  test("preserves explicit index names when defaultIndex is inferred", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      search: {
+        indexNames: ["manifest", "canvas"],
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.search.indexNames).toEqual(["manifest", "canvas"]);
+  });
+
+  test("preserves explicit index names when manifest is not present", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      search: {
+        indexNames: ["canvas"],
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.search.indexNames).toEqual(["canvas"]);
+  });
+
+  test("emits search record by default", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.search.emitRecord).toBe(true);
+  });
+
+  test("respects explicit search emitRecord = false", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      search: {
+        emitRecord: false,
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.search.emitRecord).toBe(false);
+  });
+
+  test("shares request cache directory between build and dev", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const buildConfig = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    const devConfig = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+        dev: true,
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(buildConfig.requestCacheDir).toBe(".iiif/cache/_requests");
+    expect(devConfig.requestCacheDir).toBe(".iiif/cache/_requests");
+    expect(devConfig.cacheDir).toBe(".iiif/dev/cache");
+  });
+
+  test("owns a versioned layout beneath an external cache root", async () => {
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here", cacheRoot: "/shared/hss-cache" },
+      {
+        ...defaultBuiltIns,
+        customConfig: { stores: { local: { type: "iiif-json", path: "./content" } } } as any,
+      }
+    );
+
+    expect(result.cacheDir).toMatch(/^\/shared\/hss-cache\/cache-v1\/output-v1\/hss-[^/]+\/build$/);
+    expect(result.requestCacheDir).toBe(join(result.cacheDir, "_requests"));
+  });
+
+  test("uses the injected fetch for image service requests", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+    const request = vi.fn(async () => new Response(JSON.stringify({ type: "ImageService3" })));
+    const globalFetch = vi.fn(async () => {
+      throw new Error("global fetch must not be called");
+    });
+    vi.stubGlobal("fetch", globalFetch as any);
+
+    const result = await getBuildConfig(
+      { cwd: testDir, scripts: "./no-scripts-here", networkCache: false },
+      { ...defaultBuiltIns, customConfig: config as any, fetch: request as any }
+    );
+
+    await result.imageServiceLoader.fetchService("https://example.org/iiif/info.json");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
+  test("derives bounded queue concurrency defaults", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.concurrency.link).toBeGreaterThanOrEqual(1);
+    expect(result.concurrency.extract).toBeGreaterThanOrEqual(1);
+    expect(result.concurrency.enrich).toBeGreaterThanOrEqual(1);
+    expect(result.concurrency.emit).toBeGreaterThanOrEqual(1);
+    expect(result.concurrency.emitCanvas).toBeGreaterThanOrEqual(1);
+    expect(result.concurrency.write).toBeGreaterThanOrEqual(1);
+  });
+
+  test("applies explicit queue concurrency overrides", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      concurrency: {
+        cpu: 2,
+        io: 5,
+        extract: 3,
+        enrichCanvas: 4,
+        write: 7,
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.concurrency.link).toBe(2);
+    expect(result.concurrency.extract).toBe(3);
+    expect(result.concurrency.enrich).toBe(2);
+    expect(result.concurrency.enrichCanvas).toBe(4);
+    expect(result.concurrency.emit).toBe(5);
+    expect(result.concurrency.emitCanvas).toBe(5);
+    expect(result.concurrency.write).toBe(7);
+  });
+
+  test("includes collection thumbnail extraction in default run", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.extractions.some((step) => step.id === "extract-collection-thumbnail")).toBe(true);
+  });
+
+  test("always includes runtime hints extraction even when run list is restricted", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      run: ["extract-label-string"],
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.extractions.some((step) => step.id === "extract-runtime-hints")).toBe(true);
+  });
+
+  test("auto-enables extract-topics when config exists", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      config: {
+        "extract-topics": {
+          topicTypes: {
+            date: ["Year"],
+          },
+        },
+      },
+      run: ["metadata-analysis"],
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.extractions.some((step) => step.id === "extract-topics")).toBe(true);
+  });
+
+  test("auto-enables enrich-topic-thumbnails when config exists", async () => {
+    const config = {
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+      config: {
+        "enrich-topic-thumbnails": {
+          selectionStrategy: "first",
+        },
+      },
+      run: ["metadata-analysis"],
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+      },
+      {
+        ...defaultBuiltIns,
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.enrichments.some((step) => step.id === "enrich-topic-thumbnails")).toBe(true);
+  });
+
+  test("uses configured server URL for dev configUrl when DEV_SERVER env is absent", async () => {
+    const config = {
+      server: {
+        url: "http://localhost:4321/iiif",
+      },
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+        dev: true,
+      },
+      {
+        ...defaultBuiltIns,
+        env: {
+          DEV_SERVER: undefined,
+          SERVER_URL: undefined,
+        },
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.configUrl).toBe("http://localhost:4321/iiif");
+  });
+
+  test("prefers configured server URL over DEV_SERVER env for dev configUrl", async () => {
+    const config = {
+      server: {
+        url: "http://localhost:4321/iiif",
+      },
+      stores: {
+        local: {
+          type: "iiif-json" as const,
+          path: "./content",
+        },
+      },
+    };
+
+    const result = await getBuildConfig(
+      {
+        cwd: testDir,
+        scripts: "./no-scripts-here",
+        dev: true,
+      },
+      {
+        ...defaultBuiltIns,
+        env: {
+          DEV_SERVER: "http://localhost:9876/iiif",
+          SERVER_URL: undefined,
+        },
+        customConfig: config as any,
+      }
+    );
+
+    expect(result.configUrl).toBe("http://localhost:4321/iiif");
+  });
+});

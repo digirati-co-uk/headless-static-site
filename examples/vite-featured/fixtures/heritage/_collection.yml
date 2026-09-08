@@ -1,0 +1,9 @@
+label:
+  en:
+    - Academic heritage
+summary:
+  en:
+    - Discover a selection of illustrated works from our teaching collection.
+behavior:
+  - https://example.org/behaviors/theme-yellow
+  - https://example.org/behaviors/carousel

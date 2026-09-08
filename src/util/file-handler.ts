@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
 import type { IFS } from "unionfs";
@@ -15,7 +15,9 @@ export class FileHandler {
   openBinaryChanged: Map<string, boolean> = new Map();
   directories: Set<string> = new Set();
   root: string;
-  copyTargets: Map<string, { from: string; options: any }> = new Map();
+  copyTargets: Array<{ from: string; to: string; options: any }> = [];
+  writtenFiles: Set<string> = new Set();
+  producers: Map<string, string> = new Map();
   ui: boolean;
 
   constructor(fs: IFS, root: string, ui = false) {
@@ -25,7 +27,7 @@ export class FileHandler {
   }
 
   dirExists(path: string) {
-    return this.fs.existsSync(path);
+    return this.fs.existsSync(this.resolve(path));
   }
 
   dirIsEmpty(path: string) {
@@ -58,7 +60,7 @@ export class FileHandler {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   existsBinary(filePath: string) {
@@ -66,20 +68,16 @@ export class FileHandler {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   async loadJson(path: string, fresh = false) {
     const filePath = this.resolve(path);
-    // Returns empty object if not exists.
-    if (!this.exists(filePath)) {
-      return {};
-    }
     return this.openJson(filePath, true, fresh);
   }
 
   async copy(from: string, to: string, options: any) {
-    this.copyTargets.set(to, { from, options });
+    this.copyTargets.push({ from: this.resolve(from), to: this.resolve(to), options });
   }
 
   async readFile(path: string) {
@@ -126,10 +124,37 @@ export class FileHandler {
   }
 
   async mkdir(path: string) {
-    await this.fs.promises.mkdir(path, { recursive: true });
+    await this.fs.promises.mkdir(this.resolve(path), { recursive: true });
   }
 
-  async saveJson(path: string, data: object, force = false) {
+  async remove(path: string) {
+    const resolved = this.resolve(path);
+    await this.fs.promises.rm(resolved, { recursive: true, force: true });
+    for (const collection of [this.openJsonMap, this.openJsonChanged, this.openBinaryMap, this.openBinaryChanged]) {
+      for (const key of collection.keys()) {
+        if (key === resolved || key.startsWith(`${resolved}/`)) {
+          collection.delete(key);
+        }
+      }
+    }
+  }
+
+  private claim(path: string, producer?: string) {
+    if (!producer) return;
+    const filePath = this.resolve(path);
+    const existing = this.producers.get(filePath);
+    if (existing && existing !== producer) {
+      throw new Error(`Output collision at ${filePath}: ${existing} conflicts with ${producer}`);
+    }
+    this.producers.set(filePath, producer);
+  }
+
+  clearProducerClaims() {
+    this.producers.clear();
+  }
+
+  async saveJson(path: string, data: object, force = false, producer?: string) {
+    this.claim(path, producer);
     const filePath = this.resolve(path);
     const existing = this.openJsonMap.get(filePath);
     if (!existing) {
@@ -148,13 +173,17 @@ export class FileHandler {
     this.openJsonChanged.set(filePath, true);
   }
 
-  async writeFile(path: string, data: any) {
+  async writeFile(path: string, data: any, producer?: string) {
+    this.claim(path, producer);
     const filePath = this.resolve(path);
+    const dirName = dirname(filePath);
+    await this.fs.promises.mkdir(dirName, { recursive: true });
     await this.fs.promises.writeFile(filePath, data);
+    this.writtenFiles.add(filePath);
   }
 
-  async saveAll(force = false) {
-    const queue = new PQueue();
+  async saveAll(force = false, concurrency = 16) {
+    const queue = new PQueue({ concurrency });
 
     // Open JSON
     const files = Array.from(this.openJsonMap.keys())
@@ -167,37 +196,77 @@ export class FileHandler {
       .map((k) => [k, this.openBinaryMap.get(k)] as const);
 
     const progress = makeProgressBar("Writing files", files.length + binaryFiles.length, this.ui);
+    const failedToWrite: any[] = [];
 
+    const reserved = new Map<string, string>();
+    for (const filePath of [
+      ...this.writtenFiles,
+      ...files.map(([filePath]) => filePath),
+      ...binaryFiles.map(([filePath]) => filePath),
+    ]) {
+      reserved.set(filePath, "generated output");
+    }
+    const reserveCopy = (filePath: string, source: string) => {
+      const existing = reserved.get(filePath);
+      if (existing) {
+        throw new Error(`Output collision at ${filePath}: ${existing} conflicts with copied file ${source}`);
+      }
+      reserved.set(filePath, `copied file ${source}`);
+    };
+    const reserveCopyTree = async (source: string, destination: string) => {
+      const virtualFile = this.openJsonMap.has(source) || this.openBinaryMap.has(source);
+      if (virtualFile) {
+        reserveCopy(destination, source);
+        return;
+      }
+      const stat = await this.fs.promises.stat(source);
+      if (!stat.isDirectory()) {
+        reserveCopy(destination, source);
+        return;
+      }
+      const entries = await this.fs.promises.readdir(source, { withFileTypes: true });
+      await Promise.all(
+        entries.map((entry) => reserveCopyTree(join(source, entry.name), join(destination, entry.name)))
+      );
+    };
+    for (const target of this.copyTargets) {
+      await reserveCopyTree(target.from, target.to);
+    }
     for (const [filePath, data] of files) {
-      queue.add(async () => await this.writeFile(filePath, JSON.stringify(data, null, 2)));
+      queue.add(
+        async () =>
+          await this.writeFile(filePath, JSON.stringify(data, null, 2)).catch((err) =>
+            failedToWrite.push({ filePath, err })
+          )
+      );
     }
 
     for (const [filePath, data] of binaryFiles) {
-      queue.add(async () => await this.writeFile(filePath, data));
-    }
-
-    // Copy fields.
-    const copyKeys = Array.from(this.copyTargets.keys());
-    for (const key of copyKeys) {
-      // biome-ignore lint/style/noNonNullAssertion: This is from the copyTargets map.
-      const { from, options } = this.copyTargets.get(key)!;
-      queue.add(async () => await copy(from, key, options));
+      queue.add(async () => await this.writeFile(filePath, data).catch((err) => failedToWrite.push({ filePath, err })));
     }
 
     queue.on("completed", () => progress.increment());
 
     await queue.onIdle();
+
+    // Copy fields.
+    for (const { from, to, options } of this.copyTargets) {
+      await copy(from, to, options).catch((err) => failedToWrite.push({ filePath: to, err }));
+    }
+
     progress.stop();
 
     // Clear all copy targets.
-    this.copyTargets.clear();
+    this.copyTargets.length = 0;
     this.openJsonChanged.clear();
     this.openBinaryChanged.clear();
+
+    return { failedToWrite };
   }
 
   async cachePathExists(to: string) {
     try {
-      await this.fs.promises.stat(to);
+      await this.fs.promises.stat(this.resolve(to));
       return true;
     } catch (e) {
       return false;
