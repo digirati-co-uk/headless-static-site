@@ -1,0 +1,10 @@
+label:
+  en:
+    - Early printed works
+summary:
+  en:
+    - Discover a selection of illustrated works from our teaching collection.
+behavior:
+  - hss:featured
+  - https://example.org/behaviors/theme-blue
+  - https://example.org/behaviors/carousel

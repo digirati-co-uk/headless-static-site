@@ -1,0 +1,26 @@
+server:
+  url: https://example.org/iiif
+run:
+  - folder-collections
+  - extract-collection-thumbnail
+  - feature-heritage
+stores:
+  local:
+    type: iiif-json
+    path: ./fixtures
+    base: ./fixtures
+    destination: collections
+    pattern: '**/*.json'
+    subFiles: true
+config:
+  folder-collections:
+    labelStrategy: metadata
+collections:
+  featured:
+    label: { en: [Collections] }
+    summary:
+      en: ["Explore a world of ideas. Discover the objects, printed works and images that tell the story of science and the city."]
+    thumbnail:
+      - id: /images/delft.jpg
+        type: Image
+    behavior: [https://example.org/behaviors/collections-home]

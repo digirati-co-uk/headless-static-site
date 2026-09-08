@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/heritage/engineering",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Ideas that shaped a city \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "From ambitious drawings to the places we call home."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/delft.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/heritage/engineering/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

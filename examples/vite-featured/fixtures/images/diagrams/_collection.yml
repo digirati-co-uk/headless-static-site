@@ -1,0 +1,16 @@
+label:
+  en:
+    - A visual language
+summary:
+  en:
+    - Beautiful diagrams that make complex ideas visible.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "19"
+thumbnail:
+  - id: /images/astronomy.jpg
+    type: Image

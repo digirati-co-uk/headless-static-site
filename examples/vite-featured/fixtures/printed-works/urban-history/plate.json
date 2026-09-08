@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/printed-works/urban-history",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "A city remembered \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "A closer look at the landscapes of everyday life."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/delft.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/printed-works/urban-history/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

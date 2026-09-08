@@ -1,0 +1,16 @@
+label:
+  en:
+    - Learning by looking
+summary:
+  en:
+    - Images made to share knowledge across generations.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "33"
+thumbnail:
+  - id: /images/astronomy.jpg
+    type: Image
