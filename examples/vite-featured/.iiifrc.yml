@@ -18,7 +18,7 @@ config:
 collections:
   index:
     label: { en: [Heritage catalogue] }
-    items: [missing-debug-check]
+    items: [featured, manifests]
   featured:
     label: { en: [Collections] }
     summary:
