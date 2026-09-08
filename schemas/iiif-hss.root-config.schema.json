@@ -43,7 +43,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "index": { "type": "object", "additionalProperties": true },
+        "index": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "items": {
+              "description": "Collection or manifest slugs in index order, replacing the default items.",
+              "$ref": "#/$defs/stringArray"
+            }
+          }
+        },
         "manifests": { "type": "object", "additionalProperties": true },
         "collections": {
           "type": "object",

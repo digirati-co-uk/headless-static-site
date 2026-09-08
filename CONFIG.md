@@ -80,6 +80,22 @@ stores:
     path: ./content
 ```
 
+Set `collections.index.items` to replace the root collection's default items with
+collection or manifest slugs in the given order. Other collection customisations
+still apply. Omit `items` to keep the defaults, or use `items: []` for an empty
+index. Unknown slugs fail the build. Generated collection slugs such as `topics`,
+`manifests`, `collections`, and `stores/<store-id>` can also be included.
+
+```yaml
+collections:
+  index:
+    label:
+      en: [Featured items]
+    items:
+      - stores/local
+      - my-manifest
+```
+
 ## 2) Store files (`iiif-config/stores/*.json`)
 
 Use `schemas/iiif-hss.store.schema.json`.

@@ -344,25 +344,12 @@ export async function indices(
     await writeJson(join(buildDir, "meta", "trace.json"), trace.toJSON());
   }
 
-  if (indexCollection) {
-    const indexCollectionJson = createCollection({
-      label: "Index",
-      ...(config.collections?.index || {}),
-      configUrl,
-    }) as Collection;
-
-    const indexCollectionJsonCollections = Object.values(indexCollection).filter((t) => t.type === "Collection");
-    const indexCollectionJsonManifests = Object.values(indexCollection).filter((t) => t.type === "Manifest");
-
-    indexCollectionJson.items = [
-      // Manifests then Collections.
-      ...indexCollectionJsonManifests.sort(bySourceOrder),
-      ...indexCollectionJsonCollections.sort(byLabel),
-    ];
-    (indexCollectionJson as any)["hss:totalItems"] = indexCollectionJson.items.length;
-
-    await writeJson(join(buildDir, "collection.json"), indexCollectionJson);
-  }
+  const defaultIndexItems = indexCollection
+    ? [
+        ...Object.values(indexCollection).filter((item) => item.type === "Manifest").sort(bySourceOrder),
+        ...Object.values(indexCollection).filter((item) => item.type === "Collection").sort(byLabel),
+      ]
+    : [];
 
   if (manifestCollection) {
     const manifestCollectionJson = createCollection({
@@ -439,6 +426,22 @@ export async function indices(
     await writeJson(join(buildDir, "collections", "stores", "collection.json"), storeCollectionsCollectionJson);
 
     await Promise.all(storeCollectionsJson);
+  }
+
+  if (indexCollection) {
+    const { items, ...indexConfig } = config.collections?.index || {};
+    if (items !== undefined && (!Array.isArray(items) || items.some((slug) => typeof slug !== "string"))) {
+      throw new Error("collections.index.items must be a list of slugs");
+    }
+    const indexCollectionJson = createCollection({ label: "Index", ...indexConfig, configUrl }) as Collection;
+    indexCollectionJson.items = items === undefined ? defaultIndexItems : items.map((slug) => {
+      if (!Object.prototype.hasOwnProperty.call(indexCollection, slug)) {
+        throw new Error(`Unknown slug "${slug}" in collections.index.items`);
+      }
+      return indexCollection[slug];
+    });
+    (indexCollectionJson as any)["hss:totalItems"] = indexCollectionJson.items.length;
+    await writeJson(join(buildDir, "collection.json"), indexCollectionJson);
   }
 
   // Search indexes.

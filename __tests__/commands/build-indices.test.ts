@@ -22,6 +22,46 @@ describe("build indices", () => {
     testDir = "";
   });
 
+  test.each([
+    { items: undefined, expected: ["example", "topics"] },
+    { items: ["stores/local", "example", "manifests", "collections"], expected: ["stores/local", "example", "manifests", "collections"] },
+    { items: [], expected: [] },
+    { items: ["missing"], error: 'Unknown slug "missing"' },
+    { items: "example", error: "must be a list of slugs" },
+    { items: [42], error: "must be a list of slugs" },
+  ])("supports index items $items alongside collection metadata", async ({ items, expected, error }) => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-index-items-"));
+    const buildDir = join(testDir, "build");
+    const files = new FileHandler(fs, testDir);
+    const manifest = { id: "https://example.org/example/manifest.json", type: "Manifest", "hss:slug": "example" };
+    const label = { en: ["Featured"] };
+    const summary = { en: ["Selected resources"] };
+    const result = indices({
+      allResources: [], indexCollection: { example: manifest },
+      manifestCollection: [manifest], storeCollections: { local: [manifest] }, allIndices: {},
+    }, {
+      options: {}, configUrl: "https://example.org/iiif", buildDir,
+      cacheDir: join(testDir, "cache"), topicsDir: join(testDir, "topics"),
+      collectionRewrites: [], files,
+      config: { stores: {}, collections: { index: { items, label, summary }, manifests: { label: { en: ["All manifests"] } } } },
+    } as any);
+    if (error) {
+      await expect(result).rejects.toThrow(error);
+      return;
+    }
+    await result;
+    await files.saveAll();
+    const collection = JSON.parse(await readFile(join(buildDir, "collection.json"), "utf8"));
+    expect(collection.items.map((item: any) => item["hss:slug"])).toEqual(expected);
+    expect(collection["hss:totalItems"]).toBe(expected!.length);
+    expect(collection.label).toEqual(label);
+    expect(collection.summary).toEqual(summary);
+    if (items?.length) {
+      expect(collection.items[1]).toEqual(manifest);
+      expect(collection.items[2].label).toEqual({ en: ["All manifests"] });
+    }
+  });
+
   test("always writes topics/collection.json even when there are no extracted topics", async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-build-indices-"));
     const buildDir = join(testDir, ".iiif", "build");

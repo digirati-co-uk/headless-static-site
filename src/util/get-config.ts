@@ -33,7 +33,7 @@ export interface IIIFRC {
   slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
   collections?: {
-    index?: Partial<Collection>;
+    index?: Partial<Omit<Collection, "items">> & { items?: string[] };
     manifests?: Partial<Collection>;
     collections?: Partial<Collection>;
     topics?: Partial<Collection>;
