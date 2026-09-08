@@ -44,6 +44,7 @@ export type IiifServerBuildEvent =
 interface IIIFServerOptions {
   customManifestEditor?: string;
   configSource?: Omit<ResolvedConfigSource, "config">;
+  reloadConfig?: () => Promise<IIIFRC>;
   projectRoot?: string;
   onBuild?: (event: IiifServerBuildEvent) => void | Promise<void>;
   onboarding?: {
@@ -162,9 +163,11 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
 
     let result: Awaited<ReturnType<typeof build>>;
     try {
+      if (options.dev && serverOptions.reloadConfig) config = await serverOptions.reloadConfig();
       result = await build({ ...options, cwd: projectRoot }, defaultBuiltIns, {
         storeRequestCaches,
-        fileHandler,
+        // Failed builds must not leave queued writes/copies in the next build.
+        fileHandler: new FileHandler(fs, projectRoot),
         pathCache,
         tracer,
         customConfig: config,
@@ -274,6 +277,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     const remoteOverrideStores = Object.values(config.stores).filter((store) => {
       return store.type === "iiif-remote" && typeof store.overrides === "string" && Boolean(store.overrides.trim());
     });
+    // Cached full builds refresh aggregate collections and resource inventories after edits.
     const extraWatchPaths = configSource?.watchPaths || [];
     let watchCount = 0;
 
@@ -295,11 +299,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
             const realPath = pathCache.allPaths[name];
             emitter.emit("file-change", { path: realPath });
             await cachedBuild({
-              exact: realPath || undefined,
               emit: true,
               cache: true,
               dev: true,
-            });
+            }).catch(() => undefined); // Build status reports the error; keep watching for the next edit.
             emitter.emit("file-refresh", { path: realPath });
           }
         }
@@ -330,11 +333,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
             emitter.emit("file-change", { path: realPath });
           }
           await cachedBuild({
-            exact: realPath || undefined,
             emit: true,
             cache: true,
             dev: true,
-          });
+          }).catch(() => undefined); // Keep watching after errors reported through build status.
           if (realPath) {
             emitter.emit("file-refresh", { path: realPath });
           } else {
@@ -366,7 +368,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
             emit: true,
             cache: true,
             dev: true,
-          });
+          }).catch(() => undefined); // A failed build must not terminate the watcher.
           emitter.emit("full-rebuild", {
             source: "config-watch",
             path: resolvedWatchPath,

@@ -22,6 +22,7 @@ export function HomePage({ debugBase }: { debugBase: string }) {
   const [site, setSite] = useState<SiteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [browseView, setBrowseView] = useState<"hierarchy" | "resources">("hierarchy");
   const [resourceFilter, setResourceFilter] = useState<ResourceFilter>("all");
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export function HomePage({ debugBase }: { debugBase: string }) {
         clearTimeout(timer);
       }
     };
-  }, [debugBase]);
+  }, [debugBase, site?.build?.completedAt]);
 
   useEffect(() => {
     if (typeof EventSource === "undefined") {
@@ -94,11 +95,10 @@ export function HomePage({ debugBase }: { debugBase: string }) {
     };
   }, [debugBase]);
 
-  const items = site?.featuredItems || null;
+  const items = site ? (browseView === "hierarchy" ? site.featuredItems : site.resources) : null;
   const featured = useMemo(() => {
     if (!items) return [];
     return items
-      .filter((item) => item.slug)
       .filter((item) => {
         if (resourceFilter === "all") return true;
         return toResourceFilter(item.type) === resourceFilter;
@@ -139,7 +139,7 @@ export function HomePage({ debugBase }: { debugBase: string }) {
       <section className="mb-4">
         <h2 className="text-2xl font-semibold">Browse</h2>
         <p className="text-slate-500">
-          Top collection items with direct links to debug pages.
+          Explore the configured hierarchy or browse every built resource.
         </p>
         {site?.topics?.available ? (
           <p className="mt-2 text-sm text-slate-600">
@@ -152,10 +152,22 @@ export function HomePage({ debugBase }: { debugBase: string }) {
             </a>
           </p>
         ) : null}
+        <div className="mt-3 flex gap-2" role="group" aria-label="Browse view">
+          {([ ["hierarchy", "Configured hierarchy"], ["resources", "All resources"] ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              aria-pressed={browseView === view}
+              onClick={() => { setBrowseView(view); setResourceFilter("all"); setSearchTerm(""); }}
+              className={`rounded-lg border px-3 py-2 text-sm ${browseView === view ? "bg-slate-900 text-white" : "bg-white text-slate-700"}`}
+            >{label}</button>
+          ))}
+        </div>
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
+            aria-label="Search resources by label or slug"
             placeholder="Search by label or slug"
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
           />
@@ -231,7 +243,7 @@ export function HomePage({ debugBase }: { debugBase: string }) {
 
       {!featured.length ? (
         <section className="mt-4 border border-dashed border-gray-300 bg-white rounded-xl p-4">
-          {site?.onboarding?.enabled ? (
+          {site?.onboarding?.enabled && !site.resources.length ? (
             <>
               <p className="font-medium">No IIIF content found yet.</p>
               <p className="mt-1 text-sm text-slate-600">
@@ -251,7 +263,11 @@ export function HomePage({ debugBase }: { debugBase: string }) {
               </code>
             </>
           ) : (
-            <p>No featured items found in top-level collections yet.</p>
+            <p>{searchTerm || resourceFilter !== "all"
+              ? "No resources match these filters."
+              : browseView === "hierarchy"
+                ? "The configured index is empty. Switch to All resources to browse the full inventory."
+                : "No built resources found yet."}</p>
           )}
         </section>
       ) : null}

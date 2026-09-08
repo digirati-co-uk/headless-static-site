@@ -422,6 +422,14 @@ export function createIiifRuntime(
     const { config: _skipConfig, ...restConfigSource } = configSource;
     server = await createServer(configSource.config, {
       configSource: restConfigSource,
+      reloadConfig: async () => {
+        const server = resolvedConfig?.config.server;
+        resolvedConfig = null;
+        const refreshed = await resolveIiifConfig();
+        // Keep the actual dev origin while reloading file config and inline overrides.
+        refreshed.config.server = server;
+        return refreshed.config;
+      },
       onboarding: onboardingInfo,
       projectRoot: resolvedRoot || process.cwd(),
       onBuild: lifecycle.onBuild,

@@ -129,7 +129,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
       throw new Error(`No id found in json${resource.path}`);
     }
 
-    if (store.subFiles) {
+    if (store.subFiles && !resource.virtual) {
       const subFilesFolderPath = resource.path.replace(".json", "");
       const subFilesFolder = existsSync(subFilesFolderPath);
       if (subFilesFolder) {
@@ -203,7 +203,7 @@ export async function getKey(store: { subFiles?: boolean }, resource: ParsedReso
   const file = await stat(resource.path);
   const key = `${file.mtime}-${file.ctime}-${file.size}`;
 
-  if (store.subFiles) {
+  if (store.subFiles && !resource.virtual) {
     const subFilesFolderPath = resource.path.replace(".json", "");
     const subFilesFolder = existsSync(subFilesFolderPath);
     if (subFilesFolder) {

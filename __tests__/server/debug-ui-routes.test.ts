@@ -531,6 +531,23 @@ describe("debug UI routes", () => {
     expect(deletedJson.deleted).toBe(true);
   });
 
+  test("keeps configured hierarchy separate from all resources, including generated collections", async () => {
+    const buildDir = join(testDir, ".iiif", "build");
+    const generated = { id: "http://localhost:7111/featured/collection.json", type: "Collection", label: { en: ["Featured"] } };
+    await writeFile(join(buildDir, "meta", "resources.json"), JSON.stringify({ featured: generated }));
+    await writeFile(join(buildDir, "collection.json"), JSON.stringify({ type: "Collection", items: [generated] }));
+    const server = await createServer({ stores: {} });
+    let site = await (await server.request("/_debug/api/site")).json();
+    expect(site.featuredItems.map((item: any) => item.slug)).toEqual(["featured"]);
+    expect(site.resources.map((item: any) => item.slug)).toEqual(["manifests/demo", "featured"]);
+    await writeFile(join(buildDir, "collection.json"), JSON.stringify({ type: "Collection", items: [] }));
+    await mkdir(join(buildDir, "manifests"), { recursive: true });
+    await writeFile(join(buildDir, "manifests", "collection.json"), JSON.stringify({ items: [generated] }));
+    site = await (await server.request("/_debug/api/site")).json();
+    expect(site.featuredItems).toEqual([]);
+    expect(site.resources).toHaveLength(2);
+  });
+
   test("finds packaged debug UI dir from exported module entrypoints", async () => {
     const currentWorkingDirectory = join(testDir, "project");
     await mkdir(currentWorkingDirectory, { recursive: true });

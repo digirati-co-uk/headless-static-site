@@ -490,6 +490,8 @@ export function registerDebugUiRoutes({
     const topicsCollection = (await fileHandler.loadJson(topicsCollectionPath, true)) as Record<string, any>;
     const baseUrl = config.server?.url || new URL(ctx.req.url).origin;
     const topicItems = Array.isArray(topicsCollection?.items) ? topicsCollection.items : [];
+    const registry = await fileHandler.loadJson(join(projectRoot, buildDir, "meta", "resources.json"), true);
+    const registryById = new Map(Object.entries(registry).map(([slug, item]: [string, any]) => [item.id, slug]));
     const runtimeBySlug = new Map<string, any>();
     await Promise.all(
       Object.keys(siteMap || {}).map(async (slug) => {
@@ -498,9 +500,8 @@ export function registerDebugUiRoutes({
       })
     );
 
-    const featuredItems = (topCollection.items?.length ? topCollection.items : manifestsCollection.items || []).map(
-      (item: any) => {
-        const slug = trimSlashes(item?.["hss:slug"] || "");
+    const toBrowseItem = (item: any) => {
+        const slug = trimSlashes(item?.["hss:slug"] || registryById.get(item?.id) || "");
         const runtime = runtimeBySlug.get(slug);
         const source = slug ? siteMap[slug]?.source || runtime?.source || null : null;
         return {
@@ -512,7 +513,10 @@ export function registerDebugUiRoutes({
           source,
           diskPath: toAbsoluteDiskPath(source, projectRoot),
         };
-      }
+    };
+    const featuredItems = (Array.isArray(topCollection.items) ? topCollection.items : manifestsCollection.items || []).map(toBrowseItem);
+    const resources = Object.entries({ ...siteMap, ...registry }).map(([slug, item]: [string, any]) =>
+      toBrowseItem({ ...item, "hss:slug": slug })
     );
 
     return ctx.json({
@@ -535,17 +539,7 @@ export function registerDebugUiRoutes({
         label: asLabel(topicsCollection?.label) || "Topics",
       },
       featuredItems,
-      resources: Object.entries(siteMap || {}).map(([slug, value]) => {
-        const runtime = runtimeBySlug.get(slug);
-        const source = (value as any)?.source || runtime?.source || null;
-        return {
-          slug,
-          type: (value as any)?.type || runtime?.type || null,
-          label: (value as any)?.label || null,
-          source,
-          diskPath: toAbsoluteDiskPath(source, projectRoot),
-        };
-      }),
+      resources,
     });
   });
 

@@ -64,6 +64,7 @@ export type SiteResponse = {
     label: string;
   };
   featuredItems: SiteFeaturedItem[];
+  resources: SiteFeaturedItem[];
 };
 
 export type ResourceResponse = {

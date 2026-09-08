@@ -16,6 +16,9 @@ config:
   folder-collections:
     labelStrategy: metadata
 collections:
+  index:
+    label: { en: [Heritage catalogue] }
+    items: [missing-debug-check]
   featured:
     label: { en: [Collections] }
     summary:

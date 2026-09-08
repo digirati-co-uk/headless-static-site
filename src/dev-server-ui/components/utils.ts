@@ -81,11 +81,11 @@ export function getCollectionItems(resource: any): CollectionItem[] {
   return items
     .map((item: any) => {
       const slug = item?.["hss:slug"];
-      if (!slug || typeof slug !== "string") return null;
+      if (!slug && !item?.id) return null;
       return {
         id: item?.id || null,
         type: item?.type || null,
-        slug,
+        slug: typeof slug === "string" ? slug : "",
         label: normalizeLabel(item?.label),
         thumbnail: getThumbnailId(item?.thumbnail),
       } satisfies CollectionItem;

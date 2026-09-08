@@ -1,6 +1,6 @@
 import { LazyImage } from "./LazyImage";
 import type { SiteFeaturedItem } from "./types";
-import { getDiskPath, isAbsolutePath, toFileUrl } from "./utils";
+import { encodeSlugPath, getDiskPath, isAbsolutePath, toFileUrl } from "./utils";
 
 export function FeaturedItemCard({
   debugBase,
@@ -14,7 +14,7 @@ export function FeaturedItemCard({
   return (
     <article className="border border-gray-200 rounded-xl bg-white overflow-hidden">
       <a
-        href={`${debugBase}/${item.slug}`}
+        href={item.slug ? `${debugBase}/${encodeSlugPath(item.slug)}` : /^https?:\/\//i.test(item.id || "") ? item.id! : undefined}
         className="block hover:-translate-y-px transition-transform"
       >
         <div className="w-full aspect-[16/10] bg-slate-100 text-slate-500 flex items-center justify-center">

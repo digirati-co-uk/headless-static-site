@@ -1,3 +1,4 @@
+import { encodeSlugPath } from "./utils";
 import { LazyImage } from "./LazyImage";
 import type { CollectionItem } from "./types";
 
@@ -10,7 +11,7 @@ export function CollectionItemCard({
 }) {
   return (
     <a
-      href={`${debugBase}/${item.slug}`}
+      href={item.slug ? `${debugBase}/${encodeSlugPath(item.slug)}` : /^https?:\/\//i.test(item.id || "") ? item.id! : undefined}
       className="border border-gray-200 rounded-xl overflow-hidden bg-white hover:bg-slate-50"
     >
       <div className="w-full aspect-[4/3] bg-slate-100 text-slate-500 flex items-center justify-center">
