@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chdir, cwd } from "node:process";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { linker } from "../../lib/scripts.js";
+import { enrich, extract, linker } from "../../lib/scripts.js";
 import { build, defaultBuiltIns } from "../../src/commands/build.ts";
 import { validateBuildOutput } from "../../src/output-validation.ts";
 import { FileHandler } from "../../src/util/file-handler.ts";
@@ -39,6 +39,46 @@ describe("linker integration", () => {
     (global as any).__hss = undefined;
     chdir(originalCwd);
     await rm(testDir, { recursive: true, force: true });
+  });
+
+  test("finishes asynchronous metadata injections before enrichment and emission", async () => {
+    extract(
+      {
+        id: "delayed-inject",
+        types: ["Manifest"],
+        collect: async (temp: any) => ({ temp }),
+        injectManifest: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return { meta: {
+            partOfCollections: [{ slug: "collections/demo" }],
+            thumbnail: { id: "https://example.org/thumb.jpg" },
+          } };
+        },
+      },
+      async () => ({ temp: {} })
+    );
+    let observed: any;
+    enrich({ id: "observe-injection", types: ["Manifest"] }, async (_resource: any, api: any) => {
+      observed = structuredClone(await api.meta.value);
+      return {};
+    });
+    const output = await build(
+      { emit: true, cache: false, ui: false },
+      defaultBuiltIns,
+      { customConfig: {
+        run: ["delayed-inject", "extract-search-record", "observe-injection"],
+        stores: { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } },
+        server: { url: "https://example.org/iiif" },
+        search: { indexNames: ["manifests"] },
+      }, fileHandler: new FileHandler(fs as any, testDir, false) }
+    );
+    expect(observed.partOfCollections).toEqual([{ slug: "collections/demo" }]);
+    expect(observed.thumbnail.id).toBe("https://example.org/thumb.jpg");
+    expect(observed.searchTime).toBeGreaterThanOrEqual(0);
+    const slug = output.stores.allResources[0].slug;
+    const search = JSON.parse(await readFile(join(testDir, ".iiif/build", slug, "search-record.json"), "utf8"));
+    expect(search.record.collections).toEqual(["collections/demo"]);
+    expect(search.record.thumbnail).toBe("https://example.org/thumb.jpg");
   });
 
   test("linker can write files and merge meta before extraction/enrichment", async () => {

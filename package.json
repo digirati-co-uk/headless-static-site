@@ -4,15 +4,15 @@
   "description": "IIIF Headless Static Site",
   "type": "module",
   "keywords": [],
-  "files": ["src", "build", "lib", "schemas", "CONFIG.md", "FILE-OUTPUT.md"],
+  "files": ["src", "build", "lib", "bin", "schemas", "CONFIG.md", "FILE-OUTPUT.md"],
   "engines": {
     "node": ">=20"
   },
   "main": "lib/scripts.js",
   "module": "lib/scripts.js",
   "bin": {
-    "iiif-hss": "build/index.js",
-    "iiif-hss-dev": "build/server/entrypoint.js"
+    "iiif-hss": "bin/iiif-hss.js",
+    "iiif-hss-dev": "bin/iiif-hss-dev.js"
   },
   "author": "Stephen Fraser <stephen.fraser@digirati.com>",
   "license": "MIT",

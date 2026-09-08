@@ -351,6 +351,8 @@ export async function extract(
     }
   }
 
+  await queue.onIdle();
+
   progress.stop();
 
   stats._total = performance.now() - startTime;

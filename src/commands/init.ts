@@ -110,7 +110,7 @@ slugs:
   await writeFile(
     join(cwd(), "scripts", "example.js"),
     `
-import { extract } from "hss-iiif";
+import { extract } from "iiif-hss";
 
 extract(
   {
