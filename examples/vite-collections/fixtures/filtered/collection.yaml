@@ -1,0 +1,4 @@
+{
+  "label": "Filtered \u00b7 publish a selected subtree",
+  "summary": "A store ignore pattern excludes draft files and their collection declarations. An explicitly empty collection remains available for future curation."
+}

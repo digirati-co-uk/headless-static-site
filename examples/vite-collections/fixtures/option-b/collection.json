@@ -1,0 +1,4 @@
+{
+  "label": "Option B \u00b7 nested collection folders",
+  "summary": "A parent without items discovers collection folders. Each child discovers its own manifests, with no membership list to maintain."
+}

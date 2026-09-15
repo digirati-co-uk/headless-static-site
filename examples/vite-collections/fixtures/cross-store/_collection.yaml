@@ -1,0 +1,18 @@
+{
+  "label": "Cross-store \u00b7 keep existing content",
+  "summary": "This collection contains no local objects. It selects a local store, another collection, an in-memory store and an external IIIF link. Automatic grouping is disabled.",
+  "items": [
+    "manifests/instrument",
+    "collections/option-b/inner-collection-2",
+    "manifests/programmatic",
+    {
+      "id": "https://example.org/external/collection.json",
+      "type": "Collection",
+      "label": {
+        "en": [
+          "External reference (illustrative URL)"
+        ]
+      }
+    }
+  ]
+}

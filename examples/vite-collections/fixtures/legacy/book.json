@@ -1,0 +1,15 @@
+{
+  "id": "https://example.org/samples/legacy/book",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Historic book"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Illustrative teaching object; no external service is needed to run this example."
+    ]
+  },
+  "items": []
+}
