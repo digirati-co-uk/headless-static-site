@@ -35,7 +35,7 @@ export interface IIIFJSONStore {
 
 export const IIIFJSONStore: Store<IIIFJSONStore> = {
   async parse(store: IIIFJSONStore, api: StoreApi): Promise<ParsedResource[]> {
-    const allFiles = readFilteredFiles(store).filter((file) => !/_collection\.ya?ml$/.test(file));
+    const allFiles = readFilteredFiles(store).filter((file) => !/(^|\/)_?collection\.(json|ya?ml)$/.test(file));
     const fileNameToPath = rewritePath(store);
     const newAllFiles: Array<[string, string]> = [];
     const subFileMap: Record<string, string[]> = {};

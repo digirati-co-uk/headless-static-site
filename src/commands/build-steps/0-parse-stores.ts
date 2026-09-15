@@ -58,6 +58,7 @@ export async function parseStores(
       {
         ...store,
         ...(store.type === "iiif-json" && store.path ? { path: resolveFilePath(store.path) } : {}),
+        ...(store.type === "iiif-json" && store.base ? { base: resolveFilePath(store.base) } : {}),
         ...(store.type === "iiif-remote" && store.overrides ? { overrides: resolveFilePath(store.overrides) } : {}),
       },
     ])
@@ -180,11 +181,18 @@ export async function parseStores(
       const previous = parsedSlugs.get(resource.slug);
       if (previous && (previous.virtual || resource.virtual)) {
         const folder = resource.source.type === "disk" ? resource.source.filePath : null;
-        const isAutomaticFolder = resource.virtual && resource.source.type === "disk" &&
+        const isAutomaticFolder =
+          resource.virtual &&
+          resource.source.type === "disk" &&
           folder === join(resource.source.path, resource.source.relativePath || "");
-        if (isAutomaticFolder && previous.type === "Collection" && !previous.virtual &&
-          previous.storeId === resource.storeId && previous.source.type === "disk" &&
-          (dirname(previous.source.filePath) === folder || previous.source.filePath.replace(/\.json$/i, "") === folder)) {
+        if (
+          isAutomaticFolder &&
+          previous.type === "Collection" &&
+          !previous.virtual &&
+          previous.storeId === resource.storeId &&
+          previous.source.type === "disk" &&
+          (dirname(previous.source.filePath) === folder || previous.source.filePath.replace(/\.json$/i, "") === folder)
+        ) {
           // An authored collection owns this folder; retain its membership and metadata.
           const authored = await files.loadJson(previous.path, true);
           const generated = await files.loadJson(resource.path, true);
@@ -197,8 +205,8 @@ export async function parseStores(
       }
       parsedSlugs.set(resource.slug, resource);
 
-      if (resource.source?.type === "disk" && !resource.virtual) {
-        filesToWatch.push(resource.path);
+      if (resource.source?.type === "disk") {
+        filesToWatch.push(resource.source.filePath);
       }
       storeResources[storeId].push(resource);
     }
@@ -208,6 +216,7 @@ export async function parseStores(
         const collection = await files.loadJson(resource.path, true);
         const seen = new Set<string>();
         collection.items = (collection.items || []).filter((item: any) => {
+          if (!item || typeof item !== "object") return true;
           item.id = folderAliases.get(item.id) || item.id;
           if (seen.has(item.id)) return false;
           seen.add(item.id);
@@ -222,6 +231,42 @@ export async function parseStores(
       total: totalDiscovered,
       storeId,
     });
+  }
+
+  // Resolve final public slugs only after every store and rewrite has run.
+  const readResource = (resource: ParsedResource) => {
+    if (resource.source.type === "remote") return storeRequestCaches[resource.storeId].fetch(resource.path);
+    if (resource.source.type === "memory")
+      return effectiveStoreConfigs[resource.storeId].inputs[resource.source.index].resource;
+    return files.loadJson(resource.virtual ? resource.path : resource.source.filePath, true);
+  };
+  for (const resource of Object.values(storeResources).flat()) {
+    if (!resource.virtual || resource.type !== "Collection") continue;
+    const collection = await files.loadJson(resource.path, true);
+    const seen = new Set<string>();
+    const items = [];
+    for (const entry of collection.items || []) {
+      let item = entry;
+      if (typeof entry === "string") {
+        const target = parsedSlugs.get(entry);
+        if (!target)
+          throw new Error(
+            `Unknown collection item slug "${entry}" in ${resource.source.type === "disk" ? resource.source.filePath : resource.path}`
+          );
+        const json = await readResource(target);
+        item = { id: json.id || json["@id"], type: target.type, label: json.label };
+      }
+      if (!item || typeof item.id !== "string" || !item.id || !["Manifest", "Collection"].includes(item.type)) {
+        throw new Error(
+          `Invalid collection item in ${resource.path}: expected a resource slug or IIIF Manifest/Collection reference`
+        );
+      }
+      if (item.id === collection.id) throw new Error(`Collection "${resource.slug}" cannot include itself`);
+      if (!seen.has(item.id)) items.push(item);
+      seen.add(item.id);
+    }
+    collection.items = items;
+    await files.fs.promises.writeFile(files.resolve(resource.path), JSON.stringify(collection));
   }
 
   return {

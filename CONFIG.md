@@ -171,7 +171,8 @@ These files are mounted into `config.<fileName>` and are intentionally plugin-sp
 
 Configure `collections.featured` to emit `featured/collection.json`. It gathers
 Collections whose final, explicitly authored `behavior` includes `hss:featured`.
-Source IIIF, `_collection.yml` / `_collection.yaml`, and ordinary collection
+Source IIIF, folder declarations (`collection.json`, `collection.yml`,
+`collection.yaml` and their `_collection` equivalents), and ordinary collection
 enrichment can supply that marker. Inherited behaviours do not select children.
 
 ```yaml
@@ -212,11 +213,14 @@ ordinary collection enrichment.
 
 ### Folder collection authoring
 
-Sidecars are discovered independently of a JSON-only store pattern, including
-when `subFiles: true`. Both extensions are supported; two sidecars defining the
-same folder fail clearly. A sidecar can contain IIIF `label`, `summary`,
-`thumbnail`, `behavior`, and `metadata`; strings in labels/summaries/metadata are
-converted to language maps. Identity, type and inferred items remain generated.
+Folder declarations may be named `collection.json`, `collection.yml`,
+`collection.yaml`, `_collection.json`, `_collection.yml` or `_collection.yaml`.
+They are discovered independently of a JSON-only store pattern, including when
+`subFiles: true`. Only one declaration may define a folder. Declarations support
+IIIF `label`, `summary`, `thumbnail`, `behavior`, `metadata` and `items`; strings in
+labels/summaries/metadata become language maps. IDs are generated when omitted;
+existing IDs are preserved internally and rewritten to public output URLs.
+Presentation 2 declarations are upgraded to Presentation 3.
 
 ```yaml
 label: Scientific instruments
@@ -230,25 +234,44 @@ metadata:
 thumbnail:
   - id: https://example.org/images/instruments.jpg
     type: Image
+items:
+  - manifests/telescope
+  - collections/teaching
+  - id: https://example.org/external/collection.json
+    type: Collection
+    label: { en: [External collection] }
 ```
 
-Automatic folders now materialise before extraction/enrichment too, retaining
-`collections/<relative-folder>` slugs and existing collection rewrites. Explicit
-sidecars use configured store `base`/`destination` slug rules, or the same
-`collections/<relative-folder>` default when neither is configured. `customMap` labels take
+Folder collections materialise before extraction/enrichment. Both explicit and
+implicit folders use configured store `base`/`destination` slug rules, or
+`collections/<relative-folder>` when neither is configured. A store-root
+declaration defaults to `collections/<store-id>` to avoid the generated collection
+index. Existing collection rewrites apply afterwards. `customMap` labels take
 precedence over sidecar labels; absent authored labels fall back to the folder
 name. Automatic generation respects the folder extraction's enable, depth and
 ignore settings; explicit sidecars are authored resources even if automatic
 folder grouping is disabled.
 
-Folder collections include direct resources and immediate child folder collections.
-This adds parent-child navigation and can increase direct item counts compared
-with the earlier flat folder grouping. Sidecars and source resource changes are
+Folder collections merge authored `items`, direct resources and immediate child
+folder collections, in that order. Discovery is sorted by source path; duplicate
+IIIF IDs keep their first entry. Slug strings resolve after all stores and rewrites,
+so they can reference local, remote or in-memory resources in any store order.
+Unknown slugs, invalid entries and self-references fail clearly. External IIIF
+reference objects do not import or fetch content. Slugs must identify parsed source
+resources; later-generated aggregates such as topics/featured are not available here.
+
+An authored folder discovers implicit descendant collections even without enabling
+`folder-collections`; configured ignore/depth limits still apply. Empty collections
+are supported with an explicit declaration. Ordinary collection enrichment can
+populate or sort their items without changing the source files. Sidecars and source resource changes are
 picked up by normal builds and watch mode. If an automatic folder shares its final
 slug with an authored collection inside that folder (or an adjacent JSON file with
 the same name), the authored collection supplies the membership and metadata.
 Generated parents link to that collection without appending unlisted folder items.
 Explicit sidecar conflicts and unrelated generated slug collisions still fail.
+
+See [the composable stores example](examples/vite-collections/README.md) for both
+client folder layouts, eight separately configured recipes and build verification.
 
 See [the Vite featured homepage example](examples/vite-featured/README.md) for a
 working page, authoring examples and one runnable build verification script.

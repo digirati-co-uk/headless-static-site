@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
+import { convertPresentation2 } from "@iiif/parser/presentation-2";
 import micromatch from "micromatch";
 import type { IIIFJSONStore } from "../stores/iiif-json.ts";
 import type { FolderCollectionsConfig } from "../extract/extract-folder-collections.ts";
@@ -27,21 +28,30 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
     );
   };
   const folders = new Map<string, string | undefined>();
-  for (const file of readFilteredFiles({ ...store, pattern: "**/_collection.{yml,yaml}" })) {
+  for (const file of readFilteredFiles({ ...store, pattern: "**/{_collection,collection}.{json,yml,yaml}" })) {
     if (config.ignorePaths?.length && micromatch.isMatch(relative(store.path, dirname(file)), config.ignorePaths))
       continue;
     if (folders.has(dirname(file))) throw new Error(`Multiple collection sidecars in ${dirname(file)}`);
     folders.set(dirname(file), file);
   }
-  if (automatic) {
-    for (const resource of resources) {
-      if (resource.source.type !== "disk" || resource.type !== "Manifest") continue;
-      for (
-        let folder = dirname(resource.source.filePath);
-        folder !== store.path && folder !== dirname(folder);
-        folder = dirname(folder)
-      ) {
-        if (eligible(folder) && !folders.has(folder)) folders.set(folder, undefined);
+  // Authored folders compose their descendants even without the automatic extraction.
+  const authoredFolders = [...folders.keys()];
+  const insideAuthored = (folder: string) =>
+    authoredFolders.some((parent) => {
+      const path = relative(parent, folder).replaceAll("\\", "/");
+      return !path || (path !== ".." && !path.startsWith("../"));
+    });
+  const childFolders = [
+    ...resources
+      .filter((resource) => resource.source.type === "disk")
+      .map((resource) => dirname((resource.source as { filePath: string }).filePath)),
+    ...authoredFolders.map((folder) => dirname(folder)),
+  ];
+  for (const childFolder of childFolders) {
+    for (let folder = childFolder; folder !== store.path && folder !== dirname(folder); folder = dirname(folder)) {
+      if (relative(store.path, folder).split(/[\\/]/).includes("..")) break;
+      if ((automatic || insideAuthored(folder)) && eligible(folder) && !folders.has(folder)) {
+        folders.set(folder, undefined);
       }
     }
   }
@@ -51,15 +61,25 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
   const generated: Array<{ folder: string; resource: ParsedResource; json: any }> = [];
   for (const [folder, sidecar] of folders) {
     const relativePath = relative(store.path, folder).replaceAll("\\", "/");
-    const slug =
-      sidecar && (store.base || store.destination) ? rewritePath(store)(sidecar) : `collections/${relativePath}`;
+    const rewritten =
+      store.base || store.destination ? rewritePath(store)(sidecar || join(folder, "collection.json")) : "";
+    const slug = !rewritten || rewritten === "collections" ? `collections/${relativePath || api.storeId}` : rewritten;
     if (sourceSlugs.has(slug) && sidecar) {
       throw new Error(`Both a source collection and a sidecar define ${slug}`);
     }
-    const metadata = sidecar ? await api.files.readYaml(sidecar) : {};
+    const authored = sidecar
+      ? sidecar.endsWith(".json")
+        ? await api.files.loadJson(sidecar, true)
+        : await api.files.readYaml(sidecar)
+      : {};
+    const metadata = authored?.["@type"] === "sc:Collection" ? convertPresentation2(authored) : authored;
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
       throw new Error(`Invalid collection metadata in ${sidecar}`);
-    const { id: _id, type: _type, items: _items, label, summary, metadata: fields, ...rest } = metadata;
+    if (metadata.type && metadata.type !== "Collection") throw new Error(`Expected a Collection in ${sidecar}`);
+    if (metadata.id !== undefined && (typeof metadata.id !== "string" || !metadata.id))
+      throw new Error(`Invalid collection id in ${sidecar}`);
+    const { id: _id, type: _type, items = [], label, summary, metadata: fields, ...rest } = metadata;
+    if (!Array.isArray(items)) throw new Error(`Collection items must be an array in ${sidecar}`);
     const customLabel = config.labelStrategy === "customMap" ? config.customMap?.[relativePath] : undefined;
     const folderLabel = basename(folder)
       .split(/[-_\s]+/)
@@ -67,14 +87,14 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
       .join(" ");
     const json = {
       ...rest,
-      id: `virtual://${sidecar ? rewritePath(store)(sidecar) : `${api.storeId}/${relativePath}`}`,
+      id: metadata.id || `virtual://${api.storeId}/${relativePath}`,
       type: "Collection",
       label: stringToLang(customLabel || label || folderLabel),
       summary: summary ? stringToLang(summary) : undefined,
       metadata: fields?.map((field: any) => ({ label: stringToLang(field.label), value: stringToLang(field.value) })),
-      items: [],
+      items,
     };
-    const path = api.files.resolve(join(api.build.virtualCacheDir, api.storeId, `${relativePath || "_root"}.json`));
+    const path = api.files.resolve(join(api.build.virtualCacheDir, api.storeId, relativePath, "collection.json"));
     generated.push({
       folder,
       json,
@@ -107,7 +127,7 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
     addMember(dirname(child.folder), { id: child.json.id, type: "Collection", label: child.json.label });
   }
   for (const { folder, json, resource } of generated) {
-    json.items = members.get(folder) || [];
+    json.items = [...json.items, ...(members.get(folder) || [])];
     await mkdir(dirname(resource.path), { recursive: true });
     await writeFile(resource.path, JSON.stringify(json));
   }

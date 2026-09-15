@@ -31,7 +31,7 @@ export function createFiletypeCache(cacheFile: string) {
       }
 
       if (fs.existsSync(filePath)) {
-        if (filePath.endsWith("/_collection.yml") || filePath.endsWith("/_collection.yaml")) {
+        if (/(^|\/)_?collection\.(json|ya?ml)$/.test(filePath)) {
           fileTypeCache[filePath] = "Collection";
           didChange = true;
           return fileTypeCache[filePath];
