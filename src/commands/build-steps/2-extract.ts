@@ -64,7 +64,7 @@ export async function extract(
   const extractionConfigs: Record<string, any> = {};
   const stats: Record<string, number> = {};
   const cacheStats: Record<string, { hits: number; misses: number; bypassed: number }> = {};
-  const configKey = objectHash(config);
+  let configKey: string | undefined;
   for (const extraction of allExtractions) {
     if (extraction.configure) {
       const extractionConfig = config.config?.[extraction.id];
@@ -116,8 +116,7 @@ export async function extract(
         fileHandler: files,
       });
 
-      // Metadata is used by extraction and saving; overlap its read with the other cache files.
-      const [storedCaches] = await Promise.all([cachedResource.caches.value, cachedResource.meta.value]);
+      const storedCaches = await cachedResource.caches.value;
       const previous: ExtractionCache = storedCaches[EXTRACTION_CACHE] || {};
       const next: ExtractionCache = Object.create(null);
       const outputClaims = new Map<string, { id: string; cached: boolean }>();
@@ -180,7 +179,7 @@ export async function extract(
             resultKey = objectHash({
               format: 2,
               resourceKey,
-              configKey,
+              configKey: (configKey ||= objectHash(config)),
               config: extractConfig,
               version: extraction.cache.version,
               handler: extraction.handler.toString(),

@@ -177,7 +177,8 @@ function normalizeConfigExport(value: unknown) {
     return (value as Record<string, any>).default || {};
   }
 
-  return value as IIIFRC;
+  // Named ESM exports are a module namespace, not a plain configuration object.
+  return { ...(value as IIIFRC) };
 }
 
 function assertStoreValue(storeName: string, rawStore: any, sourcePath: string) {

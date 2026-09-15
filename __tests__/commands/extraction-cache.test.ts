@@ -274,3 +274,42 @@ test("fingerprints the current Vault after intervening uncached steps", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("dev builds cache named-export JavaScript configs and invalidate changed config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "hss-named-config-"));
+  try {
+    await mkdir(join(root, "content"));
+    await writeFile(join(root, "content/a.json"), JSON.stringify({
+      id: "https://example.org/manifest", type: "Manifest", items: [],
+    }));
+    const configFile = join(root, "iiif.config.mjs");
+    const writeConfig = (value: string) => writeFile(configFile, `
+      export const server = { url: "https://example.org/iiif" };
+      export const run = ["named-cached"];
+      export const stores = { local: { type: "iiif-json", path: "./content", pattern: "**/*.json" } };
+      export const config = { "named-cached": { value: ${JSON.stringify(value)} } };
+    `);
+    let calls = 0;
+    const step: Extraction = {
+      id: "named-cached", name: "Named config", types: ["Manifest"], cache: { version: "1" },
+      invalidate: async () => true,
+      handler: async (_, _api, config) => { calls++; return { meta: { configured: config.value } }; },
+    };
+    const run = () => build({ cwd: root, config: configFile, dev: true, cache: true, ui: false },
+      { ...defaultBuiltIns, extractions: [step] });
+    await writeConfig("first");
+    const first = await run();
+    expect(Object.prototype.toString.call(first.buildConfig.config)).toBe("[object Object]");
+    expect((await run()).extractions.cacheStats[step.id].hits).toBe(1);
+    expect(calls).toBe(1);
+    await writeConfig("changed");
+    const changed = await run();
+    expect(changed.extractions.cacheStats[step.id].misses).toBe(1);
+    expect(calls).toBe(2);
+    const slug = changed.stores.allResources[0].slug;
+    const meta = JSON.parse(await readFile(join(root, changed.buildConfig.cacheDir, slug, "meta.json"), "utf8"));
+    expect(meta.configured).toBe("changed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
