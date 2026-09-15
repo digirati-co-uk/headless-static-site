@@ -282,7 +282,7 @@ test("dev builds cache named-export JavaScript configs and invalidate changed co
     await writeFile(join(root, "content/a.json"), JSON.stringify({
       id: "https://example.org/manifest", type: "Manifest", items: [],
     }));
-    const configFile = join(root, "iiif.config.mjs");
+    let configFile = join(root, "iiif.config.mjs");
     const writeConfig = (value: string) => writeFile(configFile, `
       export const server = { url: "https://example.org/iiif" };
       export const run = ["named-cached"];
@@ -302,6 +302,7 @@ test("dev builds cache named-export JavaScript configs and invalidate changed co
     expect(Object.prototype.toString.call(first.buildConfig.config)).toBe("[object Object]");
     expect((await run()).extractions.cacheStats[step.id].hits).toBe(1);
     expect(calls).toBe(1);
+    configFile = join(root, "changed.config.mjs");
     await writeConfig("changed");
     const changed = await run();
     expect(changed.extractions.cacheStats[step.id].misses).toBe(1);
