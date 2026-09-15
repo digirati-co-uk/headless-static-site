@@ -1,4 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { convertPresentation2 } from "@iiif/parser/presentation-2";
 import micromatch from "micromatch";
@@ -116,20 +115,27 @@ export async function materializeFolderCollections(store: IIIFJSONStore, api: St
     members.get(folder)!.push(item);
   };
   const generatedFolders = new Set(generated.map(({ folder }) => folder));
-  for (const child of resources) {
-    if (child.source.type !== "disk" || !generatedFolders.has(dirname(child.source.filePath))) continue;
-    const source = await api.files.loadJson(child.path);
-    const id = source.id || source["@id"];
-    if (!id) throw new Error(`Missing IIIF id in ${child.path}`);
-    addMember(dirname(child.source.filePath), { id, type: child.type, label: source.label });
+  const children = resources.filter(
+    (child) => child.source.type === "disk" && generatedFolders.has(dirname(child.source.filePath))
+  );
+  const concurrency = api.build.concurrency?.load ?? 4;
+  for (let start = 0; start < children.length; start += concurrency) {
+    const batch = children.slice(start, start + concurrency);
+    const sources = await Promise.all(batch.map((child) => api.files.loadJson(child.path)));
+    for (const [index, child] of batch.entries()) {
+      const source = sources[index];
+      const id = source.id || source["@id"];
+      if (!id) throw new Error(`Missing IIIF id in ${child.path}`);
+      if (child.source.type === "disk")
+        addMember(dirname(child.source.filePath), { id, type: child.type, label: source.label });
+    }
   }
   for (const child of generated) {
     addMember(dirname(child.folder), { id: child.json.id, type: "Collection", label: child.json.label });
   }
   for (const { folder, json, resource } of generated) {
     json.items = [...json.items, ...(members.get(folder) || [])];
-    await mkdir(dirname(resource.path), { recursive: true });
-    await writeFile(resource.path, JSON.stringify(json));
+    await api.files.saveJson(resource.path, json);
   }
   return [...resources, ...generated.map(({ resource }) => resource)];
 }

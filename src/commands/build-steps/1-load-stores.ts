@@ -1,3 +1,5 @@
+import PQueue from "p-queue";
+import { EXTRACTION_CACHE, EXTRACTION_CACHE_COMMIT, validExtractionCache } from "../../util/extraction-cache.ts";
 import nfs from "node:fs";
 import { join } from "node:path";
 import type { IFS } from "unionfs";
@@ -37,13 +39,20 @@ export async function loadStores(
     files,
   } = buildConfig;
 
+  let cacheGeneration: string | undefined;
+  try {
+    if (buildConfig.extractionCacheGeneration)
+      cacheGeneration = await fs.readFile(files.resolve(join(cacheDir, EXTRACTION_CACHE_COMMIT)), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   const allResources: Array<ActiveResourceJson> = [];
   const allPaths: Record<string, string> = {};
   const overrides: Record<string, string> = {};
   const rewrites: Record<string, string> = {};
   const editable: Record<string, string> = {};
   const idsToSlugs: Record<string, { slug: string; type: string }> = {};
-  const uniqueSlugs: string[] = [];
+  const uniqueSlugs = new Set<string>();
 
   let validCount = 0;
   let invalidCount = 0;
@@ -75,74 +84,94 @@ export async function loadStores(
 
     const progress = makeProgressBar("Loading store", resources.length, options.ui);
 
-    for (const resource of resources) {
-      if (options.exact && resource.slug !== options.exact && resource.path !== options.exact) {
-        progress.increment();
-        continue;
-      }
+    const queue = new PQueue({ concurrency: buildConfig.concurrency?.load ?? 4 });
+    const loaded = await Promise.allSettled(
+      resources.map((resource) =>
+        queue.add(async () => {
+          let active: ActiveResourceJson;
+          if (options.exact && resource.slug !== options.exact && resource.path !== options.exact) {
+            progress.increment();
+            return;
+          }
 
-      // Unique slug check. (NEEDS TO HAPPEN AFTER REWRITE)
-      if (uniqueSlugs.includes(resource.slug)) {
-        log(`WARNING: Duplicate slug found: ${resource.slug} in resource: ${resource.path}`);
-        continue;
-      }
-      uniqueSlugs.push(resource.slug);
+          // Unique slug check. (NEEDS TO HAPPEN AFTER REWRITE)
+          if (uniqueSlugs.has(resource.slug)) {
+            log(`WARNING: Duplicate slug found: ${resource.slug} in resource: ${resource.path}`);
+            return;
+          }
+          uniqueSlugs.add(resource.slug);
 
-      // Here we need to actually load the existing folder from the cache if possible.
-      const resourceDir = join(cacheDir, resource.slug);
-      const cachesFile = join(resourceDir, "caches.json");
-      const caches = await files.loadJson(cachesFile);
-      const storeType: Store<any> = (storeTypes as any)[storeConfig.type];
-      const shouldRebuild = !options.cache || (await storeType.invalidate(storeConfig as any, resource, caches));
+          // Here we need to actually load the existing folder from the cache if possible.
+          const resourceDir = join(cacheDir, resource.slug);
+          const cachesFile = join(resourceDir, "caches.json");
+          const caches = await files.loadJson(cachesFile);
+          const storeType: Store<any> = (storeTypes as any)[storeConfig.type];
+          const selectedExtractions = [
+            ...((resource.type === "Manifest" ? buildConfig.manifestExtractions : buildConfig.collectionExtractions) ||
+              []),
+            ...(storeConfig.run || []).map((id: string) => buildConfig.allExtractions?.find((step) => step.id === id)),
+          ];
+          const missingExtractionCache = selectedExtractions.some(
+            (step) =>
+              step?.cache &&
+              step.types.includes(resource.type) &&
+              !(storeConfig.skip || []).includes(step.id) &&
+              !caches[EXTRACTION_CACHE]?.[step.id]
+          );
+          const corruptExtractionCache =
+            EXTRACTION_CACHE in caches && !validExtractionCache(caches[EXTRACTION_CACHE], cacheGeneration);
+          const shouldRebuild =
+            !options.cache ||
+            corruptExtractionCache ||
+            missingExtractionCache ||
+            (await storeType.invalidate(storeConfig as any, resource, caches));
 
-      if (shouldRebuild) {
-        log(`Building ${resource.path}`);
-        invalidCount++;
-        await files.mkdir(resourceDir);
-        const data = await storeType.load(storeConfig as any, resource, resourceDir, {
-          requestCache,
-          storeId: resource.storeId,
-          build: buildConfig,
-          files,
-        });
-        if (!data) {
-          // Then there was a problem loading this store item.
-          progress.increment();
-          continue;
-        }
+          if (shouldRebuild) {
+            log(`Building ${resource.path}`);
+            invalidCount++;
+            await files.mkdir(resourceDir);
+            const data = await storeType.load(storeConfig as any, resource, resourceDir, {
+              requestCache,
+              storeId: resource.storeId,
+              build: buildConfig,
+              files,
+            });
+            if (!data) {
+              // Then there was a problem loading this store item.
+              progress.increment();
+              return;
+            }
 
-        if (data["resource.json"].id && data["resource.json"].saveToDisk) {
-          idsToSlugs[data["resource.json"].id] = {
-            slug: resource.slug,
-            type: resource.type,
-          };
-        }
+            active = data["resource.json"];
 
-        allResources.push(data["resource.json"]);
+            await Promise.all([
+              files.saveJson(join(resourceDir, "resource.json"), data["resource.json"]),
+              files.saveJson(join(resourceDir, "vault.json"), data["vault.json"]),
+              files.saveJson(join(resourceDir, "meta.json"), data["meta.json"]),
+              files.saveJson(join(resourceDir, "caches.json"), data["caches.json"]),
+              files.saveJson(join(resourceDir, "indices.json"), data["indices.json"]),
+            ]);
+          } else {
+            validCount++;
+            const data = await files.loadJson(join(resourceDir, "resource.json"));
+            data.inputKey = resource.inputKey;
+            data.saveToDisk = resource.saveToDisk;
+            await files.saveJson(join(resourceDir, "resource.json"), data);
 
-        await Promise.all([
-          files.saveJson(join(resourceDir, "resource.json"), data["resource.json"]),
-          files.saveJson(join(resourceDir, "vault.json"), data["vault.json"]),
-          files.saveJson(join(resourceDir, "meta.json"), data["meta.json"]),
-          files.saveJson(join(resourceDir, "caches.json"), data["caches.json"]),
-          files.saveJson(join(resourceDir, "indices.json"), data["indices.json"]),
-        ]);
-      } else {
-        validCount++;
-        const data = await files.loadJson(join(resourceDir, "resource.json"));
-        data.inputKey = resource.inputKey;
-        data.saveToDisk = resource.saveToDisk;
-        await files.saveJson(join(resourceDir, "resource.json"), data);
+            active = data;
+          }
 
-        if (data.id && data.saveToDisk) {
-          idsToSlugs[data.id] = {
-            slug: resource.slug,
-            type: resource.type,
-          };
-        }
-        allResources.push(data);
-      }
-
+          return { resource, active };
+        })
+      )
+    );
+    // Drain all work before propagating failures; merge in source order.
+    for (const result of loaded) {
+      if (result.status === "rejected") throw result.reason;
+      if (!result.value) continue;
+      const { resource, active } = result.value;
+      allResources.push(active);
+      if (active.id && active.saveToDisk) idsToSlugs[active.id] = { slug: resource.slug, type: resource.type };
       // Record all paths at the end, the rewrite should have happened by now.
       if (resource.source && resource.source.type === "disk") {
         editable[resource.slug] = resource.source.filePath;

@@ -87,7 +87,6 @@
               "manifestsCollection",
               "collectionsCollection",
               "resources",
-              "resourceDescriptors",
               "sitemap",
               "indices",
               "facets",

@@ -4,13 +4,11 @@ import { cwd } from "node:process";
 import { loadJson } from "./load-json";
 
 export function createFiletypeCache(cacheFile: string) {
-  let isLoaded = false;
+  let loaded: Promise<void> | undefined;
   let didChange = false;
   let fileTypeCache: Record<string, string> = {};
 
   const loadIfExists = async () => {
-    if (isLoaded) return;
-    isLoaded = true;
     if (fs.existsSync(cacheFile)) {
       const file = await fs.promises.readFile(cacheFile, "utf-8");
       try {
@@ -25,7 +23,7 @@ export function createFiletypeCache(cacheFile: string) {
   return {
     //
     async getFileType(filePath: string) {
-      await loadIfExists();
+      await (loaded ||= loadIfExists());
       if (fileTypeCache[filePath]) {
         return fileTypeCache[filePath];
       }
@@ -66,7 +64,7 @@ export function createFiletypeCache(cacheFile: string) {
     },
     async save() {
       if (didChange) {
-        fs.promises.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
+        await fs.promises.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
       }
     },
   };

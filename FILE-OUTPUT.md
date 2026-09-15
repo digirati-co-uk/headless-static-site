@@ -296,6 +296,11 @@ This final slug-to-snippet lookup includes parsed and synthetic resources. It re
 
 ### `meta/resource-descriptors.json`
 
+Optional: emitted only with `output.includeResourceDescriptors: true` (default
+`false`). Enabling it adds processing/output overhead and emits a build warning.
+The `resourceDescriptors` entrypoint is absent when disabled. Validation still
+checks the normal inventory and validates descriptors when supplied.
+
 This lookup contains one descriptor per parsed source resource. Each descriptor records `hss:slug`, canonical IIIF ID, type, optional opaque caller `inputKey`, local-save status, exact emitted file links, and known parent/child source slugs. Portable `provenance` distinguishes local, remote, and locally overridden resources; overrides include only their upstream URL. `origin: "source"` distinguishes these entries from HSS-generated navigation and topic Collections in `meta/resources.json`. It never includes source paths, headers, credentials, or store configuration.
 
 All descriptor links are normalized paths relative to the output root and occur in the build manifest inventory. Use this file for caller correlation and per-resource artifact lists instead of recursively scanning output JSON.

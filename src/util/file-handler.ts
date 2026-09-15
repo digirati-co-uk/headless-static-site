@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
@@ -17,6 +18,7 @@ export class FileHandler {
   root: string;
   copyTargets: Array<{ from: string; to: string; options: any }> = [];
   writtenFiles: Set<string> = new Set();
+  writtenHashes = new Map<string, { bytes: number; sha256: string }>();
   producers: Map<string, string> = new Map();
   ui: boolean;
 
@@ -173,6 +175,21 @@ export class FileHandler {
     this.openJsonChanged.set(filePath, true);
   }
 
+  /** Persist a materialized resource only when its final content changes. */
+  async writeJsonIfChanged(path: string, value: object) {
+    const filePath = this.resolve(path);
+    const data = JSON.stringify(value);
+    let previous: string | undefined;
+    try {
+      previous = await this.fs.promises.readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (previous !== data) await this.writeFile(filePath, data);
+    this.openJsonMap.set(filePath, value);
+    this.openJsonChanged.set(filePath, false);
+  }
+
   async writeFile(path: string, data: any, producer?: string) {
     this.claim(path, producer);
     const filePath = this.resolve(path);
@@ -180,10 +197,16 @@ export class FileHandler {
     await this.fs.promises.mkdir(dirName, { recursive: true });
     await this.fs.promises.writeFile(filePath, data);
     this.writtenFiles.add(filePath);
+    this.writtenHashes.set(filePath, {
+      bytes: typeof data === "string" ? Buffer.byteLength(data) : data.byteLength,
+      sha256: createHash("sha256").update(data).digest("hex"),
+    });
   }
 
   async saveAll(force = false, concurrency = 16) {
     const queue = new PQueue({ concurrency });
+    const timings: Record<string, number> = {};
+    let started = performance.now();
 
     // Open JSON
     const files = Array.from(this.openJsonMap.keys())
@@ -195,7 +218,11 @@ export class FileHandler {
       .filter((k) => (force ? true : this.openBinaryChanged.get(k)))
       .map((k) => [k, this.openBinaryMap.get(k)] as const);
 
-    const progress = makeProgressBar("Writing files", files.length + binaryFiles.length, this.ui);
+    const progress = makeProgressBar(
+      "Writing files",
+      files.length + binaryFiles.length + this.copyTargets.length,
+      this.ui
+    );
     const failedToWrite: any[] = [];
 
     const reserved = new Map<string, string>();
@@ -206,12 +233,18 @@ export class FileHandler {
     ]) {
       reserved.set(filePath, "generated output");
     }
+    const copySources = new Map<string, string>();
+    const hashableCopies = new Set<string>();
+    const currentCopyTree = new Set<string>();
     const reserveCopy = (filePath: string, source: string) => {
+      if (currentCopyTree.has(filePath)) return;
       const existing = reserved.get(filePath);
       if (existing) {
         throw new Error(`Output collision at ${filePath}: ${existing} conflicts with copied file ${source}`);
       }
       reserved.set(filePath, `copied file ${source}`);
+      copySources.set(filePath, source);
+      currentCopyTree.add(filePath);
     };
     const reserveCopyTree = async (source: string, destination: string) => {
       const virtualFile = this.openJsonMap.has(source) || this.openBinaryMap.has(source);
@@ -229,9 +262,33 @@ export class FileHandler {
         entries.map((entry) => reserveCopyTree(join(source, entry.name), join(destination, entry.name)))
       );
     };
-    for (const target of this.copyTargets) {
-      await reserveCopyTree(target.from, target.to);
+    const virtualCopies = new Map(this.copyTargets.map(({ from }) => [from, [] as string[]]));
+    for (const path of new Set([...this.openJsonMap.keys(), ...this.openBinaryMap.keys()])) {
+      for (let directory = dirname(path); directory !== dirname(directory); directory = dirname(directory)) {
+        virtualCopies.get(directory)?.push(path);
+      }
     }
+    for (const target of this.copyTargets) {
+      currentCopyTree.clear();
+      const virtualSources = virtualCopies.get(target.from)!;
+      for (const source of virtualSources) reserveCopy(join(target.to, relative(target.from, source)), source);
+      try {
+        await reserveCopyTree(target.from, target.to);
+      } catch (error) {
+        // A directory containing only buffered files may not exist until writes finish.
+        if (
+          (error as NodeJS.ErrnoException).code !== "ENOENT" ||
+          !virtualSources.length ||
+          this.fs.existsSync(target.from)
+        )
+          throw error;
+      }
+      if (target.options?.overwrite === true && Object.keys(target.options).every((key) => key === "overwrite")) {
+        hashableCopies.add(target.to);
+      }
+    }
+    timings["copy-preflight"] = performance.now() - started;
+    started = performance.now();
     for (const [filePath, data] of files) {
       queue.add(
         async () =>
@@ -249,11 +306,39 @@ export class FileHandler {
 
     await queue.onIdle();
 
-    // Copy fields.
+    timings["writes"] = performance.now() - started;
+    started = performance.now();
+    // Copy chains retain serial semantics; independent targets can run together.
+    if ([...copySources.values()].some((source) => copySources.has(source))) queue.concurrency = 1;
     for (const { from, to, options } of this.copyTargets) {
-      await copy(from, to, options).catch((err) => failedToWrite.push({ filePath: to, err }));
+      queue.add(async () => {
+        try {
+          const json = this.openJsonMap.get(from);
+          const known = this.writtenHashes.get(from);
+          if (json && known && hashableCopies.has(to)) {
+            const data = JSON.stringify(json, null, 2);
+            if (createHash("sha256").update(data).digest("hex") === known.sha256) {
+              // Buffered generated JSON can go straight to its public destination.
+              await this.writeFile(to, data);
+              return;
+            }
+          }
+          await copy(from, to, options);
+          if (hashableCopies.has(to)) {
+            for (const [destination, source] of copySources) {
+              if (destination === to || destination.startsWith(`${to}/`)) {
+                const digest = this.writtenHashes.get(source);
+                if (digest) this.writtenHashes.set(destination, digest);
+              }
+            }
+          }
+        } catch (err) {
+          failedToWrite.push({ filePath: to, err });
+        }
+      });
     }
-
+    await queue.onIdle();
+    timings["copies"] = performance.now() - started;
     progress.stop();
 
     // Clear all copy targets.
@@ -261,7 +346,7 @@ export class FileHandler {
     this.openJsonChanged.clear();
     this.openBinaryChanged.clear();
 
-    return { failedToWrite };
+    return { failedToWrite, timings };
   }
 
   async cachePathExists(to: string) {

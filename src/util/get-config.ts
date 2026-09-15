@@ -13,6 +13,7 @@ import type { SlugConfig } from "./slug-engine.ts";
 export interface BuildConcurrencyConfig {
   cpu?: number;
   io?: number;
+  load?: number;
   link?: number;
   extract?: number;
   enrich?: number;
@@ -51,6 +52,8 @@ export interface IIIFRC {
     topicSlugCollisions?: "error" | "merge";
     includeCanvasIndex?: boolean;
     includeDebugMetadata?: boolean;
+    /** Emit optional per-resource artifact descriptors; adds work to large builds. */
+    includeResourceDescriptors?: boolean;
     includeSourceConfig?: boolean;
   };
 }

@@ -149,3 +149,47 @@ describe("parseStores generated store handling", () => {
     expect(estimates.some((total) => total >= 5)).toBe(true);
   });
 });
+
+test("bounded loading preserves source order and drains failures before returning", async () => {
+  const config: any = createBuildConfig();
+  config.concurrency = { load: 2 };
+  config.config.generators = undefined;
+  const type = config.storeTypes["iiif-json"];
+  const original = type.load;
+  let active = 0,
+    maximum = 0,
+    fail = false;
+  type.load = async (...args: any[]) => {
+    active++;
+    maximum = Math.max(maximum, active);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, args[1].slug.endsWith("slow") ? 15 : 1));
+      if (fail && args[1].slug.endsWith("fast")) throw new Error("load failed");
+      return await original(...args);
+    } finally {
+      active--;
+    }
+  };
+  const parsed: any = {
+    storeResources: {
+      primary: ["slow", "fast", "last"].map((slug) => ({
+        type: "Manifest",
+        slug: `manifests/${slug}`,
+        path: slug,
+        storeId: "primary",
+        saveToDisk: true,
+        source: { type: "remote", url: `https://example.org/${slug}` },
+      })),
+    },
+  };
+  const result = await loadStores(parsed, config);
+  expect(maximum).toBe(2);
+  expect(result.allResources.map((resource) => resource.slug)).toEqual([
+    "manifests/slow",
+    "manifests/fast",
+    "manifests/last",
+  ]);
+  fail = true;
+  await expect(loadStores(parsed, config)).rejects.toThrow("load failed");
+  expect(active).toBe(0);
+});

@@ -6,3 +6,4 @@ export * from "./output-contract";
 export * from "./output-validation";
 export * from "./util/build-progress";
 export * from "./stores/iiif-memory";
+export { getManifestImageServices } from "./util/manifest-image-services.ts";

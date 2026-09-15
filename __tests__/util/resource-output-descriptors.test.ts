@@ -80,3 +80,33 @@ describe("resource output descriptors", () => {
     expect(JSON.stringify(descriptors)).not.toContain("/private/overrides");
   });
 });
+
+test("nested descriptors include descendants without matching sibling slug prefixes", async () => {
+  const resources = await Promise.all(
+    ["collections/a", "collections/a/child", "collections/ab"].map((slug) =>
+      resource(
+        { id: `https://example.org/${slug}`, type: "Collection", items: [] },
+        slug,
+        { type: "memory", index: 0 },
+        true
+      )
+    )
+  );
+  const paths = [
+    "collections/a/collection.json",
+    "collections/a/child/collection.json",
+    "collections/a/child/data.txt",
+    "collections/ab/collection.json",
+  ];
+  const descriptors = await createResourceOutputDescriptors(
+    "",
+    resources,
+    paths.map((path) => ({ path, bytes: 0, sha256: "unused" }))
+  );
+  expect(descriptors["collections/a"].files.extracted).toEqual([
+    "collections/a/child/collection.json",
+    "collections/a/child/data.txt",
+  ]);
+  expect(descriptors["collections/a/child"].files.extracted).toEqual(["collections/a/child/data.txt"]);
+  expect(descriptors["collections/ab"].files.extracted).toEqual([]);
+});

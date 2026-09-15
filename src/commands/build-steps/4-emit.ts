@@ -178,9 +178,8 @@ export async function emit(
         // const source = manifest.source;
 
         // Still always load the resource.
-        const vaultJson = await files.loadJson(cache["vault.json"]);
-        const vault = new Vault();
-        vault.getStore().setState(vaultJson);
+        const vault = manifest.vault || new Vault();
+        if (!manifest.vault) vault.getStore().setState(await files.loadJson(cache["vault.json"]));
 
         // @todo thumbnail extraction step and use this.
         const getMetaThumbnail = async () => {

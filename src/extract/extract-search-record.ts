@@ -38,11 +38,9 @@ export const extractSearchRecord: Extraction = {
     const id = resource.slug.replace("manifests/", "");
     const meta = await api.meta.value;
     const collections = meta.partOfCollections || [];
-
-    // const plaintext = (await api.resourceFiles.readFile("keywords.txt"))?.toString("utf-8") || "";
-    const plaintext = api.resource.metadata.map((i: any) => getValue(i.value)).join(" ");
-
-    // This is what we want to be able to support.
+    // Descriptive fields contain values, so they do not need reactive reference traversal.
+    const description = resource.vault?.get<any>(resource.id) || api.resource;
+    const plaintext = (description.metadata || []).map((i: any) => getValue(i.value)).join(" ");
     return {
       meta: {
         searchTime: performance.now() - startTime,
@@ -53,9 +51,9 @@ export const extractSearchRecord: Extraction = {
           id: btoa(id),
           type: resource.type,
           slug: resource.slug,
-          label: getValue(api.resource.label),
-          full_label: api.resource.label,
-          summary: getValue(api.resource.summary),
+          label: getValue(description.label),
+          full_label: description.label,
+          summary: getValue(description.summary),
           thumbnail: meta.thumbnail?.id,
           url: meta.url,
           plaintext,

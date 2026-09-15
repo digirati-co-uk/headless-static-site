@@ -51,3 +51,36 @@ describe("output safety", () => {
     expect(await readFile(join(testDir, "blocked"), "utf-8")).toBe("not a directory");
   });
 });
+
+test("buffered and directory copies preserve final bytes and expose matching digests", async () => {
+  const root = await mkdtemp(join(tmpdir(), "iiif-hss-copy-digests-"));
+  try {
+    const files = new FileHandler(fs as any, root);
+    await files.saveJson("cache/data.json", { value: "generated" });
+    await mkdir(join(root, "cache"), { recursive: true });
+    await writeFile(join(root, "cache/raw.txt"), "raw");
+    await files.copy("cache/data.json", "build/direct.json", { overwrite: true });
+    await files.copy("cache", "build/folder", { overwrite: true });
+    await mkdir(join(root, "build"), { recursive: true });
+    await writeFile(join(root, "build/existing.json"), "existing");
+    await files.copy("cache/data.json", "build/existing.json", { overwrite: false });
+    await files.copy("cache/data.json", "build/filtered.json", { overwrite: true, filter: () => false });
+    const result = await files.saveAll(false, 2);
+    expect(result.failedToWrite).toEqual([]);
+    const { createHash } = await import("node:crypto");
+    for (const path of ["build/direct.json", "build/folder/data.json"]) {
+      const data = await readFile(join(root, path));
+      expect(files.writtenHashes.get(join(root, path))).toEqual({
+        bytes: data.length,
+        sha256: createHash("sha256").update(data).digest("hex"),
+      });
+      expect(JSON.parse(data.toString())).toEqual({ value: "generated" });
+    }
+    expect(await readFile(join(root, "build/folder/raw.txt"), "utf8")).toBe("raw");
+    expect(await readFile(join(root, "build/existing.json"), "utf8")).toBe("existing");
+    expect(files.writtenHashes.has(join(root, "build/existing.json"))).toBe(false);
+    expect(files.writtenHashes.has(join(root, "build/filtered.json"))).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -160,7 +160,10 @@ export function validateBuildManifest(value: unknown, file = "meta/build.json"):
     "canvasSearch",
   ]) {
     const path = entrypoints[field];
-    if (typeof path === "undefined" && (manifest.mode === "partial" || field === "featuredCollection")) {
+    if (
+      typeof path === "undefined" &&
+      (manifest.mode === "partial" || field === "featuredCollection" || field === "resourceDescriptors")
+    ) {
       continue;
     }
     if (!isSafeOutputPath(path)) {
@@ -323,20 +326,19 @@ export async function validateBuildOutput(
   }
 
   const descriptorFile = manifest.entrypoints.resourceDescriptors;
-  if (!descriptorFile) {
-    fail("meta/build.json", "entrypoints.resourceDescriptors", "is required for output validation");
-  }
-  let descriptorJson: unknown;
-  try {
-    descriptorJson = JSON.parse(await readFile(resolve(root, descriptorFile), "utf8"));
-  } catch (error) {
-    fail(descriptorFile, "$", `invalid JSON: ${(error as Error).message}`);
-  }
-  const descriptors = validateResourceDescriptors(descriptorJson, descriptorFile);
-  for (const [slug, descriptor] of Object.entries(descriptors)) {
-    for (const path of descriptorPaths(descriptor)) {
-      if (!isSafeOutputPath(path) || !inventoryPaths.has(path)) {
-        fail(descriptorFile, `${slug}.files`, `contains a path not present in files (${path})`);
+  if (descriptorFile) {
+    let descriptorJson: unknown;
+    try {
+      descriptorJson = JSON.parse(await readFile(resolve(root, descriptorFile), "utf8"));
+    } catch (error) {
+      fail(descriptorFile, "$", `invalid JSON: ${(error as Error).message}`);
+    }
+    const descriptors = validateResourceDescriptors(descriptorJson, descriptorFile);
+    for (const [slug, descriptor] of Object.entries(descriptors)) {
+      for (const path of descriptorPaths(descriptor)) {
+        if (!isSafeOutputPath(path) || !inventoryPaths.has(path)) {
+          fail(descriptorFile, `${slug}.files`, `contains a path not present in files (${path})`);
+        }
       }
     }
   }

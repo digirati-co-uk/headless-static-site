@@ -275,3 +275,123 @@ client folder layouts, eight separately configured recipes and build verificatio
 
 See [the Vite featured homepage example](examples/vite-featured/README.md) for a
 working page, authoring examples and one runnable build verification script.
+
+
+### Build performance controls
+
+`output.includeResourceDescriptors` defaults to `false`. Enable it when debugging
+per-resource artifact ownership or using caller `inputKey` correlation:
+
+```yaml
+output:
+  includeResourceDescriptors: true
+concurrency:
+  load: 4
+```
+
+Enabling descriptors emits a warning about additional processing and output size.
+The dev server and standard HSS clients do not need them; output validation checks
+them when present. Disabling the flag removes stale descriptors in dev/partial
+output too. `concurrency.load` bounds simultaneous resource loads and local JSON
+reads (default at most four, respecting a lower `concurrency.io`). Source order is
+preserved; set it to `1` for a custom store requiring serial loads.
+
+The programmatic `build()` return value includes `timings` in milliseconds, with
+phase durations and separate `copy-preflight`, `writes`, `copies`, `inventory` and
+`descriptors` timings. The output contract in `meta/build.json` stays focused on
+published files. Run `node benchmarks/build.mjs --cwd <fixture> --report <report.json>`
+after building HSS to record a benchmark. `--no-cache` disables resource-cache
+reuse; it does not clear OS caches or delete the fixture cache.
+
+Folder collections retain their cache-file timestamps when final membership and
+metadata are unchanged. Aggregate collections and featured cards still rebuild,
+so changes to referenced objects are reflected without a dependency graph.
+Delft-owned steps that always invalidate still run. This is not a full incremental
+pipeline: production builds still recreate output to remove deleted resources.
+
+To disable a project-owned SQLite step, remove `manifest-sqlite` from its `run`
+lists. It is already absent from HSS's default steps. The benchmark's
+`--no-sqlite` option applies this change only to its in-memory config. Remove a
+previously generated `files/meta/manifests.db` from the project cache once (or use
+a clean cache), because arbitrary project-script files are otherwise copied again.
+
+### Cacheable extraction results
+
+Manifest and Collection extractions can opt into result caching. Existing scripts
+keep their `invalidate()` behaviour unless they declare `cache`:
+
+```js
+extract(
+  {
+    id: "image-summary",
+    name: "Image summary",
+    types: ["Manifest"],
+    cache: { version: "1" },
+    async collect(temp, api) {
+      // Includes every current resource, even when its handler was cached.
+      await api.fileHandler.saveJson(`${api.build.filesDir}/meta/image-summary.json`, temp);
+    },
+  },
+  async (_, api) => ({ temp: { canvases: api.resource.items.length } })
+);
+```
+
+The key includes normalized Vault state, source/slug, build configuration,
+effective step configuration, handler code and the explicit version. Bump `version`
+when imported helpers or closed-over behaviour changes. Declare other inputs with
+`cache.key(resource, api, config)`; its returned value becomes part of the key. For
+example, a step reading generated schema data can return
+`api.resourceFiles.loadJson("schema.json")`. Include upstream metadata read by the
+handler too. Returning `undefined` bypasses reuse for that invocation.
+
+For an opted-in step, this key replaces `invalidate()`. `build({cache: false})`
+bypasses reuse and records fresh results. Use `extractionCache: false` (CLI:
+`iiif-hss build --no-extraction-cache`) to recompute opted-in handlers while keeping
+source and network caches. Fresh results remain reusable on the next build. `result.extractions.cacheStats` reports
+per-step `hits`, `misses` and `bypassed` counts; the benchmark includes these counts.
+
+**Eligibility:** the handler must return JSON data, must not mutate the resource
+or Vault, and must not write files or perform other side effects. Its output fields
+must be exclusively owned by that step: metadata keys, index keys, cache keys,
+search-record fields, remote-record groups and search-index membership it returns.
+HSS detects overlapping fields returned by per-resource extraction handlers, but cannot detect direct
+mutations or dependencies read through arbitrary user code. Leave such scripts on
+manual invalidation. Canvas extraction and enrichment result caching are not yet
+supported; opting a Canvas extraction into this cache produces an error.
+
+On a hit HSS replays `temp`, `collections`, `meta`, `indices`, `caches` and `search`.
+Collectors still run using all current resources in source order. Previous owned
+fields are cleared before extraction, so removed outputs/steps do not retain old
+values. Snapshots are isolated from collector mutations. Collectors remain
+responsible for rewriting/removing their own generated files.
+
+Missing or corrupt entries rebuild the source resource to discard stale derived
+state. Entries are committed only after output has been saved successfully. A
+partial build can invalidate untouched entries on the next build because the
+commit marker is shared by the cache directory; this is a conservative fallback,
+not a dependency graph. Builds with `emit: false` do not commit reusable entries.
+Resource cache saves are now coalesced to once per resource after its extraction
+steps; steps should use `api.meta`, `api.indices` and `api.caches` to read preceding
+results, not inspect intermediate files as a synchronization mechanism.
+
+This cache avoids handler work. It currently still loads the resource's Vault and
+hashes normalized content to establish identity; it does not make Vault loading
+lazy or skip collection/index rebuilding.
+
+### Image-service discovery
+
+`getManifestImageServices(vault, manifestId)` from `iiif-hss/library` returns ordered
+`{ id, canvasId }` pairs by following the Vault's normalized entity references.
+It covers all canvas item pages, multiple annotation bodies, Choices and
+SpecificResources; recognizes ImageService2/3 (including `@type`) and the Image API
+protocol; and respects context-specific entity frames. It excludes thumbnails and
+unreferenced services. Repeated uses are retained. It neither mutates the Vault nor
+loads external pages. Apply project-specific URL rewrites after discovery.
+
+```js
+import { getManifestImageServices } from "iiif-hss/library";
+
+// Inside a Manifest extraction handler:
+const services = getManifestImageServices(resource.vault, resource.id);
+return services.length ? { temp: services } : {};
+```

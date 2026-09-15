@@ -98,6 +98,7 @@
       "properties": {
         "cpu": { "type": "integer", "minimum": 1 },
         "io": { "type": "integer", "minimum": 1 },
+        "load": { "type": "integer", "minimum": 1 },
         "link": { "type": "integer", "minimum": 1 },
         "extract": { "type": "integer", "minimum": 1 },
         "enrich": { "type": "integer", "minimum": 1 },
@@ -117,6 +118,7 @@
       "properties": {
         "includeCanvasIndex": { "type": "boolean", "default": false },
         "topicSlugCollisions": { "enum": ["error", "merge"], "default": "error" },
+        "includeResourceDescriptors": { "type": "boolean", "default": false, "description": "Emit per-resource artifact descriptors. Adds processing and output overhead to large builds." },
         "includeDebugMetadata": { "type": "boolean", "default": false },
         "includeSourceConfig": { "type": "boolean", "default": false }
       }

@@ -13,6 +13,16 @@ export async function createResourceOutputDescriptors(
 ) {
   const inventoryPaths = new Set(inventory.map(({ path }) => path));
   const descriptors: Record<string, ResourceOutputDescriptor> = {};
+  // Index every ancestor, preserving parent collections' descendant artifact lists.
+  const pathsBySlug = new Map(
+    resources.map((resource) => [resource.slug.replaceAll("\\", "/").replace(/^\/+/, ""), [] as string[]])
+  );
+  for (const path of inventoryPaths) {
+    for (let end = path.lastIndexOf("/"); end !== -1; end = path.lastIndexOf("/", end - 1)) {
+      pathsBySlug.get(path.slice(0, end))?.push(path);
+      if (end === 0) break;
+    }
+  }
 
   const provenanceFor = (resource: ActiveResourceJson): ResourceOutputDescriptor["provenance"] => {
     if (resource.source.type === "remote") {
@@ -26,8 +36,7 @@ export async function createResourceOutputDescriptors(
 
   for (const resource of resources) {
     const outputSlug = resource.slug.split("\\").join("/").replace(/^\/+/, "");
-    const prefix = `${outputSlug}/`;
-    const resourcePaths = [...inventoryPaths].filter((path) => path.startsWith(prefix));
+    const resourcePaths = pathsBySlug.get(outputSlug) || [];
     const iiif = pick(
       inventoryPaths,
       `${outputSlug}/${resource.type === "Manifest" ? "manifest.json" : "collection.json"}`

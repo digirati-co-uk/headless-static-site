@@ -105,3 +105,24 @@ Try adding a manifest to a child folder, reordering `mixed/collection.yml`, or
 changing a selection in `cross-store/_collection.yaml`. Watch mode rebuilds the
 output. Fixed verification assertions describe the supplied fixtures; update them
 when deliberately changing the recipes.
+
+## Cached extraction with collector replay
+
+`scripts/cached-resource-summary.js` opts a returned-data-only Manifest extraction
+into `cache: { version: "1" }`. Its collector publishes `meta/cache-demo.json` with
+labels, canvas counts and image-service references for every current manifest. The output verifier checks
+that the collector includes all manifests.
+
+To exercise cache hits, build HSS and run the benchmark twice from the repository
+root (Vite's production build deliberately requests an uncached HSS build):
+
+```sh
+pnpm run build:tsup
+node benchmarks/build.mjs --cwd examples/vite-collections --report .iiif/collections-first.json
+node benchmarks/build.mjs --cwd examples/vite-collections --report .iiif/collections-second.json
+```
+
+The second report's `extractionCache.cached-resource-summary.hits` shows reused
+results. Editing a manifest invalidates its contribution; collectors and featured
+collections are still rebuilt. See `CONFIG.md` for ownership, dependency and bypass
+rules before enabling caching on a custom step.

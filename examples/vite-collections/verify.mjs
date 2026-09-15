@@ -75,3 +75,10 @@ await walk(root);
 console.log(
   "Verified featured sections, bounded child cards and eight recipes: both client layouts, merges, scripts, namespaces, filters, legacy and cross-store references."
 );
+
+const cacheDemo = JSON.parse(await readFile(new URL("meta/cache-demo.json", root), "utf8"));
+const allManifests = await read("manifests");
+assert.deepEqual(Object.keys(cacheDemo).sort(), allManifests.items.map((item) => item["hss:slug"]).sort());
+for (const entry of Object.values(cacheDemo))
+  assert.ok(entry.label && Number.isInteger(entry.canvases) && Array.isArray(entry.imageServices));
+console.log("Verified cacheable summaries and complete collector input.");

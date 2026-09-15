@@ -1,5 +1,14 @@
 import { join } from "node:path";
 import PQueue from "p-queue";
+import objectHash from "object-hash";
+import {
+  EXTRACTION_CACHE,
+  claimExtractionFields,
+  cacheExtractionResult,
+  clearExtractionContributions,
+  digestExtraction,
+  type ExtractionCache,
+} from "../../util/extraction-cache.ts";
 import type { BuildProgressCallbacks } from "../../util/build-progress.ts";
 import { createCacheResource } from "../../util/cached-resource.ts";
 import { createResourceHandler } from "../../util/create-resource-handler.ts";
@@ -54,6 +63,8 @@ export async function extract(
   );
   const extractionConfigs: Record<string, any> = {};
   const stats: Record<string, number> = {};
+  const cacheStats: Record<string, { hits: number; misses: number; bypassed: number }> = {};
+  const configKey = objectHash(config);
   for (const extraction of allExtractions) {
     if (extraction.configure) {
       const extractionConfig = config.config?.[extraction.id];
@@ -82,9 +93,13 @@ export async function extract(
   const progress = makeProgressBar("Extraction", totalResources, options.ui);
 
   const queue = new PQueue({ concurrency: concurrency.extract });
+  const failures: unknown[] = [];
+  const enqueue = (task: () => Promise<void>) => {
+    void queue.add(task).catch((error) => failures.push(error));
+  };
 
   for (const manifest of allResources) {
-    queue.add(async () => {
+    enqueue(async () => {
       const resourceStoreConfig = config.stores[manifest.storeId] || {};
       const skipSteps = resourceStoreConfig.skip || [];
       const runSteps = resourceStoreConfig.run;
@@ -101,6 +116,13 @@ export async function extract(
         fileHandler: files,
       });
 
+      // Metadata is used by extraction and saving; overlap its read with the other cache files.
+      const [storedCaches] = await Promise.all([cachedResource.caches.value, cachedResource.meta.value]);
+      const previous: ExtractionCache = storedCaches[EXTRACTION_CACHE] || {};
+      const next: ExtractionCache = Object.create(null);
+      const outputClaims = new Map<string, { id: string; cached: boolean }>();
+      await clearExtractionContributions(previous, cachedResource);
+      if (EXTRACTION_CACHE in storedCaches) storedCaches[EXTRACTION_CACHE] = next;
       const resource = await cachedResource.attachVault();
       buildConfig.trace?.setResourceInfo(manifest, {
         label: resource?.label,
@@ -135,20 +157,54 @@ export async function extract(
           storeConfig,
           resourceStoreConfig.config?.[extraction.id] || {}
         );
-        const valid =
-          !options.cache ||
-          (await extraction.invalidate(
-            manifest,
-            {
-              caches: cachedResource.caches,
-              resource,
-              build: buildConfig,
-              fileHandler: files,
-              resourceFiles,
-              filesDir,
-            },
-            extractConfig
-          ));
+        const invalidateApi = {
+          caches: cachedResource.caches,
+          resource,
+          build: buildConfig,
+          fileHandler: files,
+          resourceFiles,
+          filesDir,
+          meta: cachedResource.meta,
+          indices: cachedResource.indices,
+          searchRecord: cachedResource.searchRecord,
+        };
+        let resultKey: string | undefined;
+        let hit = false;
+        if (extraction.cache) {
+          if (!extraction.cache.version) throw new Error(`Missing cache version for ${extraction.id}`);
+          const dependency = extraction.cache.key
+            ? await extraction.cache.key(manifest, invalidateApi, extractConfig)
+            : null;
+          if (dependency !== undefined) {
+            const resourceKey = digestExtraction(manifest.vault!.getStore().getState());
+            resultKey = objectHash({
+              format: 2,
+              resourceKey,
+              configKey,
+              config: extractConfig,
+              version: extraction.cache.version,
+              handler: extraction.handler.toString(),
+              dependency,
+              slug: manifest.slug,
+              source: manifest.source,
+            });
+          }
+          const counts = (cacheStats[extraction.id] ||= { hits: 0, misses: 0, bypassed: 0 });
+          const entry = previous[extraction.id];
+          hit = Boolean(options.cache && options.extractionCache !== false && resultKey && entry?.key === resultKey);
+          if (hit) {
+            claimExtractionFields(outputClaims, extraction.id, true, entry.result);
+            next[extraction.id] = { ...entry, generation: buildConfig.extractionCacheGeneration };
+            cachedResource.handleResponse(structuredClone(entry.result), extraction);
+            counts.hits++;
+          } else if (!options.cache || options.extractionCache === false || !resultKey) counts.bypassed++;
+          else counts.misses++;
+        }
+        const valid = extraction.cache
+          ? !hit
+          : !options.cache ||
+            Boolean(previous[extraction.id]) ||
+            (await extraction.invalidate(manifest, invalidateApi, extractConfig));
         if (valid) {
           log(`Running extract: ${extraction.name} for ${manifest.slug}`);
           const startExtract = performance.now();
@@ -171,13 +227,38 @@ export async function extract(
           buildConfig.trace?.extraction(manifest, extraction, result, startExtract, performance.now());
           stats[extraction.id] = (stats[extraction.id] || 0) + performance.now() - startExtract;
 
-          cachedResource.handleResponse(result, extraction);
+          if (extraction.cache) {
+            const entry = cacheExtractionResult(resultKey || "", result, buildConfig.extractionCacheGeneration);
+            claimExtractionFields(outputClaims, extraction.id, true, entry.result);
+            next[extraction.id] = { ...entry, generation: buildConfig.extractionCacheGeneration };
+            cachedResource.handleResponse(structuredClone(entry.result), extraction);
+          } else {
+            claimExtractionFields(outputClaims, extraction.id, false, result);
+            cachedResource.handleResponse(result, extraction);
+          }
         } else {
           buildConfig.trace?.extractionCacheHit(manifest, extraction);
         }
-
-        savingFiles.push(cachedResource.save());
       }
+      if (Object.keys(next).length || EXTRACTION_CACHE in storedCaches) {
+        cachedResource.handleResponse({ caches: { [EXTRACTION_CACHE]: next } }, { id: EXTRACTION_CACHE });
+        // Persist deleted fields even when a removed step no longer returns any data.
+        for (const [field, filename] of [
+          ["meta", "meta.json"],
+          ["indices", "indices.json"],
+          ["search", "search-record.json"],
+        ] as const) {
+          if (Object.values(previous).some(({ result }) => result[field])) {
+            const data = field === "search" ? cachedResource.searchRecord : cachedResource[field];
+            await files.saveJson(join(cacheDir, manifest.slug, filename), await data.value);
+          }
+        }
+      }
+      savingFiles.push(
+        cachedResource.save().catch((error) => {
+          failures.push(error);
+        })
+      );
 
       progress.increment();
 
@@ -211,6 +292,8 @@ export async function extract(
           const canvasResource = canvasCache.getCanvasResource();
 
           for (const canvasExtraction of canvasExtractions) {
+            if (canvasExtraction.cache)
+              throw new Error("Result caching currently supports Manifest and Collection extractions only");
             const storeConfig = extractionConfigs[canvasExtraction.id] || {};
             const extractConfig = Object.assign(
               {},
@@ -272,7 +355,11 @@ export async function extract(
             canvasCache.handleResponse(result, canvasExtraction);
           }
 
-          savingFiles.push(canvasCache.save());
+          savingFiles.push(
+            canvasCache.save().catch((error) => {
+              failures.push(error);
+            })
+          );
 
           progress.increment();
           canvasIndex++;
@@ -306,6 +393,15 @@ export async function extract(
   await queue.onIdle();
   log(`Saving ${savingFiles.length} files`);
   await Promise.all(savingFiles);
+  if (failures.length) throw failures[0];
+  // Cache hits must not change collector or generated membership order.
+  const resourceOrder = new Map(allResources.map((resource, index) => [resource.slug, index]));
+  const compareResources = (a: string, b: string) =>
+    (resourceOrder.get(a) ?? Infinity) - (resourceOrder.get(b) ?? Infinity);
+  for (const members of Object.values(collections)) members.sort(compareResources);
+  for (const id of Object.keys(temp)) {
+    temp[id] = Object.fromEntries(Object.entries(temp[id]).sort(([a], [b]) => compareResources(a, b)));
+  }
 
   for (const extraction of allExtractions) {
     if (extraction.close) {
@@ -322,7 +418,7 @@ export async function extract(
       if (extraction.injectManifest && resp && resp.temp) {
         const inject = extraction.injectManifest;
         for (const manifestSlug of Object.keys(resp.temp)) {
-          queue.add(async () => {
+          enqueue(async () => {
             const extractionConfig = extractionConfigs[extraction.id] || {};
             const foundManifest = allResources.find((r) => r.slug === manifestSlug);
             if (!foundManifest) {
@@ -352,10 +448,11 @@ export async function extract(
   }
 
   await queue.onIdle();
+  if (failures.length) throw failures[0];
 
   progress.stop();
 
   stats._total = performance.now() - startTime;
 
-  return { collections, stats };
+  return { collections, stats, cacheStats };
 }

@@ -118,6 +118,23 @@ export interface Extraction<Config = any, Temp = any, TempInject = any> {
   name: string;
   types: string[];
   alwaysRun?: boolean;
+  /** Opt in only for deterministic returned data with exclusively owned output fields.
+   * File writes and Vault mutations are not replayed. Bump version when helpers change.
+   * key declares extra inputs (upstream metadata, generated files, external revisions).
+   * Return undefined from key to bypass caching for this invocation.
+   */
+  cache?: {
+    version: string;
+    key?: (
+      resource: ActiveResourceJson,
+      api: ExtractionInvalidateApi & {
+        meta: LazyValue<any>;
+        indices: LazyValue<Record<string, string[]>>;
+        searchRecord: LazyValue<Partial<SearchRecordReturn>>;
+      },
+      config: Config
+    ) => Promise<unknown> | unknown;
+  };
   search?: Record<string, SearchExtractionConfig>;
   close?: (config: Config) => Promise<void>;
   collect?: (

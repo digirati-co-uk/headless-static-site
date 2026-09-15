@@ -17,6 +17,7 @@ program
   .command("build")
   .description("Build headless static site")
   .option("--no-cache", "Disable caching")
+  .option("--no-extraction-cache", "Recompute cacheable extractions while retaining source caches")
   .option("--no-network-cache", "Disable network request caching")
   .option("-w, --watch", "Watch for changes")
   .option("-s, --scripts <path>", "Build scripts")

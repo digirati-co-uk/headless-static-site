@@ -195,7 +195,7 @@ export async function parseStores(
         ) {
           // An authored collection owns this folder; retain its membership and metadata.
           const authored = await files.loadJson(previous.path, true);
-          const generated = await files.loadJson(resource.path, true);
+          const generated = await files.loadJson(resource.path);
           const id = authored.id || authored["@id"];
           if (!id) throw new Error(`Missing IIIF id in ${previous.path}`);
           folderAliases.set(generated.id, id);
@@ -213,7 +213,7 @@ export async function parseStores(
     if (folderAliases.size) {
       for (const resource of storeResources[storeId]) {
         if (!resource.virtual) continue;
-        const collection = await files.loadJson(resource.path, true);
+        const collection = await files.loadJson(resource.path);
         const seen = new Set<string>();
         collection.items = (collection.items || []).filter((item: any) => {
           if (!item || typeof item !== "object") return true;
@@ -222,8 +222,8 @@ export async function parseStores(
           seen.add(item.id);
           return true;
         });
-        // Virtual collections are loaded fresh from disk in the next build phase.
-        await files.fs.promises.writeFile(files.resolve(resource.path), JSON.stringify(collection));
+        // Keep aliases in memory until the final membership is resolved.
+        await files.saveJson(resource.path, collection);
       }
     }
     const totalDiscovered = Object.values(storeResources).reduce((total, all) => total + all.length, 0);
@@ -238,11 +238,11 @@ export async function parseStores(
     if (resource.source.type === "remote") return storeRequestCaches[resource.storeId].fetch(resource.path);
     if (resource.source.type === "memory")
       return effectiveStoreConfigs[resource.storeId].inputs[resource.source.index].resource;
-    return files.loadJson(resource.virtual ? resource.path : resource.source.filePath, true);
+    return files.loadJson(resource.virtual ? resource.path : resource.source.filePath, !resource.virtual);
   };
   for (const resource of Object.values(storeResources).flat()) {
     if (!resource.virtual || resource.type !== "Collection") continue;
-    const collection = await files.loadJson(resource.path, true);
+    const collection = await files.loadJson(resource.path);
     const seen = new Set<string>();
     const items = [];
     for (const entry of collection.items || []) {
@@ -266,7 +266,7 @@ export async function parseStores(
       seen.add(item.id);
     }
     collection.items = items;
-    await files.fs.promises.writeFile(files.resolve(resource.path), JSON.stringify(collection));
+    await files.writeJsonIfChanged(resource.path, collection);
   }
 
   return {

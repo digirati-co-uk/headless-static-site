@@ -101,6 +101,7 @@ describe("linker integration", () => {
     );
 
     const customConfig = {
+      output: { includeResourceDescriptors: true },
       run: ["demo-linker"],
       stores: {
         local: {
@@ -318,6 +319,7 @@ describe("linker integration", () => {
             inputKeys: { "demo.json": "site-resource-1" },
           },
         },
+        output: { includeResourceDescriptors: true },
         server: { url: "http://localhost:7111" },
       },
       fileHandler: new FileHandler(fs as any, testDir, false),
@@ -442,6 +444,7 @@ describe("linker integration", () => {
               ],
             },
           },
+          output: { includeResourceDescriptors: true },
           server: { url: "https://site.example" },
         },
         fetch: request as typeof fetch,
@@ -477,6 +480,7 @@ describe("linker integration", () => {
     const fileHandler = new FileHandler(fs as any, testDir, false);
     const configFor = (input: Record<string, any>) => ({
       stores: { supplied: { type: "iiif-memory" as const, inputs: [{ resource, ...input }] } },
+      output: { includeResourceDescriptors: true },
       server: { url: "https://site.example" },
     });
 

@@ -3,6 +3,7 @@ server:
 run:
   - extract-collection-thumbnail
   - fill-empty-collection
+  - cached-resource-summary
 collections:
   index:
     label: Collection recipes

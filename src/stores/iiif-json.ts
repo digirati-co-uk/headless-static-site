@@ -40,7 +40,6 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
     const newAllFiles: Array<[string, string]> = [];
     const subFileMap: Record<string, string[]> = {};
 
-
     if (store.subFiles) {
       // Check for sub-files.
       // Sub-files work like this:
@@ -76,36 +75,40 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
     }
 
     const manifests: ParsedResource[] = [];
-    for (const [file, fileWithoutExtension] of newAllFiles) {
-      const fileType = await api.build.fileTypeCache.getFileType(file);
-      if (!fileType) {
-        api.build.log(`Warning: Could not determine file type for "${file}"`);
-      }
-      const source: ProtoResourceDirectory["resource.json"]["source"] = {
-        type: "disk",
-        path: store.path,
-        filePath: file,
-      };
-
-      if (store.path) {
-        const dir = dirname(file);
-        if (dir) {
-          source.relativePath = relative(store.path, dir);
+    const concurrency = api.build.concurrency?.load ?? 4;
+    for (let start = 0; start < newAllFiles.length; start += concurrency) {
+      const batch = newAllFiles.slice(start, start + concurrency);
+      const types = await Promise.all(batch.map(([file]) => api.build.fileTypeCache.getFileType(file)));
+      for (const [index, [file, fileWithoutExtension]] of batch.entries()) {
+        const fileType = types[index];
+        if (!fileType) {
+          api.build.log(`Warning: Could not determine file type for "${file}"`);
         }
+        const source: ProtoResourceDirectory["resource.json"]["source"] = {
+          type: "disk",
+          path: store.path,
+          filePath: file,
+        };
+
+        if (store.path) {
+          const dir = dirname(file);
+          if (dir) {
+            source.relativePath = relative(store.path, dir);
+          }
+        }
+
+        manifests.push({
+          path: file,
+          slug: fileWithoutExtension,
+          type: fileType || "Manifest",
+          storeId: api.storeId,
+          subFiles: subFileMap[fileWithoutExtension],
+          source: source,
+          saveToDisk: true,
+          inputKey: store.inputKeys?.[file] || store.inputKeys?.[relative(store.path, file)],
+        });
       }
-
-      manifests.push({
-        path: file,
-        slug: fileWithoutExtension,
-        type: fileType || "Manifest",
-        storeId: api.storeId,
-        subFiles: subFileMap[fileWithoutExtension],
-        source: source,
-        saveToDisk: true,
-        inputKey: store.inputKeys?.[file] || store.inputKeys?.[relative(store.path, file)],
-      });
     }
-
     return materializeFolderCollections(store, api, manifests);
   },
 
@@ -168,7 +171,6 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
       }
     }
 
-
     try {
       const res = await vault.load<Manifest>(id, json);
       if (!res) {
@@ -201,7 +203,7 @@ export const IIIFJSONStore: Store<IIIFJSONStore> = {
 
 export async function getKey(store: { subFiles?: boolean }, resource: ParsedResource) {
   const file = await stat(resource.path);
-  const key = `${file.mtime}-${file.ctime}-${file.size}`;
+  const key = `${file.mtimeMs}-${file.ctimeMs}-${file.size}`;
 
   if (store.subFiles && !resource.virtual) {
     const subFilesFolderPath = resource.path.replace(".json", "");
@@ -211,7 +213,7 @@ export async function getKey(store: { subFiles?: boolean }, resource: ParsedReso
       const keys = [];
       for (const fileName of allFiles) {
         const file = await stat(fileName);
-        keys.push(`${file.mtime}-${file.ctime}-${file.size}`);
+        keys.push(`${file.mtimeMs}-${file.ctimeMs}-${file.size}`);
       }
 
       const dirHash = objectHash(keys);

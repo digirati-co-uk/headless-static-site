@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { join } from "node:path";
 import { cwd as nodeCwd } from "node:process";
@@ -39,6 +40,7 @@ export type BuildOptions = {
   cache?: boolean;
   cacheRoot?: string;
   networkCache?: boolean;
+  extractionCache?: boolean;
   exact?: string;
   watch?: boolean;
   debug?: boolean;
@@ -66,6 +68,7 @@ export type BuildOptions = {
 };
 
 export interface QueueConcurrencySettings {
+  load: number;
   link: number;
   extract: number;
   enrich: number;
@@ -150,6 +153,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const cpuConcurrency = normalizeConcurrency(concurrencyConfig.cpu, defaultCpuConcurrency);
   const ioConcurrency = normalizeConcurrency(concurrencyConfig.io, defaultIoConcurrency);
   const concurrency: QueueConcurrencySettings = {
+    load: normalizeConcurrency(concurrencyConfig.load, Math.min(4, ioConcurrency)),
     link: normalizeConcurrency(concurrencyConfig.link, cpuConcurrency),
     extract: normalizeConcurrency(concurrencyConfig.extract, cpuConcurrency),
     enrich: normalizeConcurrency(concurrencyConfig.enrich, cpuConcurrency),
@@ -248,10 +252,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const enrichments = selectScripts(allEnrichments);
   const linkers = selectScripts(allLinkers);
   // Store-only steps need lifecycle hooks too; unselected project scripts must not run setup/collect.
-  const activeScriptIds = new Set([
-    ...toRun,
-    ...stores.flatMap((store) => config.stores[store].run || []),
-  ]);
+  const activeScriptIds = new Set([...toRun, ...stores.flatMap((store) => config.stores[store].run || [])]);
   const availableScripts = <T extends { id: string }>(scripts: T[]) =>
     useBuiltInScripts ? scripts : scripts.filter((script) => activeScriptIds.has(script.id));
 
@@ -296,11 +297,9 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   })();
 
   const topicsDir = join(cwd, topicFolder);
-  const configUrl =
-    (typeof server === "string" ? resolveHostUrl(server) : server?.url ? resolveHostUrl(server.url) : server?.url)?.replace(
-      /\/+$/,
-      ""
-    );
+  const configUrl = (
+    typeof server === "string" ? resolveHostUrl(server) : server?.url ? resolveHostUrl(server.url) : server?.url
+  )?.replace(/\/+$/, "");
   if (options.emit && !configUrl) {
     throw new Error(
       "A canonical server URL is required when emitting output. Set server.url in the IIIF configuration or SERVER_URL."
@@ -380,6 +379,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     virtualCacheDir,
     topicsDir,
     cacheDir,
+    extractionCacheGeneration: randomUUID(),
     buildDir,
     filesDir,
     stores,
