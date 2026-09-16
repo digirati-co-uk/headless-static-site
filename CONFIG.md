@@ -221,7 +221,58 @@ store-filtered) builds and builds without emission skip this phase. Store-level
 `run`/`skip` do not select finalizers because they operate on the site-wide graph.
 Remote collections without a local output document are not finalized or fetched.
 
-The first built-in is `featured-part-of`:
+The default run list includes `collection-item-order` and `collection-thumbnail`.
+Projects with an explicit `run` list select them explicitly, in this order:
+
+```yaml
+run:
+  # Keep your existing extraction/enrichment and membership-editing steps.
+  - collection-item-order
+  - collection-thumbnail
+  - featured-part-of
+config:
+  collection-item-order:
+    language: en
+    byCollection:
+      collections/archive: label
+      stores/local: source
+      collections/curated: preserve
+```
+
+`collection-item-order` preserves authored member order and explicit root/featured
+lists by default. Generated aggregates retain their source-order, label-order or
+mixed root-index policy. Exact-slug `byCollection` rules override those defaults;
+use `""` for the root index. Modes are `label`, `source` and `preserve`. Unknown
+collections or modes fail the build. Label ordering uses `Intl.Collator`, defaults
+to English, prefers the requested language, and breaks ties by slug/ID. Source
+ordering uses the original build resource order, with slug/ID fallback for members
+without an ordinal. Topic-key and registry-key construction order is unchanged.
+
+`collection-thumbnail` preserves explicit thumbnails and otherwise chooses the
+first available member image in finalized order, following nested local collections
+without a depth limit. Manifest/external references contribute existing thumbnails;
+this step makes no network requests. Cycles are guarded, image-free collections
+remain without a thumbnail, and featured/root/topic/store aggregates can now
+inherit thumbnails too. The fallback uses one image, preserving its properties;
+explicit thumbnail arrays are retained in full.
+
+When this step runs, earlier collection-item thumbnail fallback is disabled and
+legacy cached metadata marked `hss:thumbnail.source: collection-item` is ignored
+for output thumbnail selection. `extract-collection-thumbnail` remains available
+(and in the default extraction list) for its existing metadata consumers, including
+search and debug tools; it no longer determines final collection thumbnails in
+these builds. Its metadata/search results still describe the earlier extraction
+phase, not later membership edits. Explicit metadata overrides with other thumbnail
+sources and authored topic YAML remain authoritative.
+
+Builds omitting the new steps retain legacy behavior. Partial and non-emitting
+builds retain their earlier extraction/emission behavior. `builtInScripts: false`
+disables the built-ins. No finalizers are silently appended to an explicit run
+list. Put membership edits and renames before ordering, and ordering before
+thumbnail fallback and breadcrumbs. To change a derived thumbnail, edit the
+membership before selection; to force an image, set `thumbnail` explicitly.
+
+`featured-part-of` is separately opt-in:
 
 ```yaml
 run:
@@ -269,6 +320,8 @@ Select `collection-style` in `run` and put its options under
 `config.collection-style` (for example `background: "#f00"`). The handler receives
 mutable output JSON, an API with `slug`, `collections` (keyed by slug; root index
 uses `""`) and the project `config`, plus the step's options as its third argument.
+The API also exposes read-only `sourceOrder` and `orderPolicies` maps for display
+policies; they contain no source filesystem paths and are not emitted into IIIF.
 Optional `configure(api, options)` runs once and supplies the handler's third
 argument; optional `close(options)` runs after the step, including handler failures.
 Programmatic builds can supply `BuildBuiltIns.collectionFinalizers`.

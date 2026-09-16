@@ -4,6 +4,9 @@ run:
   - folder-collections
   - extract-collection-thumbnail
   - feature-heritage
+  - collection-item-order
+  - collection-thumbnail
+  - featured-part-of
 stores:
   local:
     type: iiif-json
@@ -13,6 +16,9 @@ stores:
     pattern: '**/*.json'
     subFiles: true
 config:
+  collection-item-order:
+    byCollection:
+      collections/printed-works: label
   folder-collections:
     labelStrategy: metadata
 collections:

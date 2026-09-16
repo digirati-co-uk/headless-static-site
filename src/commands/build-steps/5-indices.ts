@@ -1,3 +1,4 @@
+import type { CollectionOrder } from "../../util/finalize-collection.ts";
 import fs from "node:fs";
 import { dirname, join } from "node:path";
 import type { Collection, InternationalString } from "@iiif/presentation-3";
@@ -40,7 +41,7 @@ export async function indices(
     searchIndexes?: SearchIndexes;
     allIndices?: Record<string, string[]>;
   },
-  { options, configUrl, buildDir, config, cacheDir, topicsDir, collectionRewrites, files, trace }: BuildConfig
+  { options, configUrl, buildDir, config, cacheDir, topicsDir, collectionRewrites, files, trace, lateCollectionOrdering, lateCollectionThumbnails, collectionOrder = new Map<string, CollectionOrder>() }: BuildConfig
 ) {
   if (options.exact || options.stores?.length) {
     return;
@@ -50,7 +51,16 @@ export async function indices(
   function write(file: string, content: any) {
     return files.writeFile(file, content);
   }
-  function writeJson(file: string, content: any) {
+  function writeJson(file: string, content: any, order: CollectionOrder = "preserve") {
+    if (content?.type === "Collection") {
+      collectionOrder.set(content["hss:slug"] || "", order);
+      if (!lateCollectionOrdering && content.items) {
+        if (order === "source") content.items.sort(bySourceOrder);
+        if (order === "label") content.items.sort(byLabel);
+        if (order === "index") content.items.sort((a: any, b: any) =>
+          a.type !== b.type ? (a.type === "Manifest" ? -1 : 1) : a.type === "Manifest" ? bySourceOrder(a, b) : byLabel(a, b));
+      }
+    }
     if (content?.type === "Collection" && content["hss:slug"] && content.items) {
       collectionItems[content["hss:slug"]] = content.items;
     }
@@ -166,12 +176,11 @@ export async function indices(
             .map((slug) => {
               return indexCollection[slug];
             })
-            .filter(Boolean)
-            .sort(bySourceOrder),
+            .filter(Boolean),
         };
         indexCollection[collectionSlug] = collectionSnippet;
         await files.mkdir(join(buildDir, collectionSlug));
-        await writeJson(join(buildDir, collectionSlug, "collection.json"), collection);
+        await writeJson(join(buildDir, collectionSlug, "collection.json"), collection, "source");
 
         topLevelCollection.push(collectionSnippet);
       }
@@ -306,15 +315,14 @@ export async function indices(
             .map((slug: string) => {
               return indexCollection[slug];
             })
-            .filter((e) => e)
-            .sort(bySourceOrder),
+            .filter((e) => e),
         };
 
         await files.mkdir(join(buildDir, "topics", topicTypeId, topicId));
 
         (topicCollection as any)["hss:totalItems"] = topicCollection.items.length;
         (topicCollectionSnippet as any)["hss:totalItems"] = topicCollection.items.length;
-        await writeJson(join(buildDir, "topics", topicTypeId, topicId, "collection.json"), topicCollection);
+        await writeJson(join(buildDir, "topics", topicTypeId, topicId, "collection.json"), topicCollection, "source");
         await writeJson(join(buildDir, "topics", topicTypeId, topicId, "meta.json"), topicMeta);
       }
 
@@ -351,8 +359,8 @@ export async function indices(
 
   const defaultIndexItems = indexCollection
     ? [
-        ...Object.values(indexCollection).filter((item) => item.type === "Manifest").sort(bySourceOrder),
-        ...Object.values(indexCollection).filter((item) => item.type === "Collection").sort(byLabel),
+        ...Object.values(indexCollection).filter((item) => item.type === "Manifest"),
+        ...Object.values(indexCollection).filter((item) => item.type === "Collection"),
       ]
     : [];
 
@@ -364,14 +372,14 @@ export async function indices(
       slug: "manifests",
     }) as Collection;
 
-    manifestCollectionJson.items = [...manifestCollection].sort(bySourceOrder);
+    manifestCollectionJson.items = [...manifestCollection];
     (manifestCollectionJson as any)["hss:totalItems"] = manifestCollection.length;
     indexCollection.manifests = {
       ...manifestCollectionJson,
       items: undefined,
     };
 
-    await writeJson(join(buildDir, "manifests", "collection.json"), manifestCollectionJson);
+    await writeJson(join(buildDir, "manifests", "collection.json"), manifestCollectionJson, "source");
   }
 
   if (storeCollections) {
@@ -394,8 +402,8 @@ export async function indices(
 
         return writeJson(join(buildDir, "stores", `${storeId}/collection.json`), {
           ...storeCollectionSnippet,
-          items: [...items].sort(bySourceOrder),
-        });
+          items: [...items],
+        }, "source");
       });
 
     const topLevelCollectionJson = createCollection({
@@ -411,7 +419,7 @@ export async function indices(
       slug: "collections/stores",
       configUrl,
     }) as Collection;
-    storeCollectionsCollectionJson.items = storeCollectionSnippets.sort(byLabel);
+    storeCollectionsCollectionJson.items = storeCollectionSnippets;
     (storeCollectionsCollectionJson as any)["hss:totalItems"] = storeCollectionSnippets.length;
     topLevelCollection.push(storeCollectionsCollectionJson);
     indexCollection["collections/stores"] = {
@@ -419,16 +427,16 @@ export async function indices(
       items: undefined,
     };
 
-    topLevelCollectionJson.items = topLevelCollection.sort(byLabel);
+    topLevelCollectionJson.items = topLevelCollection;
     (topLevelCollectionJson as any)["hss:totalItems"] = topLevelCollection.length;
     indexCollection.collections = {
       ...topLevelCollectionJson,
       items: undefined,
     };
     await files.mkdir(join(buildDir, "collections"));
-    await writeJson(join(buildDir, "collections/collection.json"), topLevelCollectionJson);
+    await writeJson(join(buildDir, "collections/collection.json"), topLevelCollectionJson, "label");
     await files.mkdir(join(buildDir, "collections", "stores"));
-    await writeJson(join(buildDir, "collections", "stores", "collection.json"), storeCollectionsCollectionJson);
+    await writeJson(join(buildDir, "collections", "stores", "collection.json"), storeCollectionsCollectionJson, "label");
 
     await Promise.all(storeCollectionsJson);
   }
@@ -437,9 +445,9 @@ export async function indices(
     if (Object.prototype.hasOwnProperty.call(indexCollection, "featured")) {
       throw new Error('The slug "featured" is reserved when collections.featured is configured');
     }
-    const featured = createFeaturedCollection(config.collections.featured, configUrl, indexCollection, collectionItems);
+    const featured = createFeaturedCollection(config.collections.featured, configUrl, indexCollection, collectionItems, { order: lateCollectionOrdering, thumbnail: lateCollectionThumbnails });
     await files.mkdir(join(buildDir, "featured"));
-    await writeJson(join(buildDir, "featured", "collection.json"), featured);
+    await writeJson(join(buildDir, "featured", "collection.json"), featured, config.collections.featured.items === undefined ? "label" : "preserve");
     indexCollection.featured = { ...featured, items: undefined };
   }
 
@@ -456,7 +464,7 @@ export async function indices(
       return indexCollection[slug];
     });
     (indexCollectionJson as any)["hss:totalItems"] = indexCollectionJson.items.length;
-    await writeJson(join(buildDir, "collection.json"), indexCollectionJson);
+    await writeJson(join(buildDir, "collection.json"), indexCollectionJson, items === undefined ? "index" : "preserve");
   }
 
   // Search indexes.

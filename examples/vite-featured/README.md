@@ -46,6 +46,11 @@ stylesheet falls back to system sans-serif when offline.
 - Cards display authored “Objects in collection” metadata separately from the
   computed direct member count. The sample holdings/descriptions are illustrative.
 - The root index explicitly references `featured` and `manifests`.
+- Late finalizers sort the printed-works cards by label, derive missing collection
+  thumbnails from the final member order, then add `partOf` breadcrumb chains.
+  Change `config.collection-item-order.byCollection` in `.iiifrc.yml` to try
+  `label`, `source` or `preserve`. The featured and collection JSON contain the
+  breadcrumb references; the example does not render a breadcrumb navigation bar.
 
 To replace automatic selection and change the section order, add to `.iiifrc.yml`:
 
@@ -63,7 +68,7 @@ featured configuration disables output; remove `featured` from the root index's
 explicit list at the same time.
 
 `pnpm build` runs `verify.mjs` after Vite: a small assertion script checking the
-actual generated sections, enrichment, source summaries, metadata, background colours, counts,
+actual generated sections, enrichment, source summaries, metadata, background colours, late ordering, breadcrumbs, counts,
 thumbnail fallbacks, automatic folders and bounded embedding. It expects the
 original fixture/configuration; restore those after trying editorial changes.
 

@@ -1,4 +1,4 @@
-import type { CollectionFinalizer } from "./finalize-collection.ts";
+import type { CollectionFinalizer, CollectionOrder } from "./finalize-collection.ts";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -257,6 +257,9 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const enrichments = selectScripts(allEnrichments);
   const linkers = selectScripts(allLinkers);
   const collectionFinalizers = selectScripts(allCollectionFinalizers);
+  const fullEmission = options.emit && !options.exact && !options.stores?.length;
+  const lateCollectionOrdering = Boolean(fullEmission && collectionFinalizers.some((step) => step.id === "collection-item-order"));
+  const lateCollectionThumbnails = Boolean(fullEmission && collectionFinalizers.some((step) => step.id === "collection-thumbnail"));
   // Store-only steps need lifecycle hooks too; unselected project scripts must not run setup/collect.
   const activeScriptIds = new Set([...toRun, ...stores.flatMap((store) => config.stores[store].run || [])]);
   const availableScripts = <T extends { id: string }>(scripts: T[]) =>
@@ -382,6 +385,9 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     manifestEnrichment,
     collectionEnrichment,
     collectionFinalizers,
+    lateCollectionOrdering,
+    lateCollectionThumbnails,
+    collectionOrder: new Map<string, CollectionOrder>(),
     requestCacheDir,
     virtualCacheDir,
     topicsDir,

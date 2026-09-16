@@ -1,3 +1,5 @@
+import { collectionItemOrder } from "../finalize/collection-item-order.ts";
+import { collectionThumbnail } from "../finalize/collection-thumbnail.ts";
 import { featuredPartOf } from "../finalize/featured-part-of.ts";
 import { finalizeCollections } from "./build-steps/6-finalize-collections.ts";
 import { EXTRACTION_CACHE_COMMIT } from "../util/extraction-cache.ts";
@@ -122,6 +124,8 @@ const defaultRun = [
   extractFilesList.id,
   extractCollectionThumbnail.id,
   filesRewrite.id,
+  collectionItemOrder.id,
+  collectionThumbnail.id,
 ];
 
 const buildInRewrites: Rewrite[] = [
@@ -185,7 +189,7 @@ export const defaultBuiltIns: BuildBuiltIns = {
   rewrites: buildInRewrites,
   extractions: builtInExtractions,
   enrichments: buildInEnrichments,
-  collectionFinalizers: [featuredPartOf],
+  collectionFinalizers: [collectionItemOrder, collectionThumbnail, featuredPartOf],
   linkers: builtInLinkers,
   defaultCacheDir,
   defaultBuildDir,

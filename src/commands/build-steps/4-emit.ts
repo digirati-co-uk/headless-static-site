@@ -30,7 +30,7 @@ export async function emit(
     allPaths?: Record<string, string>;
     idsToSlugs?: Record<string, { slug: string; type: string }>;
   },
-  { options, configUrl, cacheDir, buildDir, log, imageServiceLoader, files, search, concurrency, config }: BuildConfig,
+  { options, configUrl, cacheDir, buildDir, log, imageServiceLoader, files, search, concurrency, config, lateCollectionThumbnails, lateCollectionOrdering }: BuildConfig,
   { canvasSearchIndex }: { canvasSearchIndex?: CanvasSearchIndex }
 ) {
   if (!options.emit) {
@@ -141,6 +141,7 @@ export async function emit(
     }
 
     const metaJson = await files.loadJson(metaPath);
+    if (lateCollectionThumbnails && metaJson["hss:thumbnail"]?.source === "collection-item") return null;
     const thumbnail = normalizeThumbnail(
       (metaJson as any)["hss:thumbnail"]?.image || (metaJson as any).thumbnail || (metaJson as any).default?.thumbnail
     );
@@ -186,6 +187,7 @@ export async function emit(
         const getMetaThumbnail = async () => {
           try {
             const metaJson = await files.loadJson(cache["meta.json"]);
+            if (manifest.type === "Collection" && lateCollectionThumbnails && metaJson["hss:thumbnail"]?.source === "collection-item") return null;
             return metaJson["hss:thumbnail"]?.image || metaJson.thumbnail || metaJson.default?.thumbnail || null;
           } catch (err) {
             return null;
@@ -377,7 +379,7 @@ export async function emit(
               resource.items = rewrittenItems as any;
             }
 
-            if (!resource.thumbnail && resource.items?.length) {
+            if (!lateCollectionThumbnails && !resource.thumbnail && resource.items?.length) {
               const firstItemWithThumbnail = resource.items.find((item: any) => item?.thumbnail);
               const derivedItemThumbnail = normalizeThumbnail(firstItemWithThumbnail?.thumbnail);
               if (derivedItemThumbnail) {
@@ -553,7 +555,7 @@ export async function emit(
     const snippet = indexCollection[resource.slug];
     if (!snippet) continue;
     snippet["hss:totalItems"] = members.length;
-    snippet.thumbnail ||= collectionItems[resource.slug].find((item) => item.thumbnail?.length)?.thumbnail;
+    if (!lateCollectionThumbnails) snippet.thumbnail ||= collectionItems[resource.slug].find((item) => item.thumbnail?.length)?.thumbnail;
     if (resource.saveToDisk) {
       const path = join(buildDir, resource.slug, "collection.json");
       const collection = await files.loadJson(path);
@@ -576,9 +578,9 @@ export async function emit(
     (resourceOrdinal.get(a?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) -
       (resourceOrdinal.get(b?.["hss:slug"]) ?? Number.MAX_SAFE_INTEGER) ||
     String(a?.["hss:slug"] || "").localeCompare(String(b?.["hss:slug"] || ""));
-  manifestCollection.sort(bySourceOrder);
-  for (const items of Object.values(storeCollections)) {
-    items.sort(bySourceOrder);
+  if (!lateCollectionOrdering) {
+    manifestCollection.sort(bySourceOrder);
+    for (const items of Object.values(storeCollections)) items.sort(bySourceOrder);
   }
 
   // Emit the canvasSearchIndexFile

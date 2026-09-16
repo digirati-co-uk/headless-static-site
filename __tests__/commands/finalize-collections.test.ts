@@ -178,3 +178,88 @@ test("later renames update breadcrumb labels without nesting ancestor paths", as
   expect(deep.partOf[2].label).toEqual({ en: ["New B"] });
   expect(deep.partOf.every((ancestor: any) => !ancestor.partOf && !ancestor.items)).toBe(true);
 });
+
+test("ordering precedes thumbnails and breadcrumbs, ignores legacy cached fallbacks, and propagates removals", async () => {
+  const { config, run, read, write } = await fixture();
+  await write("content/a/e/_collection.yml", "label: E\n");
+  const image = (id: string) => ({ id: `https://example.org/${id}.jpg`, type: "Image" });
+  const manifest = (id: string) => ({
+    id: `https://example.org/${id}`,
+    type: "Manifest",
+    label: { en: [id] },
+    thumbnail: [image(id)],
+    items: [],
+  });
+  await write("content/a/e/object.json", manifest("e"));
+  await write("content/a/b/c/d/object.json", manifest("b"));
+  config.run = ["extract-collection-thumbnail"];
+  expect((await read(await run(), "collections/a/collection.json")).thumbnail[0].id).toBe(image("b").id);
+  const builtIns = {
+    ...defaultBuiltIns,
+    collectionFinalizers: [
+      ...defaultBuiltIns.collectionFinalizers!,
+      {
+        id: "edit-members",
+        name: "Edit members",
+        handler(collection: FinalCollection, { slug }: { slug: string }) {
+          if (slug === "collections/a/b") collection.label = { en: ["Z"] };
+        },
+      },
+    ],
+  };
+  config.run = [
+    "extract-collection-thumbnail",
+    "edit-members",
+    "collection-item-order",
+    "collection-thumbnail",
+    "featured-part-of",
+  ];
+  Object.assign(config, { config: { "collection-item-order": { byCollection: { "collections/a": "label" } } } });
+  const result = await run(builtIns);
+  const a = await read(result, "collections/a/collection.json");
+  expect(a.items.map((item: any) => item["hss:slug"])).toEqual(["collections/a/e", "collections/a/b"]);
+  expect(a.thumbnail).toEqual([image("e")]);
+  const featured = await read(result, "featured/collection.json");
+  expect(featured.items[0].thumbnail).toEqual(a.thumbnail);
+  expect(featured.items[0].items.map((item: any) => item.id)).toEqual(a.items.map((item: any) => item.id));
+  expect(featured.items[0].items.every((item: any) => item.items === undefined)).toBe(true);
+  expect((await read(result, "meta/resources.json"))["collections/a"].thumbnail).toEqual(a.thumbnail);
+  builtIns.collectionFinalizers[builtIns.collectionFinalizers.length - 1].handler = (collection, { slug }) => {
+    if (slug === "collections/a") collection.items = [];
+  };
+  const removed = await run(builtIns);
+  expect((await read(removed, "collections/a/collection.json")).thumbnail).toBeUndefined();
+  expect((await read(removed, "featured/collection.json")).items[0].thumbnail).toBeUndefined();
+  expect((await read(removed, "meta/resources.json"))["collections/a"].thumbnail).toBeUndefined();
+  await write("content/a/_collection.yml", { label: "A", thumbnail: [image("authored"), image("second")] });
+  expect((await read(await run(builtIns), "collections/a/collection.json")).thumbnail).toEqual([
+    image("authored"),
+    image("second"),
+  ]);
+});
+
+test("default generated ordering matches legacy output and preserves authored member lists", async () => {
+  const { config, run, read, write } = await fixture();
+  await write("content/a/b/_collection.json", { label: "Zulu" });
+  await write("content/a/e/_collection.yml", "label: Alpha\n");
+  config.run = [];
+  const legacy = await run();
+  const resources = await read(legacy, "meta/resources.json");
+  const paths = [
+    "collection.json",
+    ...Object.entries(resources)
+      .filter(([, value]: any) => value.type === "Collection")
+      .map(([slug]) => `${slug}/collection.json`),
+  ];
+  const previous = await Promise.all(
+    paths.map(async (path) => (await read(legacy, path)).items.map((item: any) => item.id))
+  );
+  config.run = ["collection-item-order"];
+  const migrated = await run();
+  for (const [index, path] of paths.entries()) {
+    expect(
+      (await read(migrated, path)).items.map((item: any) => item.id),
+      path
+    ).toEqual(previous[index]);
+  }
+});

@@ -24,7 +24,8 @@ export function createFeaturedCollection(
   config: NonNullable<NonNullable<IIIFRC["collections"]>["featured"]>,
   configUrl: string | undefined,
   resources: Record<string, any>,
-  collectionItems: Record<string, any[]>
+  collectionItems: Record<string, any[]>,
+  finalize: { order?: boolean; thumbnail?: boolean } = {}
 ) {
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     throw new Error("collections.featured must be an object");
@@ -43,6 +44,7 @@ export function createFeaturedCollection(
           resources[slug].behavior?.includes("hss:featured")
       )
       .sort((a, b) => {
+        if (finalize.order) return 0;
         const label = (slug: string) => String(Object.values(resources[slug].label || {})[0]?.[0] || slug);
         return label(a).localeCompare(label(b)) || a.localeCompare(b);
       });
@@ -68,7 +70,7 @@ export function createFeaturedCollection(
     if (members) {
       section.items = members.map(reference);
       section["hss:totalItems"] = members.length;
-      section.thumbnail ||= section.items.find((item: any) => item.thumbnail?.length)?.thumbnail;
+      if (!finalize.thumbnail) section.thumbnail ||= section.items.find((item: any) => item.thumbnail?.length)?.thumbnail;
     }
     return section;
   });

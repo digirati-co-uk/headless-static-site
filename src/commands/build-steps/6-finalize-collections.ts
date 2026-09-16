@@ -15,7 +15,7 @@ export async function finalizeCollections(
     siteMap?: Record<string, any>;
   },
   sourceResources: ActiveResourceJson[],
-  { options, collectionFinalizers = [], files, buildDir, config }: BuildConfig
+  { options, collectionFinalizers = [], files, buildDir, config, collectionOrder }: BuildConfig
 ) {
   if (!options.emit || options.exact || options.stores?.length || !collectionFinalizers.length || !resources) return;
   const remote = new Set(sourceResources.filter((resource) => !resource.saveToDisk).map((resource) => resource.slug));
@@ -26,7 +26,12 @@ export async function finalizeCollections(
   const collections: Record<string, FinalCollection> = Object.fromEntries(
     await Promise.all([...paths].map(async ([slug, path]) => [slug, await files.loadJson(path)]))
   );
-  const api = { collections, config };
+  const api = {
+    collections,
+    config,
+    orderPolicies: collectionOrder,
+    sourceOrder: new Map(sourceResources.map((resource, index) => [resource.slug, index])),
+  };
   const snippet = ({ items, "@context": context, annotations, structures, ...metadata }: any) => metadata;
   for (const step of collectionFinalizers) {
     const before = structuredClone(collections);

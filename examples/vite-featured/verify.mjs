@@ -15,6 +15,7 @@ for (const section of featured.items) {
   const canonical = await read(`${section["hss:slug"]}/collection.json`);
   assert.deepEqual(section.summary, canonical.summary);
   assert.equal(section.background, canonical.background);
+  assert.deepEqual(section.partOf.map((parent) => parent["hss:slug"]), ["featured"]);
   assert.equal(section["hss:totalItems"], canonical.items.length);
   assert.ok(section.behavior.includes("hss:featured"));
   for (const card of section.items) {
@@ -31,6 +32,10 @@ assert.ok(
   heritage.items.find((item) => item["hss:slug"].endsWith("/navigation")).thumbnail.length,
   "Thumbnail fallback"
 );
+const printed = featured.items[1];
+const printedLabels = printed.items.map((item) => item.label.en[0]);
+assert.deepEqual(printedLabels, [...printedLabels].sort(new Intl.Collator("en").compare));
+assert.deepEqual(heritage.items.find((item) => item["hss:slug"].endsWith("/navigation")).partOf.map((parent) => parent["hss:slug"]), ["featured", "collections/heritage"]);
 const images = featured.items[2];
 assert.ok(images.items.some((item) => item.type === "Manifest"));
 assert.ok(
