@@ -2,8 +2,8 @@
 
 A complete static collection homepage driven by one generated IIIF document:
 `/iiif/featured/collection.json`. Its hero, section headings, descriptions, cards,
-images, metadata and counts come from the build output. Custom behaviours select
-yellow, blue and orange sections and horizontal carousels.
+images, metadata, background colours and counts come from the build output.
+The custom `background` property colours cards; behaviours enable horizontal carousels.
 
 From the repository root, after `pnpm install`:
 
@@ -33,8 +33,12 @@ stylesheet falls back to system sans-serif when offline.
   collection enrichment and updates its summary. The other sections are marked
   directly in their sidecars. `images/_collection.yaml` demonstrates the alternate
   extension. The store intentionally uses `**/*.json` and `subFiles: true`.
-- Remove or change a section's theme/carousel behaviour: the page falls back to
-  neutral cards / a grid. Unknown behaviours are ignored by the frontend.
+- Change `background: "#f8d447"` in a section sidecar to colour its cards. A card's
+  own `background` overrides that default: `heritage/astronomy/_collection.yml`
+  uses lavender (`"#d9c9f2"`). Quote hex colours so YAML treats them as strings.
+  Without either property, cards use the neutral default.
+- Remove a section's carousel behaviour to switch to a grid. Unknown behaviours
+  are ignored by the frontend.
 - `fixtures/images/details` has no sidecar: HSS creates it as an automatic folder
   collection. `heritage/navigation` inherits a thumbnail from its immediate item.
 - Images mixes a direct Manifest card with collection cards, including an item
@@ -59,7 +63,7 @@ featured configuration disables output; remove `featured` from the root index's
 explicit list at the same time.
 
 `pnpm build` runs `verify.mjs` after Vite: a small assertion script checking the
-actual generated sections, enrichment, source summaries, metadata, counts,
+actual generated sections, enrichment, source summaries, metadata, background colours, counts,
 thumbnail fallbacks, automatic folders and bounded embedding. It expects the
 original fixture/configuration; restore those after trying editorial changes.
 

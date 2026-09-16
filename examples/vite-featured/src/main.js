@@ -32,6 +32,7 @@ function card(item) {
   const anchor = link("", route(item));
   anchor.append(image(item));
   const body = el("div", "card-body");
+  if (typeof item.background === "string") body.style.backgroundColor = item.background;
   body.append(
     el("span", "eyebrow", item.type === "Collection" ? "Collection" : "From the archive"),
     el("h3", "", text(item.label))
@@ -50,10 +51,8 @@ function card(item) {
 function section(resource, index) {
   const node = el("section", "collection-section");
   const behaviors = resource.behavior || [];
-  const color = ["yellow", "blue", "orange"].find((name) =>
-    behaviors.includes(`https://example.org/behaviors/theme-${name}`)
-  );
-  if (color) node.classList.add(color);
+  if (typeof resource.background === "string" && CSS.supports("color", resource.background))
+    node.style.setProperty("--accent", resource.background);
   const heading = el("div", "section-heading");
   const description = el("div");
   description.append(

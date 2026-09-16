@@ -6,5 +6,5 @@ summary:
     - Discover a selection of illustrated works from our teaching collection.
 behavior:
   - hss:featured
-  - https://example.org/behaviors/theme-blue
   - https://example.org/behaviors/carousel
+background: "#bad3f8"

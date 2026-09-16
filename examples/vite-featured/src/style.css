@@ -6,8 +6,6 @@
   font-synthesis: none;
   --navy: #242159;
   --yellow: #f8d447;
-  --blue: #bad3f8;
-  --orange: #facba2;
 }
 * {
   box-sizing: border-box;
@@ -191,15 +189,6 @@ h1 {
   width: 76%;
   margin: 76px auto;
   --accent: #dfdfdc;
-}
-.collection-section.yellow {
-  --accent: var(--yellow);
-}
-.collection-section.blue {
-  --accent: var(--blue);
-}
-.collection-section.orange {
-  --accent: var(--orange);
 }
 .section-heading {
   display: flex;

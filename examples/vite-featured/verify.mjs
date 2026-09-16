@@ -14,6 +14,7 @@ assert.deepEqual(
 for (const section of featured.items) {
   const canonical = await read(`${section["hss:slug"]}/collection.json`);
   assert.deepEqual(section.summary, canonical.summary);
+  assert.equal(section.background, canonical.background);
   assert.equal(section["hss:totalItems"], canonical.items.length);
   assert.ok(section.behavior.includes("hss:featured"));
   for (const card of section.items) {
@@ -23,7 +24,8 @@ for (const section of featured.items) {
 }
 const heritage = featured.items[0];
 assert.match(heritage.summary.en[0], /observatory/, "Enrichment must update the featured section");
-assert.ok(heritage.behavior.includes("https://example.org/behaviors/theme-yellow"));
+assert.deepEqual(featured.items.map((item) => item.background), ["#f8d447", "#bad3f8", "#facba2"]);
+assert.equal(heritage.items.find((item) => item["hss:slug"].endsWith("/astronomy")).background, "#d9c9f2");
 assert.ok(heritage.items[0].metadata.length);
 assert.ok(
   heritage.items.find((item) => item["hss:slug"].endsWith("/navigation")).thumbnail.length,
@@ -40,5 +42,5 @@ assert.ok(
   "Missing image fallback must be demonstrable"
 );
 console.log(
-  "Featured homepage verified: selection, enrichment, metadata, counts, folders, thumbnails and bounded embedding."
+  "Featured homepage verified: selection, enrichment, metadata, backgrounds, counts, folders, thumbnails and bounded embedding."
 );

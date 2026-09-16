@@ -14,3 +14,4 @@ metadata:
 thumbnail:
   - id: /images/astronomy.jpg
     type: Image
+background: "#d9c9f2"
