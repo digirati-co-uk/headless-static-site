@@ -189,3 +189,37 @@ test("curated slugs resolve remote and memory inputs using their owning store", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test.each(["collection.json", "collection.yml", "collection.yaml", "_collection.json", "_collection.yml", "_collection.yaml"])(
+  "%s preserves arbitrary properties in resources and snippets across rebuilds",
+  async (filename) => {
+    const { root, write, manifest, store, run, read } = await fixture();
+    try {
+      const properties = { background: "#f00", custom: { enabled: false, count: 0, values: ["a", "b"] }, nullable: null };
+      const declaration = { label: "Custom collection", ...properties };
+      await write(`content/example/${filename}`, filename.endsWith(".json") ? declaration :
+        'label: Custom collection\nbackground: "#f00"\ncustom: { enabled: false, count: 0, values: [a, b] }\nnullable: null\n');
+      await write("content/example/object.json", { ...manifest("object"), ...properties });
+      const stores = { local: store("content") };
+      for (const cache of [false, true]) {
+        await run(stores, cache);
+        const collection = await read("collections/example");
+        expect(collection).toMatchObject(properties);
+        expect(collection.items[0]).toMatchObject(properties);
+        const resources = JSON.parse(await readFile(join(root, ".iiif/build/meta/resources.json"), "utf8"));
+        expect(resources["collections/example"]).toMatchObject(properties);
+        expect(resources["manifests/object"]).toMatchObject(properties);
+        expect(resources["collections/example"]).not.toHaveProperty("items");
+        expect(collection).not.toHaveProperty("iiif-parser:hasPart");
+        const output = JSON.parse(await readFile(join(root, ".iiif/build/manifests/object/manifest.json"), "utf8"));
+        expect(output).toMatchObject(properties);
+      }
+      await write(`content/example/${filename}`, { ...declaration, background: "#0f0" });
+      await run(stores, true);
+      expect(await read("collections/example")).toMatchObject({ background: "#0f0" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+);

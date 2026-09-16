@@ -217,13 +217,19 @@ Folder declarations may be named `collection.json`, `collection.yml`,
 `collection.yaml`, `_collection.json`, `_collection.yml` or `_collection.yaml`.
 They are discovered independently of a JSON-only store pattern, including when
 `subFiles: true`. Only one declaration may define a folder. Declarations support
+arbitrary properties, including custom fields such as `background`, alongside
 IIIF `label`, `summary`, `thumbnail`, `behavior`, `metadata` and `items`; strings in
 labels/summaries/metadata become language maps. IDs are generated when omitted;
 existing IDs are preserved internally and rewritten to public output URLs.
-Presentation 2 declarations are upgraded to Presentation 3.
+Presentation 2 declarations are upgraded to Presentation 3. Custom properties
+are preserved in emitted resources and collection/index snippets, including
+properties in ordinary manifest JSON. Snippets omit resource bodies (`items`,
+`annotations`, `structures`) and the JSON-LD context; generated public IDs and
+`hss:slug` still follow the configured output routing.
 
 ```yaml
 label: Scientific instruments
+background: "#f00" # Quote colours: an unquoted # starts a YAML comment.
 summary: Instruments used in teaching and research.
 behavior:
   - hss:featured

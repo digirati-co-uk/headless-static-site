@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Vault, createThumbnailHelper } from "@iiif/helpers";
+import { emptyCollection, emptyManifest } from "@iiif/parser";
 import type { Canvas, Collection, Manifest } from "@iiif/presentation-3";
 import PQueue from "p-queue";
 import { getValue } from "../../extract/extract-label-string.ts";
@@ -208,6 +209,12 @@ export async function emit(
 
         if (!resource) return;
 
+        // The IIIF serializer omits extension properties retained by the Vault.
+        const defaults = resource.type === "Collection" ? emptyCollection : emptyManifest;
+        Object.assign(resource, Object.fromEntries(Object.entries(ref).filter(([key]) =>
+          !Object.prototype.hasOwnProperty.call(defaults, key) && key !== "@context" && !key.startsWith("iiif-parser:")
+        )));
+
         siteMap[manifest.slug] = {
           type: manifest.type,
           label: getValue(resource.label),
@@ -261,18 +268,11 @@ export async function emit(
           }
         }
 
+        const { "@context": _context, items: _items, annotations: _annotations, structures: _structures, ...properties } =
+          resource as Manifest;
         const snippet = {
+          ...properties,
           id: url,
-          type: resource.type,
-          label: resource.label,
-          summary: resource.summary,
-          metadata: resource.metadata,
-          rights: resource.rights,
-          requiredStatement: resource.requiredStatement,
-          provider: resource.provider,
-          homepage: resource.homepage,
-          navDate: resource.navDate,
-          behavior: resource.behavior,
           "hss:slug": manifest.slug,
           "hss:totalItems": resource.type === "Collection" ? resource.items?.length || 0 : undefined,
           thumbnail:
