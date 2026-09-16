@@ -1,4 +1,5 @@
 import { EXTRACTION_CACHE_COMMIT } from "../util/extraction-cache.ts";
+import { isSafeOutputPath } from "../output-validation.ts";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { watch as watchFs } from "node:fs/promises";
@@ -522,6 +523,17 @@ async function buildInternal(
   // Collectors may write public metadata before enrichment setup runs.
   await buildConfig.files.mkdir(join(buildConfig.filesDir, "meta"));
   const isPartialBuild = Boolean(buildConfig.options.exact || buildConfig.options.stores?.length);
+  let previousOutput: string[] = [];
+  if (buildConfig.options.dev && buildConfig.options.emit && !isPartialBuild) {
+    try {
+      const previous = JSON.parse(await buildConfig.files.fs.promises.readFile(
+        buildConfig.files.resolve(join(buildConfig.buildDir, "meta/build.json")), "utf8"
+      ));
+      previousOutput = (previous.files || []).map((file: OutputFile) => file.path).filter(isSafeOutputPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
   if (buildConfig.options.emit && !buildConfig.options.dev && !isPartialBuild) {
     await buildConfig.files.remove(buildConfig.buildDir);
   }
@@ -654,6 +666,10 @@ async function buildInternal(
 
     const inventoryStarted = performance.now();
     const resolvedOutputRoot = buildConfig.files.resolve(buildConfig.buildDir);
+    for (const path of previousOutput) {
+      const absolute = join(resolvedOutputRoot, path);
+      if (!buildConfig.files.writtenFiles.has(absolute)) await buildConfig.files.remove(absolute);
+    }
     outputRoot = resolvedOutputRoot;
     const inventory: OutputFile[] = [];
     const inventoryQueue = new PQueue({ concurrency: buildConfig.concurrency.write });

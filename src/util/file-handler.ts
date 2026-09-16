@@ -7,6 +7,8 @@ import { parse as parseYaml } from "yaml";
 import { isEmpty } from "./is-empty";
 import { makeProgressBar } from "./make-progress-bar";
 
+export type SavedFile = { sha256: string; size: number; mtimeMs: number; ctimeMs: number; ino: number };
+
 export class FileHandler {
   fs: IFS;
   toSave: Set<string> = new Set();
@@ -21,6 +23,16 @@ export class FileHandler {
   writtenHashes = new Map<string, { bytes: number; sha256: string }>();
   producers: Map<string, string> = new Map();
   ui: boolean;
+  // Dev builds share only immutable write signatures, never mutable parsed Vaults.
+  savedFiles?: Map<string, SavedFile>;
+  captureRoot?: string;
+  capturedFiles = new Map<string, Buffer>();
+  writeStats = { written: 0, skipped: 0, skippedBytes: 0 };
+  readSnapshot?: { root: string; files: Map<string, Buffer> };
+
+  private inSnapshot(path: string) {
+    return Boolean(this.readSnapshot && path.startsWith(`${this.readSnapshot.root}/`));
+  }
 
   constructor(fs: IFS, root: string, ui = false) {
     this.fs = fs;
@@ -58,6 +70,7 @@ export class FileHandler {
   }
 
   exists(filePath: string) {
+    if (this.inSnapshot(this.resolve(filePath))) return this.readSnapshot!.files.has(this.resolve(filePath));
     if (this.openJsonMap.has(this.resolve(filePath))) {
       return true;
     }
@@ -66,6 +79,7 @@ export class FileHandler {
   }
 
   existsBinary(filePath: string) {
+    if (this.inSnapshot(this.resolve(filePath))) return this.readSnapshot!.files.has(this.resolve(filePath));
     if (this.openBinaryMap.has(this.resolve(filePath))) {
       return true;
     }
@@ -84,6 +98,11 @@ export class FileHandler {
 
   async readFile(path: string) {
     const filePath = this.resolve(path);
+    if (this.inSnapshot(filePath)) {
+      const bytes = this.readSnapshot!.files.get(filePath);
+      if (!bytes) throw Object.assign(new Error(`No snapshot file: ${filePath}`), { code: "ENOENT" });
+      return bytes;
+    }
     if (this.openBinaryMap.has(filePath)) {
       return this.openBinaryMap.get(filePath) as Buffer;
     }
@@ -102,6 +121,12 @@ export class FileHandler {
 
   async openJson(path: string, allowEmpty = false, fresh = false) {
     const filePath = this.resolve(path);
+    if (this.inSnapshot(filePath)) {
+      const bytes = this.readSnapshot!.files.get(filePath);
+      if (!bytes && allowEmpty) return {};
+      if (!bytes) throw Object.assign(new Error(`No snapshot file: ${filePath}`), { code: "ENOENT" });
+      return JSON.parse(bytes.toString("utf8"));
+    }
     if (!fresh && this.openJsonMap.has(filePath)) {
       return this.openJsonMap.get(filePath);
     }
@@ -126,12 +151,23 @@ export class FileHandler {
   }
 
   async mkdir(path: string) {
-    await this.fs.promises.mkdir(this.resolve(path), { recursive: true });
+    const resolved = this.resolve(path);
+    if (this.directories.has(resolved)) return;
+    await this.fs.promises.mkdir(resolved, { recursive: true });
+    this.directories.add(resolved);
   }
 
   async remove(path: string) {
     const resolved = this.resolve(path);
     await this.fs.promises.rm(resolved, { recursive: true, force: true });
+    for (const key of this.directories) {
+      if (key === resolved || key.startsWith(`${resolved}/`)) this.directories.delete(key);
+    }
+    for (const map of [this.savedFiles, this.capturedFiles]) {
+      if (map) for (const key of map.keys()) {
+        if (key === resolved || key.startsWith(`${resolved}/`)) map.delete(key);
+      }
+    }
     for (const collection of [this.openJsonMap, this.openJsonChanged, this.openBinaryMap, this.openBinaryChanged]) {
       for (const key of collection.keys()) {
         if (key === resolved || key.startsWith(`${resolved}/`)) {
@@ -193,14 +229,38 @@ export class FileHandler {
   async writeFile(path: string, data: any, producer?: string) {
     this.claim(path, producer);
     const filePath = this.resolve(path);
-    const dirName = dirname(filePath);
-    await this.fs.promises.mkdir(dirName, { recursive: true });
-    await this.fs.promises.writeFile(filePath, data);
-    this.writtenFiles.add(filePath);
-    this.writtenHashes.set(filePath, {
+    const digest = {
       bytes: typeof data === "string" ? Buffer.byteLength(data) : data.byteLength,
       sha256: createHash("sha256").update(data).digest("hex"),
-    });
+    };
+    const previous = this.savedFiles?.get(filePath);
+    let unchanged = false;
+    if (previous?.sha256 === digest.sha256) {
+      try {
+        const stat = await this.fs.promises.stat(filePath);
+        unchanged = stat.size === previous.size && stat.mtimeMs === previous.mtimeMs &&
+          stat.ctimeMs === previous.ctimeMs && stat.ino === previous.ino;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    if (unchanged) {
+      this.writeStats.skipped++;
+      this.writeStats.skippedBytes += digest.bytes;
+    } else {
+      await this.mkdir(dirname(filePath));
+      await this.fs.promises.writeFile(filePath, data);
+      this.writeStats.written++;
+      if (this.savedFiles) {
+        const { size, mtimeMs, ctimeMs, ino } = await this.fs.promises.stat(filePath);
+        this.savedFiles.set(filePath, { sha256: digest.sha256, size, mtimeMs, ctimeMs, ino });
+      }
+    }
+    this.writtenFiles.add(filePath);
+    this.writtenHashes.set(filePath, digest);
+    if (this.captureRoot && (filePath === this.captureRoot || filePath.startsWith(`${this.captureRoot}/`))) {
+      this.capturedFiles.set(filePath, Buffer.from(data));
+    }
   }
 
   async saveAll(force = false, concurrency = 16) {
@@ -324,6 +384,9 @@ export class FileHandler {
             }
           }
           await copy(from, to, options);
+          for (const [destination] of copySources) {
+            if (destination === to || destination.startsWith(`${to}/`)) this.writtenFiles.add(destination);
+          }
           if (hashableCopies.has(to)) {
             for (const [destination, source] of copySources) {
               if (destination === to || destination.startsWith(`${to}/`)) {

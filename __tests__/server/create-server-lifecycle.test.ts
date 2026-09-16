@@ -59,7 +59,7 @@ describe("createServer build lifecycle", () => {
     await vi.waitFor(() => expect(buildMock).toHaveBeenCalledTimes(1));
     rejectFirst(new Error("first failed"));
     await firstRejection;
-    await expect(second).resolves.toEqual(result);
+    await expect(second).resolves.toMatchObject(result);
 
     expect(maxActive).toBe(1);
     expect(events).toEqual(["start", "error", "start", "success"]);
@@ -79,4 +79,48 @@ describe("createServer build lifecycle", () => {
 
     await expect(server._extra.cachedBuild({})).rejects.toBe(original);
   });
+});
+
+test.each([false, "false"])("POST build accepts and normalizes cache=%s", async (cache) => {
+  buildMock.mockReset();
+  buildMock.mockResolvedValue({ ...result, emitted: { stats: {}, siteMap: {} }, extractions: {}, enrichments: {} });
+  const server = await createServer({ stores: {} });
+  const response = await server.request("/build", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cache }),
+  });
+  expect(response.status).toBe(200);
+  expect(buildMock.mock.calls[0][0]).toMatchObject({ cache: false, dev: true });
+});
+
+test("coalesces watch bursts and schedules only one follow-up for edits during a build", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "hss-watch-"));
+  await mkdir(join(root, "content"));
+  const config = { stores: { local: { type: "iiif-json" as const, path: "./content" } } };
+  let finish!: (value: typeof result) => void;
+  buildMock.mockReset();
+  buildMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; })).mockResolvedValue(result);
+  const server = await createServer(config, { projectRoot: root });
+  try {
+    await server.request("/watch");
+    for (let i = 0; i < 10; i++) await writeFile(join(root, "content/object.json"), `${i}`);
+    await vi.waitFor(() => expect(buildMock).toHaveBeenCalledTimes(1));
+    for (let i = 0; i < 10; i++) await writeFile(join(root, "content/object.json"), `${i}`);
+    await new Promise((resolve) => setTimeout(resolve, 110));
+    expect(buildMock).toHaveBeenCalledTimes(1);
+    finish(result);
+    await vi.waitFor(() => expect(buildMock).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(buildMock).toHaveBeenCalledTimes(2);
+    await server.request("/unwatch");
+    await writeFile(join(root, "content/object.json"), "stopped");
+    await new Promise((resolve) => setTimeout(resolve, 110));
+    expect(buildMock).toHaveBeenCalledTimes(2);
+  } finally {
+    server._extra.close();
+    finish?.(result);
+    await rm(root, { recursive: true, force: true });
+  }
 });

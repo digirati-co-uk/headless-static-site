@@ -24,22 +24,26 @@ function stripResourcePrefix(slug: string, type: string | null) {
   return slug;
 }
 
-export async function resolveEditablePathForSlug(fileHandler: FileHandler, buildDir: string, inputSlug: string) {
+export async function resolveEditablePathForSlug(fileHandler: FileHandler, buildDir: string, inputSlug: string,
+  sources?: Record<string, { type: string; source: any }>) {
   const slug = normalizeSlug(inputSlug);
   if (!slug) {
     return null;
   }
 
-  const editablePath = join(fileHandler.root, buildDir, "meta", "editable.json");
+  let siteMapEntry = sources?.[slug];
+  if (!sources) {
+  const editablePath = join(fileHandler.resolve(buildDir), "meta", "editable.json");
   const editable = (await fileHandler.loadJson(editablePath, true)) as Record<string, string>;
   const directPath = editable[slug];
   if (typeof directPath === "string" && directPath.length > 0) {
     return directPath;
   }
 
-  const siteMapPath = join(fileHandler.root, buildDir, "meta", "sitemap.json");
+  const siteMapPath = join(fileHandler.resolve(buildDir), "meta", "sitemap.json");
   const siteMap = (await fileHandler.loadJson(siteMapPath, true)) as Record<string, any>;
-  const siteMapEntry = siteMap[slug];
+  siteMapEntry = siteMap[slug];
+  }
   if (!siteMapEntry || typeof siteMapEntry !== "object") {
     return null;
   }
