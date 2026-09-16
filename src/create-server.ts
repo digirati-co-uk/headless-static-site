@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -382,10 +382,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
               .some((part) => [".iiif", "node_modules", ".git"].includes(part))
           )
             return;
-          if (changed.startsWith(`${toProjectPath(activePaths.buildDir)}/`)) return;
+          if (changed.startsWith(`${toProjectPath(activePaths.buildDir)}${sep}`)) return;
           if (entry.rootConfig) {
             if (dirname(changed) !== projectRoot || !/\.(ya?ml|json|[cm]?[jt]s)$/.test(changed)) return;
-          } else if (changed !== entry.path && !changed.startsWith(`${entry.path}/`)) return;
+          } else if (changed !== entry.path && !changed.startsWith(`${entry.path}${sep}`)) return;
           const resourcePath = pathCache.allPaths[changed];
           if (resourcePath) emitter.emit("file-change", { path: resourcePath });
           scheduleWatchBuild();
@@ -600,7 +600,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     headers["Cache-Control"] = "no-store";
     headers["Content-Type"] = mimeTypeFor(realPath);
     const outputRoot = toProjectPath(activePaths.buildDir);
-    if (outputSnapshot && realPath.startsWith(`${outputRoot}/`)) {
+    if (outputSnapshot && realPath.startsWith(`${outputRoot}${sep}`)) {
       const file = outputSnapshot.get(realPath);
       return file ? ctx.body(file as any, { headers }) : ctx.notFound();
     }

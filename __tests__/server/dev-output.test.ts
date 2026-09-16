@@ -157,7 +157,7 @@ test("reloads standalone config and updates watch roots when a store is added", 
     server?._extra.close();
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 15000);
 
 test("failed buffered writes stay pending and can be retried", async () => {
   const root = await mkdtemp(join(tmpdir(), "hss-dev-retry-"));

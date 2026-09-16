@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve as resolvePath, sep } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
 import type { IFS } from "unionfs";
@@ -31,7 +31,7 @@ export class FileHandler {
   readSnapshot?: { root: string; files: Map<string, Buffer> };
 
   private inSnapshot(path: string) {
-    return Boolean(this.readSnapshot && path.startsWith(`${this.readSnapshot.root}/`));
+    return Boolean(this.readSnapshot && path.startsWith(`${this.readSnapshot.root}${sep}`));
   }
 
   constructor(fs: IFS, root: string, ui = false) {
@@ -57,16 +57,7 @@ export class FileHandler {
   }
 
   resolve(path: string) {
-    let out = "";
-    if (path.startsWith("/")) {
-      out = join(this.root, relative(this.root, path));
-    } else {
-      out = join(this.root, path);
-    }
-
-    // console.log({ in: path, out, root: this.root });
-
-    return out;
+    return resolvePath(this.root, path);
   }
 
   exists(filePath: string) {
@@ -161,17 +152,17 @@ export class FileHandler {
     const resolved = this.resolve(path);
     await this.fs.promises.rm(resolved, { recursive: true, force: true });
     for (const key of this.directories) {
-      if (key === resolved || key.startsWith(`${resolved}/`)) this.directories.delete(key);
+      if (key === resolved || key.startsWith(`${resolved}${sep}`)) this.directories.delete(key);
     }
     for (const map of [this.savedFiles, this.capturedFiles]) {
       if (map)
         for (const key of map.keys()) {
-          if (key === resolved || key.startsWith(`${resolved}/`)) map.delete(key);
+          if (key === resolved || key.startsWith(`${resolved}${sep}`)) map.delete(key);
         }
     }
     for (const collection of [this.openJsonMap, this.openJsonChanged, this.openBinaryMap, this.openBinaryChanged]) {
       for (const key of collection.keys()) {
-        if (key === resolved || key.startsWith(`${resolved}/`)) {
+        if (key === resolved || key.startsWith(`${resolved}${sep}`)) {
           collection.delete(key);
         }
       }
@@ -263,7 +254,7 @@ export class FileHandler {
     }
     this.writtenFiles.add(filePath);
     this.writtenHashes.set(filePath, digest);
-    if (this.captureRoot && (filePath === this.captureRoot || filePath.startsWith(`${this.captureRoot}/`))) {
+    if (this.captureRoot && (filePath === this.captureRoot || filePath.startsWith(`${this.captureRoot}${sep}`))) {
       this.capturedFiles.set(filePath, Buffer.from(data));
     }
   }
@@ -390,11 +381,11 @@ export class FileHandler {
           }
           await copy(from, to, options);
           for (const [destination] of copySources) {
-            if (destination === to || destination.startsWith(`${to}/`)) this.writtenFiles.add(destination);
+            if (destination === to || destination.startsWith(`${to}${sep}`)) this.writtenFiles.add(destination);
           }
           if (hashableCopies.has(to)) {
             for (const [destination, source] of copySources) {
-              if (destination === to || destination.startsWith(`${to}/`)) {
+              if (destination === to || destination.startsWith(`${to}${sep}`)) {
                 const digest = this.writtenHashes.get(source);
                 if (digest) this.writtenHashes.set(destination, digest);
               }
