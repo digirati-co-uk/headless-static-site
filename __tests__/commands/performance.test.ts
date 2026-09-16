@@ -10,10 +10,10 @@ test("unchanged folder resources stay cached; child edits refresh collections an
   try {
     const folder = join(root, "content", "exhibition");
     await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, "collection.yml"), "label: Exhibition\nbehavior: [hss:featured]\n");
+    await writeFile(join(folder, "collection.yml"), 'label: Exhibition\nbehavior: [hss:featured]\nbackground: "#f00"\n');
     const manifestPath = join(folder, "object.json");
     const manifest = (label: string) =>
-      JSON.stringify({ id: "https://example.org/object", type: "Manifest", label: { en: [label] }, items: [] });
+      JSON.stringify({ id: "https://example.org/object", type: "Manifest", label: { en: [label] }, background: "#0f0", items: [] });
     await writeFile(manifestPath, manifest("First"));
     const config = {
       server: { url: "https://example.org/iiif" },
@@ -42,6 +42,8 @@ test("unchanged folder resources stay cached; child edits refresh collections an
         "utf8"
       )
     );
+    expect(featured.items[0].background).toBe("#f00");
+    expect(featured.items[0].items[0].background).toBe("#0f0");
     expect(featured.items[0].items[0].label).toEqual({ en: ["Other"] });
     expect(third.stores.stats.invalidCount).toBe(2);
   } finally {

@@ -9,6 +9,7 @@ const publicFields = [
   "summary",
   "thumbnail",
   "behavior",
+  "background",
   "metadata",
   "rights",
   "requiredStatement",
