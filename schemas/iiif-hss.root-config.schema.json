@@ -53,6 +53,12 @@
             }
           }
         },
+        "hydrate": {
+          "description": "Collection slugs whose output documents embed their child collections' immediate members. Use an empty string for the root index.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
         "featured": {
           "type": "object",
           "additionalProperties": true,

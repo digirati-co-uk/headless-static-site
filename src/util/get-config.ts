@@ -34,6 +34,8 @@ export interface IIIFRC {
   slugs?: Record<string, SlugConfig>;
   config?: Record<string, any>;
   collections?: {
+    /** Slugs whose collection documents embed one extra level of members. */
+    hydrate?: string[];
     index?: Partial<Omit<Collection, "items">> & { items?: string[] };
     featured?: Partial<Omit<Collection, "items">> & { items?: string[] };
     manifests?: Partial<Collection>;

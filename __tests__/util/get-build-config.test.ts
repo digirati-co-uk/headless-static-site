@@ -19,6 +19,33 @@ describe("getBuildConfig search indexNames", () => {
     (global as any).__hss = undefined;
   });
 
+  test.each([
+    ["extractions", "extractions", "allExtractions"],
+    ["enrichments", "enrichments", "allEnrichments"],
+    ["rewrites", "collectionRewrites", "allRewrites"],
+    ["linkers", "linkers", "allLinkers"],
+    ["collectionFinalizers", "collectionFinalizers", "collectionFinalizers"],
+  ])("custom %s replace built-ins before selection and lifecycle lookup", async (registry, selected, available) => {
+    const builtIn = { id: "override-me", name: "Built-in", types: ["Collection"], alwaysRun: true };
+    const custom = { id: "override-me", name: "Custom", types: ["Collection"] };
+    (global as any).__hss = { [registry]: [custom] };
+    const builtIns = { ...defaultBuiltIns, [registry]: [builtIn], defaultRun: ["override-me"] };
+    const result = await getBuildConfig({ cwd: testDir, scripts: "./no-scripts-here" }, {
+      ...builtIns,
+      customConfig: { stores: { local: { type: "iiif-json", path: "./content" } } },
+    } as any);
+    expect((result as any)[selected]).toEqual([custom]);
+    expect((result as any)[available]).toEqual([custom]);
+    if (registry !== "collectionFinalizers") {
+      const storeOnly = await getBuildConfig({ cwd: testDir, scripts: "./no-scripts-here" }, {
+        ...builtIns,
+        customConfig: { run: [], stores: { local: { type: "iiif-json", path: "./content", run: ["override-me"] } } },
+      } as any);
+      expect((storeOnly as any)[selected]).toEqual([]);
+      expect((storeOnly as any)[available].find((step: any) => step.id === "override-me")).toBe(custom);
+    }
+  });
+
   test("requires a canonical URL before emitting", async () => {
     await expect(
       getBuildConfig(

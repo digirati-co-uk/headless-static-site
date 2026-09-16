@@ -2,23 +2,7 @@ import type { Collection } from "@iiif/presentation-3";
 import type { IIIFRC } from "./get-config.ts";
 import { createCollection } from "./create-collection.ts";
 
-const publicFields = [
-  "id",
-  "type",
-  "label",
-  "summary",
-  "thumbnail",
-  "behavior",
-  "background",
-  "metadata",
-  "rights",
-  "requiredStatement",
-  "provider",
-  "homepage",
-  "navDate",
-  "hss:slug",
-  "hss:totalItems",
-];
+import { hydrateCollectionItems } from "./hydrate-collection-items.ts";
 
 export function createFeaturedCollection(
   config: NonNullable<NonNullable<IIIFRC["collections"]>["featured"]>,
@@ -49,14 +33,6 @@ export function createFeaturedCollection(
         return label(a).localeCompare(label(b)) || a.localeCompare(b);
       });
   if (new Set(selected).size !== selected.length) throw new Error("Duplicate slug in collections.featured.items");
-  const byId = new Map(Object.values(resources).map((resource) => [resource.id, resource]));
-  const reference = (item: any) => {
-    const canonical = byId.get(item.id) || (item["hss:slug"] && resources[item["hss:slug"]]);
-    const merged = { ...item, ...canonical };
-    return Object.fromEntries(
-      publicFields.filter((field) => merged[field] !== undefined).map((field) => [field, merged[field]])
-    );
-  };
   const sections = selected.map((slug) => {
     if (
       slug === "featured" ||
@@ -65,18 +41,11 @@ export function createFeaturedCollection(
     ) {
       throw new Error(`Invalid collection slug "${slug}" in collections.featured.items`);
     }
-    const section = reference(resources[slug]);
-    const members = collectionItems[slug];
-    if (members) {
-      section.items = members.map(reference);
-      section["hss:totalItems"] = members.length;
-      if (!finalize.thumbnail) section.thumbnail ||= section.items.find((item: any) => item.thumbnail?.length)?.thumbnail;
-    }
-    return section;
+    return resources[slug];
   });
   return {
     ...createCollection({ label: "Featured collections", ...metadata, configUrl, slug: "featured" }),
-    items: sections,
+    items: hydrateCollectionItems(sections, resources, collectionItems, !finalize.thumbnail),
     "hss:totalItems": sections.length,
   } as Collection;
 }

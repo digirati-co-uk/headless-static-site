@@ -1,3 +1,4 @@
+import { hydrateCollectionItems } from "../../util/hydrate-collection-items.ts";
 import { join } from "node:path";
 import { getValue } from "../../extract/extract-label-string.ts";
 import type { BuildConfig } from "../build.ts";
@@ -17,11 +18,19 @@ export async function finalizeCollections(
   sourceResources: ActiveResourceJson[],
   { options, collectionFinalizers = [], files, buildDir, config, collectionOrder }: BuildConfig
 ) {
-  if (!options.emit || options.exact || options.stores?.length || !collectionFinalizers.length || !resources) return;
+  if (!options.emit || options.exact || options.stores?.length || !resources) return;
+  const hydrate = config.collections?.hydrate === undefined ? [] : config.collections.hydrate;
+  if (!Array.isArray(hydrate) || hydrate.some((slug) => typeof slug !== "string"))
+    throw new Error("collections.hydrate must be a list of collection slugs");
+  if (new Set(hydrate).size !== hydrate.length) throw new Error("Duplicate slug in collections.hydrate");
+  if (!collectionFinalizers.length && !hydrate.length) return;
   const remote = new Set(sourceResources.filter((resource) => !resource.saveToDisk).map((resource) => resource.slug));
   const paths = new Map<string, string>([["", join(buildDir, "collection.json")]]);
   for (const [slug, resource] of Object.entries(resources)) {
     if (resource.type === "Collection" && !remote.has(slug)) paths.set(slug, join(buildDir, slug, "collection.json"));
+  }
+  for (const slug of hydrate) {
+    if (!paths.has(slug)) throw new Error(`Invalid local collection slug "${slug}" in collections.hydrate`);
   }
   const collections: Record<string, FinalCollection> = Object.fromEntries(
     await Promise.all([...paths].map(async ([slug, path]) => [slug, await files.loadJson(path)]))
@@ -74,7 +83,11 @@ export async function finalizeCollections(
         const canonical = byId.get(reference.id);
         if (canonical && reference !== canonical) {
           for (const [key, value] of Object.entries(changes.get(reference.id) || {})) {
-            if (ancestor && (key === "partOf" || !Object.prototype.hasOwnProperty.call(reference, key))) continue;
+            if (
+              ancestor &&
+              (key === "partOf" || (key !== "background" && !Object.prototype.hasOwnProperty.call(reference, key)))
+            )
+              continue;
             if (value === undefined) delete reference[key];
             else Object.defineProperty(reference, key, { value, writable: true, enumerable: true, configurable: true });
           }
@@ -92,8 +105,20 @@ export async function finalizeCollections(
       await step.close?.(stepConfig);
     }
   }
+  // Hydrate detached output copies: selecting both parent and child must not deepen either document.
+  const members = {
+    ...collectionItems,
+    ...Object.fromEntries(Object.entries(collections).map(([slug, collection]) => [slug, collection.items || []])),
+  };
+  const canonical = { ...resources, ...collections };
+  const hydrated = new Set(hydrate);
   for (const [slug, path] of paths) {
-    const collection = collections[slug];
+    const collection = hydrated.has(slug)
+      ? {
+          ...collections[slug],
+          items: hydrateCollectionItems(collections[slug].items || [], canonical, members, false),
+        }
+      : collections[slug];
     await files.saveJson(path, collection);
     if (collectionItems) collectionItems[slug] = collection.items || [];
     if (siteMap?.[slug]) siteMap[slug].label = getValue(collection.label);

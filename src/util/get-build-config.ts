@@ -171,11 +171,6 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const files = builtIns.fileHandler || new FileHandler(fs, cwd);
 
   const useBuiltInScripts = config.builtInScripts !== false;
-  const allRewrites = useBuiltInScripts ? [...builtIns.rewrites] : [];
-  const allExtractions = useBuiltInScripts ? [...builtIns.extractions] : [];
-  const allEnrichments = useBuiltInScripts ? [...builtIns.enrichments] : [];
-  const allCollectionFinalizers = useBuiltInScripts ? [...(builtIns.collectionFinalizers || [])] : [];
-  const allLinkers = useBuiltInScripts ? [...builtIns.linkers] : [];
 
   const cacheDir = options.cacheRoot
     ? getExternalCacheDirectory(options.cacheRoot, Boolean(options.dev))
@@ -223,11 +218,14 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   await loadScripts({ ...options, scripts: scriptsPath, cwd }, log);
   const globals = getNodeGlobals();
 
-  allExtractions.push(...globals.extractions);
-  allEnrichments.push(...globals.enrichments);
-  allCollectionFinalizers.push(...globals.collectionFinalizers);
-  allLinkers.push(...globals.linkers);
-  allRewrites.push(...globals.rewrites);
+  // Resolve IDs before selection and lifecycle setup, including store-only steps.
+  const mergeScripts = <T extends { id: string }>(builtIn: T[], custom: T[]) =>
+    [...new Map([...(useBuiltInScripts ? builtIn : []), ...custom].map((step) => [step.id, step])).values()];
+  const allExtractions = mergeScripts(builtIns.extractions, globals.extractions);
+  const allEnrichments = mergeScripts(builtIns.enrichments, globals.enrichments);
+  const allCollectionFinalizers = mergeScripts(builtIns.collectionFinalizers || [], globals.collectionFinalizers);
+  const allLinkers = mergeScripts(builtIns.linkers, globals.linkers);
+  const allRewrites = mergeScripts(builtIns.rewrites, globals.rewrites);
 
   log("Available extractions:", allExtractions.map((e) => e.id).join(", "));
   log("Available enrichments:", allEnrichments.map((e) => e.id).join(", "));

@@ -32,6 +32,7 @@ export const featuredPartOf: CollectionFinalizer<Map<string, FinalCollection[]>>
         id: parent.id,
         type: "Collection",
         label: parent.label,
+        ...(parent.background !== undefined ? { background: parent.background } : {}),
         "hss:slug": parent["hss:slug"],
       }));
     }

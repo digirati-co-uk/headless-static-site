@@ -24,6 +24,10 @@ for (const section of featured.items) {
   }
 }
 const heritage = featured.items[0];
+const hydratedHeritage = await read("collections/heritage/collection.json");
+assert.ok(hydratedHeritage.items.find((item) => item["hss:slug"].endsWith("/astronomy")).items.length);
+assert.ok(hydratedHeritage.items.every((item) => (item.items || []).every((child) => child.items === undefined)));
+assert.equal(heritage.items.find((item) => item["hss:slug"].endsWith("/astronomy")).partOf[1].background, "#f8d447");
 assert.match(heritage.summary.en[0], /observatory/, "Enrichment must update the featured section");
 assert.deepEqual(featured.items.map((item) => item.background), ["#f8d447", "#bad3f8", "#facba2"]);
 assert.equal(heritage.items.find((item) => item["hss:slug"].endsWith("/astronomy")).background, "#d9c9f2");

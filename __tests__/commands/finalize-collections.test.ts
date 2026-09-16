@@ -263,3 +263,90 @@ test("default generated ordering matches legacy output and preserves authored me
     ).toEqual(previous[index]);
   }
 });
+
+test("a registered replacement finalizer runs once instead of its built-in", async () => {
+  const { run, read } = await fixture();
+  const { finalizeCollection } = await import("../../lib/scripts.js");
+  let calls = 0;
+  finalizeCollection({ id: "featured-part-of", name: "Custom breadcrumbs" }, (collection) => {
+    calls++;
+    collection.customOverride = true;
+  });
+  const result = await run();
+  const a = await read(result, "collections/a/collection.json");
+  expect(a.customOverride).toBe(true);
+  expect(a.partOf).toBeUndefined();
+  expect(calls).toBe(
+    Object.values(await read(result, "meta/resources.json")).filter((resource: any) => resource.type === "Collection")
+      .length + 1
+  );
+});
+
+test("breadcrumb backgrounds follow ancestor additions, changes and removals", async () => {
+  const { config, run, read } = await fixture();
+  config.run.push("colours");
+  let colour: string | undefined = "#0f0";
+  const builtIns = {
+    ...defaultBuiltIns,
+    collectionFinalizers: [
+      ...defaultBuiltIns.collectionFinalizers!,
+      {
+        id: "colours",
+        name: "Colours",
+        handler(collection: FinalCollection, { slug }: { slug: string }) {
+          if (slug === "collections/a" || slug === "collections/a/b") {
+            if (colour) collection.background = colour;
+            else delete collection.background;
+          }
+        },
+      },
+    ],
+  };
+  for (const value of ["#0f0", undefined]) {
+    colour = value;
+    const result = await run(builtIns);
+    const deep = await read(result, "collections/a/b/c/collection.json");
+    expect(deep.partOf[1].background).toBe(value);
+    expect(deep.partOf[2].background).toBe(value);
+    expect((await read(result, "featured/collection.json")).items[0].items[0].partOf[1].background).toBe(value);
+  }
+});
+
+test("selected collections hydrate one extra level after finalizers without deepening other documents", async () => {
+  const { config, run, read } = await fixture();
+  Object.assign(config.collections, { hydrate: ["collections/a/b", "collections/a", ""] });
+  const result = await run();
+  const a = await read(result, "collections/a/collection.json");
+  expect(a.items[0]["hss:slug"]).toBe("collections/a/b");
+  expect(a.items[0].items[0]["hss:slug"]).toBe("collections/a/b/c");
+  expect(a.items[0].items[0].items).toBeUndefined();
+  expect(a.items[0].items[0].partOf[1].background).toBe("#f00");
+  const b = await read(result, "collections/a/b/collection.json");
+  expect(b.items[0].items[0]["hss:slug"]).toBe("collections/a/b/c/d");
+  expect(b.items[0].items[0].items).toBeUndefined();
+  const resources = await read(result, "meta/resources.json");
+  expect(resources["collections/a"].items).toBeUndefined();
+  const root = await read(result, "collection.json");
+  expect(root.items.find((item: any) => item["hss:slug"] === "collections/a").items[0].items).toBeUndefined();
+  const c = await read(result, "collections/a/b/c/collection.json");
+  expect(c.items[0].items).toBeUndefined();
+  const featured = await read(result, "featured/collection.json");
+  expect(featured.items[0].items[0].items).toBeUndefined();
+  await expect(
+    validateBuildOutput(result.buildConfig.files.resolve(result.buildConfig.buildDir), { sha256: true })
+  ).resolves.toMatchObject({ status: "complete" });
+  // Hydration also works with no selected finalizers; removing the option clears cached output nesting.
+  config.run = [];
+  expect((await read(await run(), "collections/a/collection.json")).items[0].items).toHaveLength(1);
+  Object.assign(config.collections, { hydrate: [] });
+  expect((await read(await run(), "collections/a/collection.json")).items[0].items).toBeUndefined();
+});
+
+test.each([null, "collections/a", [42], ["missing"], ["collections/a", "collections/a"]])(
+  "invalid hydration configuration fails clearly: %j",
+  async (hydrate) => {
+    const { config, run } = await fixture();
+    Object.assign(config.collections, { hydrate });
+    await expect(run()).rejects.toThrow(/collections.hydrate/);
+  }
+);

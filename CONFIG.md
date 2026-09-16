@@ -41,9 +41,18 @@ Typical keys:
 - `fileTemplates`
 - `output`
 
+A project script with the same ID as a built-in replaces that built-in within
+its script kind (extraction, enrichment, rewrite, linker or collection finalizer).
+Only the replacement is available to `run`, store-level lookup and lifecycle
+hooks. The whole registration is replaced: types, `alwaysRun`, configuration and
+handlers are not inherited. Default run lists still refer to the same ID, so a
+replacement also works without adding an explicit `run` entry. Repeated project
+registrations use the latest registration for that ID. IDs in different script
+kinds remain independent.
+
 Set `builtInScripts: false` to use only project scripts from the scripts directory.
 This removes all built-in extractions (including runtime hints), enrichments, rewrites,
-and linkers, and disables the default run list. Select project scripts explicitly in
+linkers and collection finalizers, and disables the default run list. Select project scripts explicitly in
 `run` or each store's `run`. Within each build phase, scripts run in `run` order;
 store-only steps follow the global steps. Projects using runtime helpers should provide their own
 `extract-runtime-hints` step to emit `hss:runtime` metadata.
@@ -211,6 +220,35 @@ Generated topic/store aggregate collections are selected after construction and
 can carry behaviours via their existing configuration; they do not run through
 ordinary collection enrichment.
 
+### Hydrating other collections
+
+Use `collections.hydrate` to give selected collection documents the same extra
+level of member embedding as featured output:
+
+```yaml
+collections:
+  hydrate:
+    - collections/archive
+    - topics/subject/science
+    # - "" # The root index, if needed.
+```
+
+Each selected document embeds its child collections' immediate members. Deeper
+collections remain references, and manifest canvases are never embedded. Existing
+member order is preserved. Selecting both a parent and a child hydrates each
+output independently; it does not recursively expand the parent's output.
+
+Hydration runs after collection finalizers, so it uses their final labels,
+backgrounds, thumbnails, breadcrumbs and membership. It does not require a `run`
+entry or create new collections. `meta/resources.json` remains a snippet registry.
+Featured output keeps its existing automatic embedding without appearing in this
+list. Remove a slug to restore normal references on the next build.
+
+Entries are exact output slugs. Unknown slugs, manifests, duplicate entries and
+remote collections without a local output document fail clearly. Existing
+external member references remain references; hydration makes no network requests.
+Like finalization, hydration runs only on full emitting builds, not partial builds.
+
 ### Late collection finalizers
 
 Collection finalizers run after all output collections (including folders, topics,
@@ -296,7 +334,9 @@ output's two embedded levels. For a path Featured → A → B → C, C receives:
 }
 ```
 
-Ancestors are ordered root-first, excluding the current collection. The step
+Ancestors are ordered root-first, excluding the current collection. Each ancestor
+also includes its `background` value when present; later finalizers can add, change
+or remove that colour and the breadcrumb references are updated. The step
 replaces authored `partOf` on reachable descendants with one breadcrumb path.
 Shared descendants use the first depth-first path encountered; cycles are skipped.
 Unreachable collections, the featured root and manifests retain their existing

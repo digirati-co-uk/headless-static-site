@@ -46,6 +46,9 @@ stylesheet falls back to system sans-serif when offline.
 - Cards display authored “Objects in collection” metadata separately from the
   computed direct member count. The sample holdings/descriptions are illustrative.
 - The root index explicitly references `featured` and `manifests`.
+- `collections.hydrate: [collections/heritage]` adds immediate member details to
+  the heritage collection's standalone JSON too. Breadcrumb ancestors also carry
+  their collection's `background` colour when present.
 - Late finalizers sort the printed-works cards by label, derive missing collection
   thumbnails from the final member order, then add `partOf` breadcrumb chains.
   Change `config.collection-item-order.byCollection` in `.iiifrc.yml` to try
