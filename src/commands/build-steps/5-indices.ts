@@ -228,7 +228,7 @@ export async function indices(
       let baseTopicTypeMeta = {};
       const topicTypeMetaDisk = join(topicsDir, topicTypeId, "_meta.yaml");
       if (fs.existsSync(topicTypeMetaDisk)) {
-        baseTopicTypeMeta = files.readYaml(topicTypeMetaDisk) || {};
+        baseTopicTypeMeta = (await files.readYaml(topicTypeMetaDisk)) || {};
       }
       const topicTypeMeta = Object.assign(
         {
@@ -239,11 +239,8 @@ export async function indices(
         baseTopicTypeMeta
       );
 
-      const topicTypeCollectionSnippet = createCollection({
-        configUrl,
-        slug: topicTypeMeta.slug,
-        label: topicTypeMeta.label,
-      });
+      const { id: _topicTypeId, ...topicTypeProperties } = topicTypeMeta;
+      const topicTypeCollectionSnippet = createCollection({ ...topicTypeProperties, configUrl });
 
       indexCollection[topicTypeMeta.slug] = topicTypeCollectionSnippet;
       baseTopicTypeCollection.items.push(topicTypeCollectionSnippet as any);
@@ -270,7 +267,7 @@ export async function indices(
         const topicMetaDisk = join(topicsDir, topicTypeId, `${topicId}.yaml`);
         let baseMeta = {};
         if (fs.existsSync(topicMetaDisk)) {
-          baseMeta = files.readYaml(topicMetaDisk) || {};
+          baseMeta = (await files.readYaml(topicMetaDisk)) || {};
         }
 
         const topicMeta: any = Object.assign(
@@ -287,17 +284,14 @@ export async function indices(
           await write(topicMetaDisk, stringify(topicMeta));
         }
 
-        const topicCollectionSnippet = createCollection({
-          configUrl,
-          slug: topicMeta.slug,
-          label: topicMeta.label,
-        });
+        const { id: _topicId, ...topicProperties } = topicMeta;
+        const topicCollectionSnippet = createCollection({ ...topicProperties, configUrl });
 
         topicTypeCollection.items.push(topicCollectionSnippet as any);
 
         indexCollection[topicMeta.slug] = topicCollectionSnippet;
 
-        if (topicMeta.thumbnail) {
+        if (typeof topicMeta.thumbnail === "string") {
           (topicCollectionSnippet as any).thumbnail = [
             {
               id: topicMeta.thumbnail,

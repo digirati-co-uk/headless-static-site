@@ -62,6 +62,29 @@ describe("build indices", () => {
     }
   });
 
+  test("topic YAML overrides preserve arbitrary properties in collections and snippets", async () => {
+    testDir = await mkdtemp(join(tmpdir(), "iiif-hss-topic-properties-"));
+    const files = new FileHandler(fs, testDir);
+    await writeJson(join(testDir, "cache/example/indices.json"), { Subject: ["Art"] });
+    await mkdir(join(testDir, "topics/subject"), { recursive: true });
+    for (const name of ["_meta", "art"]) {
+      await writeFile(join(testDir, `topics/subject/${name}.yaml`),
+        'label: Overridden\nbackground: "#f00"\ncustom: { enabled: false }\nthumbnail: [{ id: "https://example.org/image.jpg", type: Image }]\n');
+    }
+    const indexCollection: Record<string, any> = { example: { id: "https://example.org/example", type: "Manifest" } };
+    await indices({ allResources: [{ slug: "example" }] as any, indexCollection, allIndices: {} }, {
+      options: {}, configUrl: "https://example.org/iiif", buildDir: join(testDir, "build"),
+      cacheDir: join(testDir, "cache"), topicsDir: join(testDir, "topics"), collectionRewrites: [],
+      files, config: { stores: {} },
+    } as any);
+    for (const slug of ["topics/subject", "topics/subject/art"]) {
+      const expected = { background: "#f00", custom: { enabled: false }, label: { en: ["Overridden"] },
+        thumbnail: [{ id: "https://example.org/image.jpg", type: "Image" }] };
+      expect(indexCollection[slug]).toMatchObject(expected);
+      expect(await files.loadJson(join(testDir, `build/${slug}/collection.json`))).toMatchObject(expected);
+    }
+  });
+
   test("always writes topics/collection.json even when there are no extracted topics", async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-build-indices-"));
     const buildDir = join(testDir, ".iiif", "build");

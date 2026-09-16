@@ -205,15 +205,18 @@ export async function emit(
 
         const helper = createThumbnailHelper(vault, { imageServiceLoader });
         const ref = vault.get(manifest.id);
-        const resource = vault.toPresentation3<Manifest | Collection>(ref);
+        let resource = vault.toPresentation3<Manifest | Collection>(ref);
 
         if (!resource) return;
 
         // The IIIF serializer omits extension properties retained by the Vault.
         const defaults = resource.type === "Collection" ? emptyCollection : emptyManifest;
-        Object.assign(resource, Object.fromEntries(Object.entries(ref).filter(([key]) =>
-          !Object.prototype.hasOwnProperty.call(defaults, key) && key !== "@context" && !key.startsWith("iiif-parser:")
-        )));
+        resource = {
+          ...resource,
+          ...Object.fromEntries(Object.entries(ref).filter(([key]) =>
+            !Object.prototype.hasOwnProperty.call(defaults, key) && key !== "@context" && !key.startsWith("iiif-parser:")
+          )),
+        };
 
         siteMap[manifest.slug] = {
           type: manifest.type,
