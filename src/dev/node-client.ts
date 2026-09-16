@@ -6,7 +6,10 @@ import { resolveFromSlug } from "../util/resolve-from-slug.ts";
 import { compileSlugConfig } from "../util/slug-engine.ts";
 
 function normalizeSlug(value: string) {
-  return value.replace(/^\/+/, "").replace(/\/+$/, "").replace(/\/(manifest|collection)\.json$/i, "");
+  return value
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/\/(manifest|collection)\.json$/i, "");
 }
 
 async function safeReadJson(filePath: string) {
@@ -32,20 +35,20 @@ export function create(folderPath: string) {
     top: join(folderPath, "collections", "collection.json"),
     topics: join(folderPath, "topics/collection.json"),
   };
-  const cache: Record<string, any> = {};
+  let cache: Record<string, any> = {};
   const cachedGet = async <T>(filePath: string): Promise<T> => {
     if (cache[filePath]) {
       return cache[filePath];
     }
+    const currentCache = cache;
     const json = await safeReadJson(filePath);
-    cache[filePath] = json;
+    currentCache[filePath] = json;
     return json;
   };
 
   const clearCache = () => {
-    for (const key of Object.keys(cache)) {
-      delete cache[key];
-    }
+    cache = {};
+    slugHelperCache = { slugHelper: null };
   };
 
   const getSlugs = () => cachedGet<IIIFRC["slugs"]>(endpoints.slugs);
@@ -70,23 +73,24 @@ export function create(folderPath: string) {
     return resolveFromSlug(slug, type, (slugs || {}) as any);
   }
 
-  const slugHelperCache = { slugHelper: null } as {
+  let slugHelperCache = { slugHelper: null } as {
     slugHelper: null | ReturnType<typeof makeGetSlugHelper>;
   };
   async function getSlugHelper() {
-    if (!slugHelperCache.slugHelper) {
+    const currentHelper = slugHelperCache;
+    if (!currentHelper.slugHelper) {
       const slugs = await getSlugs();
       const compiledSlugs = Object.fromEntries(
         Object.entries(slugs || {}).map(([key, value]) => {
           return [key, { info: value, compile: compileSlugConfig(value as any) }];
         })
       );
-      slugHelperCache.slugHelper = makeGetSlugHelper(
+      currentHelper.slugHelper = makeGetSlugHelper(
         { slugTemplates: Object.keys(compiledSlugs || {}) } as any,
         compiledSlugs as any
       );
     }
-    return slugHelperCache.slugHelper;
+    return currentHelper.slugHelper;
   }
 
   async function urlToSlug(url: string, type?: string) {

@@ -90,7 +90,7 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
   const routes = resolveAstroIiifRoutes(options.routes);
   const fetchFn = options.fetchFn || fetch;
   const useCache = options.cache ?? true;
-  const cache = new Map<string, any>();
+  let cache = new Map<string, any>();
   let resolvedBaseUrl: string | null = configuredBaseUrl || null;
 
   function orderedBaseUrls() {
@@ -110,13 +110,14 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
       return cache.get(url);
     }
 
+    const currentCache = cache;
     const response = await fetchFn(url);
     if (!response.ok) {
       throw new Error(`Failed to load ${url}: ${response.status}`);
     }
     const json = await response.json();
     if (useCache) {
-      cache.set(url, json);
+      currentCache.set(url, json);
     }
     return json;
   }
@@ -498,7 +499,9 @@ export function createIiifAstroClient(options: AstroIiifClientOptions = {}) {
   }
 
   return {
-    clearCache: () => cache.clear(),
+    clearCache: () => {
+      cache = new Map();
+    },
     slugFromParams,
     getSitemap,
     getBuildManifest,

@@ -2,7 +2,10 @@ import type { IIIFRC } from "../util/get-config.ts";
 import { resolveFromSlug } from "../util/resolve-from-slug.ts";
 
 function normalizeSlug(input: string) {
-  return input.replace(/^\/+/, "").replace(/\/+$/, "").replace(/\/(manifest|collection)\.json$/i, "");
+  return input
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/\/(manifest|collection)\.json$/i, "");
 }
 
 function asEncodedSlugPath(slug: string) {
@@ -42,7 +45,7 @@ export function create(
   if (options.ws) {
     const wsUrl = new URL(rootUrl);
     wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-    wsUrl.pathname = "/ws";
+    wsUrl.pathname = `${wsUrl.pathname.replace(/\/+$/, "")}/ws`;
     const ws = new WebSocket(wsUrl.toString());
     ws.onopen = () => ws.send("ping");
     ws.onmessage = (event) => {
@@ -65,12 +68,13 @@ export function create(
     if (cache[targetUrl]) {
       return cache[targetUrl];
     }
+    const currentCache = cache;
     const res = await fetch(targetUrl);
     if (!res.ok) {
       throw new Error(`Failed to load ${targetUrl}: ${res.status}`);
     }
     const json = await res.json();
-    cache[targetUrl] = json;
+    currentCache[targetUrl] = json;
     return json;
   };
 

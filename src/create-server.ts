@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -12,7 +12,7 @@ import PQueue from "p-queue";
 import { z } from "zod";
 import { type BuildOptions, build, defaultBuiltIns } from "./commands/build";
 import { createBuildStatusTracker } from "./server/build-status.ts";
-import { findDebugUiDir, registerDebugUiRoutes } from "./server/debug-ui-routes.ts";
+import { findDebugUiDir, mimeTypeFor, registerDebugUiRoutes } from "./server/debug-ui-routes.ts";
 import { editorHtml } from "./server/editor.html";
 import { explorerHtml } from "./server/explorer.html";
 import type { BuildStatus } from "./util/build-progress.ts";
@@ -170,7 +170,8 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       if (options.dev && serverOptions.reloadConfig) config = await serverOptions.reloadConfig();
       else if (options.dev && configSource && configSource.mode !== "custom") {
         const refreshed = await resolveConfigSource(
-          configSource.mode === "explicit" ? configSource.configPath : undefined, projectRoot
+          configSource.mode === "explicit" ? configSource.configPath : undefined,
+          projectRoot
         );
         const { config: nextConfig, ...source } = refreshed;
         config = nextConfig;
@@ -189,29 +190,37 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       if (result.result?.status === "complete") {
         const snapshot = new Map<string, Buffer>();
         const queue = new PQueue({ concurrency: 16 });
-        await Promise.all([...result.result.manifest.files.map((file) => file.path), "meta/build.json"].map((path) =>
-          queue.add(async () => {
-            const absolute = buildFiles.resolve(join(result.buildConfig.buildDir, path));
-            snapshot.set(absolute, buildFiles.capturedFiles.get(absolute) || await readFile(absolute));
-          })
-        ));
+        await Promise.all(
+          [...result.result.manifest.files.map((file) => file.path), "meta/build.json"].map((path) =>
+            queue.add(async () => {
+              const absolute = buildFiles.resolve(join(result.buildConfig.buildDir, path));
+              snapshot.set(absolute, buildFiles.capturedFiles.get(absolute) || (await readFile(absolute)));
+            })
+          )
+        );
         // Publish only after the entire build and snapshot succeed. Requests keep the previous generation meanwhile.
         outputSnapshot = snapshot;
         editableSources = {
           ...(result.result.manifest.mode === "partial" ? editableSources : {}),
-          ...Object.fromEntries(result.stores.allResources.filter((resource) => !resource.virtual)
-            .map(({ slug, type, source }) => [slug, { type, source }])),
+          ...Object.fromEntries(
+            result.stores.allResources
+              .filter((resource) => !resource.virtual)
+              .map(({ slug, type, source }) => [slug, { type, source }])
+          ),
         };
         fileHandler.readSnapshot = { root: buildFiles.resolve(result.buildConfig.buildDir), files: snapshot };
         savedFiles = buildFiles.savedFiles || new Map();
         activePaths.buildDir = result.buildConfig.buildDir;
         activePaths.cacheDir = result.buildConfig.cacheDir;
-        for (const [values, changed] of [[fileHandler.openJsonMap, fileHandler.openJsonChanged],
-          [fileHandler.openBinaryMap, fileHandler.openBinaryChanged]] as const) {
-          for (const key of values.keys()) if (!changed.get(key)) {
-            values.delete(key);
-            changed.delete(key);
-          }
+        for (const [values, changed] of [
+          [fileHandler.openJsonMap, fileHandler.openJsonChanged],
+          [fileHandler.openBinaryMap, fileHandler.openBinaryChanged],
+        ] as const) {
+          for (const key of values.keys())
+            if (!changed.get(key)) {
+              values.delete(key);
+              changed.delete(key);
+            }
         }
       }
       if (isWatching) refreshWatchers();
@@ -239,14 +248,22 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       buildDir: result.buildConfig.buildDir ? toProjectPath(result.buildConfig.buildDir) : null,
       durationMs: Date.now() - startedAt,
     });
-    return { ...result, dev: { writes: buildFiles.writeStats, snapshotBytes:
-      [...(outputSnapshot?.values() || [])].reduce((total, bytes) => total + bytes.length, 0) } };
+    return {
+      ...result,
+      dev: {
+        writes: buildFiles.writeStats,
+        snapshotBytes: [...(outputSnapshot?.values() || [])].reduce((total, bytes) => total + bytes.length, 0),
+      },
+    };
   };
 
   const cachedBuild = (options: BuildOptions) => {
     const queued = buildQueue.then(() => executeBuild(options));
     // Keep a completion barrier, not the last build result and all of its Vaults.
-    buildQueue = queued.then(() => undefined, () => undefined);
+    buildQueue = queued.then(
+      () => undefined,
+      () => undefined
+    );
     return queued;
   };
 
@@ -272,7 +289,9 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   app.get("/config", async (ctx) => {
     return ctx.json({
       isWatching: isWatching,
-      pendingFiles: Array.from(fileHandler.openJsonChanged).filter(([, changed]) => changed).map(([path]) => path),
+      pendingFiles: Array.from(fileHandler.openJsonChanged)
+        .filter(([, changed]) => changed)
+        .map(([path]) => path),
       configMode: configSource?.mode || "custom",
       ...config,
       run: config.run || defaultBuiltIns.defaultRun,
@@ -322,7 +341,9 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       if (watchBuild || !isWatching) return;
       watchDirty = false;
       watchBuild = cachedBuild({ emit: true, cache: true, dev: true })
-        .then(() => { emitter.emit("full-rebuild", { source: "watch" }); })
+        .then(() => {
+          emitter.emit("full-rebuild", { source: "watch" });
+        })
         .catch(() => undefined) // The build status reports failure; keep watching for the next edit.
         .finally(() => {
           watchBuild = undefined;
@@ -355,7 +376,12 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       try {
         const watcher = fs.watch(location, { recursive: entry.recursive, persistent: false }, (_event, filename) => {
           const changed = filename ? resolve(location, filename.toString()) : entry.path;
-          if (relative(projectRoot, changed).split(/[\\/]/).some((part) => [".iiif", "node_modules", ".git"].includes(part))) return;
+          if (
+            relative(projectRoot, changed)
+              .split(/[\\/]/)
+              .some((part) => [".iiif", "node_modules", ".git"].includes(part))
+          )
+            return;
           if (changed.startsWith(`${toProjectPath(activePaths.buildDir)}/`)) return;
           if (entry.rootConfig) {
             if (dirname(changed) !== projectRoot || !/\.(ya?ml|json|[cm]?[jt]s)$/.test(changed)) return;
@@ -370,10 +396,11 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
         console.warn(`Unable to watch ${entry.path}:`, error);
       }
     }
-    for (const [key, watcher] of watchers) if (!next.has(key)) {
-      watcher.close();
-      watchers.delete(key);
-    }
+    for (const [key, watcher] of watchers)
+      if (!next.has(key)) {
+        watcher.close();
+        watchers.delete(key);
+      }
   }
 
   function stopWatching() {
@@ -401,30 +428,41 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   app.get("/build/save", async (ctx) => {
     const total = Array.from(fileHandler.openJsonChanged.values()).filter(Boolean).length;
     if (total) {
-      await fileHandler.saveAll();
+      const { failedToWrite } = await fileHandler.saveAll();
+      if (failedToWrite.length) return ctx.json({ saved: false, total, failed: failedToWrite.length }, 500);
     }
     return ctx.json({ saved: true, total });
   });
 
   const booleanOption = z.preprocess(
-    (value) => value === "true" ? true : value === "false" ? false : value,
+    (value) => (value === "true" ? true : value === "false" ? false : value),
     z.boolean().optional()
   );
   const buildRequest = z.object({
-    cache: booleanOption, networkCache: booleanOption, generate: booleanOption,
-    exact: z.string().optional(), emit: booleanOption, debug: booleanOption,
-    enrich: booleanOption, extract: booleanOption,
+    cache: booleanOption,
+    networkCache: booleanOption,
+    generate: booleanOption,
+    exact: z.string().optional(),
+    emit: booleanOption,
+    debug: booleanOption,
+    enrich: booleanOption,
+    extract: booleanOption,
   });
   async function buildResponse(ctx: Context, options: z.infer<typeof buildRequest>) {
-    const result = await cachedBuild({ cache: true, ...options, dev: true });
+    const result = await cachedBuild({ cache: true, generate: true, ...options, dev: true });
     const { files, log, fileTypeCache, ...buildConfig } = result.buildConfig;
     const report = {
       emitted: { stats: result.emitted.stats, siteMap: result.emitted.siteMap },
-      extractions: result.extractions, enrichments: result.enrichments,
-      timings: result.timings, dev: result.dev,
-      config: buildConfig, buildConfig,
-      stores: result.stores && { ...result.stores,
-        allResources: result.stores.allResources.map(({ vault, ...resource }) => resource) },
+      extractions: result.extractions,
+      enrichments: result.enrichments,
+      timings: result.timings,
+      dev: result.dev,
+      config: buildConfig,
+      buildConfig,
+      stores: result.stores && {
+        ...result.stores,
+        allResources: result.stores.allResources.map(({ vault, ...resource }) => resource),
+      },
       parsed: result.parsed,
     };
     emitter.emit("full-rebuild", report);
@@ -502,8 +540,9 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
         dev: true,
       });
 
-      const resource = created.stores.allResources.find((resource) => resource.source.type === "disk" &&
-        toProjectPath(resource.source.filePath) === existing);
+      const resource = created.stores.allResources.find(
+        (resource) => resource.source.type === "disk" && toProjectPath(resource.source.filePath) === existing
+      );
       if (!resource) return ctx.text("Created file was not included by the store configuration", 422);
       const manifestId = `${resource.slug}/manifest.json`;
       const manifestUrl = `${baseServerUrl()}/${manifestId.replace(/^\/+/, "")}`;
@@ -517,13 +556,17 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   );
 
   app.get("/*", async (ctx, next) => {
+    ctx.header("Cache-Control", "no-store");
     if (ctx.req.path.startsWith("/ws")) {
       await next();
       return;
     }
     let requestedPath: string;
-    try { requestedPath = decodeURIComponent(ctx.req.path).replace(/^\/+/, ""); }
-    catch { return ctx.notFound(); }
+    try {
+      requestedPath = decodeURIComponent(ctx.req.path).replace(/^\/+/, "");
+    } catch {
+      return ctx.notFound();
+    }
     if (!isSafeOutputPath(requestedPath)) return ctx.notFound();
     let realPath = join(toProjectPath(activePaths.buildDir), requestedPath);
     if (realPath.endsWith("meta.json")) {
@@ -555,8 +598,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     }
 
     headers["Cache-Control"] = "no-store";
-    headers["Content-Type"] = extname(realPath) === ".json" ? "application/json; charset=utf-8" :
-      extname(realPath) === ".jsonl" ? "application/x-ndjson; charset=utf-8" : "application/octet-stream";
+    headers["Content-Type"] = mimeTypeFor(realPath);
     const outputRoot = toProjectPath(activePaths.buildDir);
     if (outputSnapshot && realPath.startsWith(`${outputRoot}/`)) {
       const file = outputSnapshot.get(realPath);
@@ -564,7 +606,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
     }
     try {
       // Before the first build, and for private metadata, read fresh bytes rather than caching filesystem reads forever.
-      return ctx.body(await readFile(realPath) as any, { headers });
+      return ctx.body((await readFile(realPath)) as any, { headers });
     } catch (error) {
       if (["ENOENT", "ENOTDIR", "EISDIR"].includes((error as NodeJS.ErrnoException).code || "")) return ctx.notFound();
       throw error;

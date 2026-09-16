@@ -28,6 +28,9 @@ const MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".jsonl": "application/x-ndjson; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".pdf": "application/pdf",
   ".map": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml; charset=utf-8",
@@ -37,7 +40,7 @@ const MIME_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-function mimeTypeFor(path: string) {
+export function mimeTypeFor(path: string) {
   const extension = extname(path).toLowerCase();
   return MIME_TYPES[extension] || "application/octet-stream";
 }

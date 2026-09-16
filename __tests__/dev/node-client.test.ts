@@ -37,5 +37,16 @@ describe("node-client slug helper", () => {
     const slug = await client.urlToSlug("https://example.org/iiif/demo.json", "Manifest");
 
     expect(slug).toEqual(["manifests/demo", "manifest"]);
+    await writeFile(
+      join(testDir, "config/slugs.json"),
+      JSON.stringify({
+        replacement: { type: "Manifest", domain: "example.org", prefix: "/new/", suffix: ".json" },
+      })
+    );
+    client.clearCache();
+    expect(await client.urlToSlug("https://example.org/new/other.json", "Manifest")).toEqual([
+      "manifests/other",
+      "replacement",
+    ]);
   });
 });

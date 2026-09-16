@@ -164,9 +164,10 @@ export class FileHandler {
       if (key === resolved || key.startsWith(`${resolved}/`)) this.directories.delete(key);
     }
     for (const map of [this.savedFiles, this.capturedFiles]) {
-      if (map) for (const key of map.keys()) {
-        if (key === resolved || key.startsWith(`${resolved}/`)) map.delete(key);
-      }
+      if (map)
+        for (const key of map.keys()) {
+          if (key === resolved || key.startsWith(`${resolved}/`)) map.delete(key);
+        }
     }
     for (const collection of [this.openJsonMap, this.openJsonChanged, this.openBinaryMap, this.openBinaryChanged]) {
       for (const key of collection.keys()) {
@@ -205,6 +206,7 @@ export class FileHandler {
 
     if (force) {
       await this.writeFile(filePath, JSON.stringify(data, null, 2));
+      this.openJsonChanged.set(filePath, false);
       return;
     }
 
@@ -238,8 +240,11 @@ export class FileHandler {
     if (previous?.sha256 === digest.sha256) {
       try {
         const stat = await this.fs.promises.stat(filePath);
-        unchanged = stat.size === previous.size && stat.mtimeMs === previous.mtimeMs &&
-          stat.ctimeMs === previous.ctimeMs && stat.ino === previous.ino;
+        unchanged =
+          stat.size === previous.size &&
+          stat.mtimeMs === previous.mtimeMs &&
+          stat.ctimeMs === previous.ctimeMs &&
+          stat.ino === previous.ino;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -404,10 +409,12 @@ export class FileHandler {
     timings["copies"] = performance.now() - started;
     progress.stop();
 
-    // Clear all copy targets.
-    this.copyTargets.length = 0;
-    this.openJsonChanged.clear();
-    this.openBinaryChanged.clear();
+    // Leave failed writes queued so callers can retry without losing pending edits.
+    const failedPaths = new Set(failedToWrite.map(({ filePath }) => filePath));
+    this.copyTargets = this.copyTargets.filter(({ to }) => failedPaths.has(to));
+    for (const changed of [this.openJsonChanged, this.openBinaryChanged]) {
+      for (const path of changed.keys()) if (!failedPaths.has(path)) changed.delete(path);
+    }
 
     return { failedToWrite, timings };
   }

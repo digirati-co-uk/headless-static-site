@@ -34,7 +34,7 @@ describe("createServer build lifecycle", () => {
               active--;
               reject(error);
             };
-          }),
+          })
       )
       .mockImplementationOnce(async () => {
         active++;
@@ -50,7 +50,7 @@ describe("createServer build lifecycle", () => {
         onBuild(event) {
           events.push(event.type);
         },
-      },
+      }
     );
 
     const first = server._extra.cachedBuild({ dev: true });
@@ -74,7 +74,7 @@ describe("createServer build lifecycle", () => {
         onBuild(event) {
           if (event.type === "error") throw new Error("reporting failed");
         },
-      },
+      }
     );
 
     await expect(server._extra.cachedBuild({})).rejects.toBe(original);
@@ -86,7 +86,9 @@ test.each([false, "false"])("POST build accepts and normalizes cache=%s", async 
   buildMock.mockResolvedValue({ ...result, emitted: { stats: {}, siteMap: {} }, extractions: {}, enrichments: {} });
   const server = await createServer({ stores: {} });
   const response = await server.request("/build", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cache }),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cache }),
   });
   expect(response.status).toBe(200);
   expect(buildMock.mock.calls[0][0]).toMatchObject({ cache: false, dev: true });
@@ -101,7 +103,14 @@ test("coalesces watch bursts and schedules only one follow-up for edits during a
   const config = { stores: { local: { type: "iiif-json" as const, path: "./content" } } };
   let finish!: (value: typeof result) => void;
   buildMock.mockReset();
-  buildMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; })).mockResolvedValue(result);
+  buildMock
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    )
+    .mockResolvedValue(result);
   const server = await createServer(config, { projectRoot: root });
   try {
     await server.request("/watch");
