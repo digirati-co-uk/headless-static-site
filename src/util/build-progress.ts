@@ -7,6 +7,7 @@ export const BUILD_STEP_ORDER = [
   "enrich-resources",
   "emit-files",
   "build-indices",
+  "finalize-collections",
   "save-files",
 ] as const;
 

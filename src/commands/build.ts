@@ -1,3 +1,5 @@
+import { featuredPartOf } from "../finalize/featured-part-of.ts";
+import { finalizeCollections } from "./build-steps/6-finalize-collections.ts";
 import { EXTRACTION_CACHE_COMMIT } from "../util/extraction-cache.ts";
 import { isSafeOutputPath } from "../output-validation.ts";
 import fs from "node:fs";
@@ -183,6 +185,7 @@ export const defaultBuiltIns: BuildBuiltIns = {
   rewrites: buildInRewrites,
   extractions: builtInExtractions,
   enrichments: buildInEnrichments,
+  collectionFinalizers: [featuredPartOf],
   linkers: builtInLinkers,
   defaultCacheDir,
   defaultBuildDir,
@@ -205,6 +208,7 @@ const BUILD_PHASE_LABELS: Record<BuildStepId, string> = {
   "enrich-resources": "Enriching resources",
   "emit-files": "Emitting files",
   "build-indices": "Building indices",
+  "finalize-collections": "Finalizing collections",
   "save-files": "Saving files",
 };
 
@@ -642,6 +646,10 @@ async function buildInternal(
       },
       buildConfig
     )
+  );
+
+  await runPhase("finalize-collections", "Finalizing collections", () =>
+    finalizeCollections(emitted, stores.allResources, buildConfig)
   );
 
   await buildConfig.fileTypeCache.save();

@@ -211,6 +211,77 @@ Generated topic/store aggregate collections are selected after construction and
 can carry behaviours via their existing configuration; they do not run through
 ordinary collection enrichment.
 
+### Late collection finalizers
+
+Collection finalizers run after all output collections (including folders, topics,
+stores, the root index and featured collections) exist, before files are saved and
+hashed. Enable them in the project-level `run` list, in execution order. They run
+on every full emitting build, including cached/dev builds; partial (`exact` or
+store-filtered) builds and builds without emission skip this phase. Store-level
+`run`/`skip` do not select finalizers because they operate on the site-wide graph.
+Remote collections without a local output document are not finalized or fetched.
+
+The first built-in is `featured-part-of`:
+
+```yaml
+run:
+  - folder-collections
+  - featured-part-of
+collections:
+  featured:
+    items: [collections/archive]
+```
+
+It follows the complete collection graph starting at `featured`, beyond featured
+output's two embedded levels. For a path Featured → A → B → C, C receives:
+
+```json
+{
+  "partOf": [
+    { "id": "https://example.org/iiif/featured/collection.json", "type": "Collection", "label": { "en": ["Featured"] }, "hss:slug": "featured" },
+    { "id": "https://example.org/iiif/collections/a/collection.json", "type": "Collection", "label": { "en": ["A"] }, "hss:slug": "collections/a" },
+    { "id": "https://example.org/iiif/collections/b/collection.json", "type": "Collection", "label": { "en": ["B"] }, "hss:slug": "collections/b" }
+  ]
+}
+```
+
+Ancestors are ordered root-first, excluding the current collection. The step
+replaces authored `partOf` on reachable descendants with one breadcrumb path.
+Shared descendants use the first depth-first path encountered; cycles are skipped.
+Unreachable collections, the featured root and manifests retain their existing
+metadata. No featured output means no breadcrumb changes. This is a site-navigation
+convention on `partOf`, rather than a list of only immediate IIIF parents.
+
+Register your own finalizer from a JS/TS file in the configured scripts directory:
+
+```js
+import { finalizeCollection } from "iiif-hss";
+
+finalizeCollection(
+  { id: "collection-style", name: "Collection style" },
+  (collection, { slug, collections }, config) => {
+    if (slug === "collections/archive") collection.background = config.background;
+  }
+);
+```
+
+Select `collection-style` in `run` and put its options under
+`config.collection-style` (for example `background: "#f00"`). The handler receives
+mutable output JSON, an API with `slug`, `collections` (keyed by slug; root index
+uses `""`) and the project `config`, plus the step's options as its third argument.
+Optional `configure(api, options)` runs once and supplies the handler's third
+argument; optional `close(options)` runs after the step, including handler failures.
+Programmatic builds can supply `BuildBuiltIns.collectionFinalizers`.
+
+Edit the collection document once. The phase propagates metadata additions,
+changes and deletions to collection references in aggregate output and
+`meta/resources.json`. Membership edits refresh counts and the immediate members
+of embedded featured sections, without embedding their descendants. Identity
+(`id`, `type`, `hss:slug`) must remain unchanged; routing and resource creation
+belong to earlier phases. This phase does not rerun extraction/search indexing or
+modify manifest documents. Put membership-editing steps before `featured-part-of`
+so breadcrumbs reflect the final hierarchy.
+
 ### Folder collection authoring
 
 Folder declarations may be named `collection.json`, `collection.yml`,

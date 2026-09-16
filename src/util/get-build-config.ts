@@ -1,3 +1,4 @@
+import type { CollectionFinalizer } from "./finalize-collection.ts";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -90,6 +91,7 @@ export interface BuildBuiltIns {
   rewrites: Rewrite[];
   extractions: Extraction[];
   enrichments: Enrichment[];
+  collectionFinalizers?: CollectionFinalizer[];
   linkers: Linker[];
 
   defaultCacheDir: string;
@@ -172,6 +174,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const allRewrites = useBuiltInScripts ? [...builtIns.rewrites] : [];
   const allExtractions = useBuiltInScripts ? [...builtIns.extractions] : [];
   const allEnrichments = useBuiltInScripts ? [...builtIns.enrichments] : [];
+  const allCollectionFinalizers = useBuiltInScripts ? [...(builtIns.collectionFinalizers || [])] : [];
   const allLinkers = useBuiltInScripts ? [...builtIns.linkers] : [];
 
   const cacheDir = options.cacheRoot
@@ -222,11 +225,13 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
 
   allExtractions.push(...globals.extractions);
   allEnrichments.push(...globals.enrichments);
+  allCollectionFinalizers.push(...globals.collectionFinalizers);
   allLinkers.push(...globals.linkers);
   allRewrites.push(...globals.rewrites);
 
   log("Available extractions:", allExtractions.map((e) => e.id).join(", "));
   log("Available enrichments:", allEnrichments.map((e) => e.id).join(", "));
+  log("Available collection finalizers:", allCollectionFinalizers.map((e) => e.id).join(", "));
   log("Available linkers:", allLinkers.map((e) => e.id).join(", "));
   log("Available rewrites:", allRewrites.map((e) => e.id).join(", "));
 
@@ -251,6 +256,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
   const extractions = selectScripts(allExtractions);
   const enrichments = selectScripts(allEnrichments);
   const linkers = selectScripts(allLinkers);
+  const collectionFinalizers = selectScripts(allCollectionFinalizers);
   // Store-only steps need lifecycle hooks too; unselected project scripts must not run setup/collect.
   const activeScriptIds = new Set([...toRun, ...stores.flatMap((store) => config.stores[store].run || [])]);
   const availableScripts = <T extends { id: string }>(scripts: T[]) =>
@@ -375,6 +381,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
     canvasEnrichment,
     manifestEnrichment,
     collectionEnrichment,
+    collectionFinalizers,
     requestCacheDir,
     virtualCacheDir,
     topicsDir,

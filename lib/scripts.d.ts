@@ -1,3 +1,4 @@
+import type { CollectionFinalizer } from "../src/util/finalize-collection.ts";
 import type { Enrichment } from "../src/util/enrich.ts";
 import type { Extraction } from "../src/util/extract.ts";
 import type { IIIFGenerator } from "../src/util/iiif-generator.ts";
@@ -7,6 +8,7 @@ import type { Rewrite } from "../src/util/rewrite.ts";
 declare global {
   namespace __hss {
     let extractions: Extraction[] | undefined;
+    let collectionFinalizers: CollectionFinalizer[] | undefined;
     let enrichments: Enrichment[] | undefined;
     let linkers: Linker[] | undefined;
     let rewrites: Rewrite[] | undefined;
@@ -38,3 +40,8 @@ export function linker<Config = any>(
 export function rewrite(config: Rewrite): void;
 
 export function generator<Config = any, Temp = any>(config: IIIFGenerator<Config, Temp>): void;
+
+export function finalizeCollection<Config = any>(
+  config: Omit<CollectionFinalizer<Config>, "handler">,
+  handler: CollectionFinalizer<Config>["handler"]
+): void;

@@ -1,3 +1,4 @@
+import type { CollectionFinalizer } from "./finalize-collection.ts";
 import type { Enrichment } from "./enrich";
 import type { Extraction } from "./extract";
 import type { IIIFGenerator } from "./iiif-generator.ts";
@@ -7,6 +8,7 @@ import type { Rewrite } from "./rewrite.ts";
 declare interface Global {
   __hss?: {
     extractions?: Extraction[];
+    collectionFinalizers?: CollectionFinalizer[];
     enrichments?: Enrichment[];
     linkers?: Linker[];
     rewrites?: Rewrite[];
@@ -16,6 +18,7 @@ declare interface Global {
 
 export function getNodeGlobals() {
   const extractions: Extraction[] = [];
+  const collectionFinalizers: CollectionFinalizer[] = [];
   const enrichments: Enrichment[] = [];
   const linkers: Linker[] = [];
   const rewrites: Rewrite[] = [];
@@ -45,6 +48,7 @@ export function getNodeGlobals() {
   }
 
   if (g.__hss) {
+    collectionFinalizers.push(...dedupeById(g.__hss.collectionFinalizers || []));
     if (g.__hss.extractions) {
       extractions.push(...dedupeById(g.__hss.extractions as Array<Extraction & { id?: string }>));
     }
@@ -61,5 +65,5 @@ export function getNodeGlobals() {
       generators.push(...dedupeById(g.__hss.generators as Array<IIIFGenerator & { id?: string }>));
     }
   }
-  return { extractions, enrichments, linkers, rewrites, generators };
+  return { collectionFinalizers, extractions, enrichments, linkers, rewrites, generators };
 }
