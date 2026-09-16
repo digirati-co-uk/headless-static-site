@@ -94,6 +94,9 @@ export class FileHandler {
       if (!bytes) throw Object.assign(new Error(`No snapshot file: ${filePath}`), { code: "ENOENT" });
       return bytes;
     }
+    if (this.openJsonChanged.get(filePath)) {
+      return Buffer.from(JSON.stringify(this.openJsonMap.get(filePath), null, 2));
+    }
     if (this.openBinaryMap.has(filePath)) {
       return this.openBinaryMap.get(filePath) as Buffer;
     }
@@ -196,7 +199,7 @@ export class FileHandler {
     this.openJsonMap.set(filePath, data);
 
     if (force) {
-      await this.writeFile(filePath, JSON.stringify(data, null, 2));
+      await this.writeFile(filePath, JSON.stringify(data, null, 2), undefined, data);
       this.openJsonChanged.set(filePath, false);
       return;
     }
@@ -219,7 +222,7 @@ export class FileHandler {
     this.openJsonChanged.set(filePath, false);
   }
 
-  async writeFile(path: string, data: any, producer?: string) {
+  async writeFile(path: string, data: any, producer?: string, json?: object) {
     this.claim(path, producer);
     const filePath = this.resolve(path);
     const digest = {
@@ -254,6 +257,12 @@ export class FileHandler {
     }
     this.writtenFiles.add(filePath);
     this.writtenHashes.set(filePath, digest);
+    if (json) this.openJsonMap.set(filePath, json);
+    else {
+      this.openJsonMap.delete(filePath);
+      this.openJsonChanged.delete(filePath);
+    }
+    if (this.openBinaryMap.has(filePath)) this.openBinaryMap.set(filePath, Buffer.from(data));
     if (this.captureRoot && (filePath === this.captureRoot || filePath.startsWith(`${this.captureRoot}${sep}`))) {
       this.capturedFiles.set(filePath, Buffer.from(data));
     }
@@ -348,7 +357,7 @@ export class FileHandler {
     for (const [filePath, data] of files) {
       queue.add(
         async () =>
-          await this.writeFile(filePath, JSON.stringify(data, null, 2)).catch((err) =>
+          await this.writeFile(filePath, JSON.stringify(data, null, 2), undefined, data).catch((err) =>
             failedToWrite.push({ filePath, err })
           )
       );

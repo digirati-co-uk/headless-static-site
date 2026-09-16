@@ -173,3 +173,29 @@ test("failed buffered writes stay pending and can be retried", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("the file handler does not serve old JSON or bytes after a write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "hss-dev-read-write-"));
+  try {
+    const files = new FileHandler(fs as any, root);
+    await files.writeFile("object.json", '{"value":"old"}');
+    await files.loadJson("object.json");
+    await files.readFile("object.json");
+    await files.writeFile("object.json", '{"value":"new"}');
+    expect(await files.loadJson("object.json")).toEqual({ value: "new" });
+    expect(JSON.parse((await files.readFile("object.json")).toString())).toEqual({ value: "new" });
+    await files.saveJson("object.json", { value: "pending" });
+    expect(JSON.parse((await files.readFile("object.json")).toString())).toEqual({ value: "pending" });
+    await files.saveAll();
+    expect(await files.loadJson("object.json")).toEqual({ value: "pending" });
+    await files.saveJson("object.json", { value: "forced" }, true);
+    expect(await files.loadJson("object.json")).toEqual({ value: "forced" });
+    expect(JSON.parse((await files.readFile("object.json")).toString())).toEqual({ value: "forced" });
+    await files.saveJson("object.json", { value: "queued" });
+    await files.writeFile("object.json", '{"value":"raw"}');
+    expect(JSON.parse((await files.readFile("object.json")).toString())).toEqual({ value: "raw" });
+    expect(await files.loadJson("object.json")).toEqual({ value: "raw" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

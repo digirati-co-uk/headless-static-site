@@ -133,3 +133,33 @@ test("coalesces watch bursts and schedules only one follow-up for edits during a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a failed watcher can be recreated on the next build", async () => {
+  const fs = (await import("node:fs")).default;
+  const { EventEmitter } = await import("node:events");
+  const watchers: Array<InstanceType<typeof EventEmitter> & { close: ReturnType<typeof vi.fn> }> = [];
+  const watch = vi.spyOn(fs, "watch").mockImplementation(() => {
+    const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
+    watchers.push(watcher);
+    return watcher as any;
+  });
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  buildMock.mockReset();
+  buildMock.mockResolvedValue(result);
+  const server = await createServer({ stores: {} });
+  try {
+    await server.request("/watch");
+    const initial = watchers.length;
+    watchers[0].emit("error", new Error("watch failed"));
+    expect(watchers[0].close).toHaveBeenCalledOnce();
+    await server._extra.cachedBuild({ dev: true });
+    expect(watchers).toHaveLength(initial + 1);
+    server._extra.close();
+    expect((await server.request("/watch")).status).toBe(503);
+    await expect(server._extra.cachedBuild({ dev: true })).rejects.toThrow("server is closed");
+  } finally {
+    server._extra.close();
+    watch.mockRestore();
+    warning.mockRestore();
+  }
+});

@@ -76,6 +76,8 @@ export function iiifPlugin(options: IiifVitePluginOptions = {}): Plugin {
 
       await applyResolvedDevUrl(false);
       await runtime.mountHonoMiddleware(viteDevServer.middlewares as any);
+      const iiifServer = await runtime.ensureServer();
+      viteDevServer.httpServer?.once?.("close", () => iiifServer._extra.close?.());
       await runtime.attachDevHotReloadBridge(() => {
         if (!viteDevServer.ws || typeof viteDevServer.ws.send !== "function") {
           return;

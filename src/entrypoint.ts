@@ -38,6 +38,7 @@ app.get(
 
 console.log(`Server running: ${resolveHostUrl(`http://localhost:${server.port}`)}`);
 const runningServer = serve(server);
+runningServer.on("close", server._extra.close);
 injectWebSocket(runningServer);
 
 try {

@@ -127,6 +127,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   const pathCache = { allPaths: {} as Record<string, string> };
 
   let isWatching = false;
+  let closed = false;
   const fileHandler = new FileHandler(fs, projectRoot);
   let savedFiles = new Map<string, SavedFile>();
   let outputSnapshot: Map<string, Buffer> | undefined;
@@ -258,7 +259,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   };
 
   const cachedBuild = (options: BuildOptions) => {
-    const queued = buildQueue.then(() => executeBuild(options));
+    const queued = buildQueue.then(() => {
+      if (closed) throw new Error("IIIF dev server is closed");
+      return executeBuild(options);
+    });
     // Keep a completion barrier, not the last build result and all of its Vaults.
     buildQueue = queued.then(
       () => undefined,
@@ -390,7 +394,11 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
           if (resourcePath) emitter.emit("file-change", { path: resourcePath });
           scheduleWatchBuild();
         });
-        watcher.on("error", (error) => console.warn(`IIIF watcher failed for ${entry.path}:`, error));
+        watcher.on("error", (error) => {
+          if (watchers.get(key) === watcher) watchers.delete(key);
+          watcher.close();
+          console.warn(`IIIF watcher failed for ${entry.path}:`, error);
+        });
         watchers.set(key, watcher);
       } catch (error) {
         console.warn(`Unable to watch ${entry.path}:`, error);
@@ -412,6 +420,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   }
 
   app.get("/watch", (ctx) => {
+    if (closed) return ctx.json({ watching: false }, 503);
     if (!isWatching) {
       isWatching = true;
       refreshWatchers();
@@ -650,7 +659,10 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
       emitter,
       app,
       cachedBuild,
-      close: stopWatching,
+      close: () => {
+        closed = true;
+        stopWatching();
+      },
       getBuildStatus: () => buildStatusTracker.getBuildStatus(),
     },
   };

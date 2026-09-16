@@ -550,6 +550,8 @@ export function iiifAstro(options: IiifAstroOptions = {}): AstroIntegrationLike 
         const devUrl = runtime.resolveServerUrl(devHost, devPort, 4321);
         await runtime.setConfigServerUrl(devUrl);
         await runtime.mountHonoMiddleware(server.middlewares as any);
+        const iiifServerForShutdown = await runtime.ensureServer();
+        server.httpServer?.once?.("close", () => iiifServerForShutdown._extra.close?.());
         await runtime.attachDevHotReloadBridge(() => {
           if (!server.ws || typeof server.ws.send !== "function") {
             return;

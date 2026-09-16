@@ -395,3 +395,25 @@ import { getManifestImageServices } from "iiif-hss/library";
 const services = getManifestImageServices(resource.vault, resource.id);
 return services.length ? { temp: services } : {};
 ```
+
+## Development serving and rebuilds
+
+The dev server publishes a snapshot of generated output in memory after a
+successful build. Requests keep using the previous successful snapshot while a
+build runs or fails. Generated files still exist on disk for Node clients and
+scripts; private cache metadata remains disk-backed. Memory use grows with public
+output size (about 282 MB for the measured Delft fixture).
+
+Within a server session, unchanged generated writes are skipped after checking
+that the destination's file identity and timestamps still match. External edits
+and deleted destinations are repaired. Full dev builds remove obsolete paths
+from the previous output inventory; explicit partial builds retain unrelated
+files. Editing a manifest through the server performs a full cached rebuild so
+collections, featured cards and indexes stay current.
+
+Watch events are debounced, with at most one follow-up for edits during a watch
+build. The standalone server reloads its configuration before rebuilding and
+refreshes watch roots as stores change. It watches root configuration sidecars,
+including YAML read by a JavaScript config, and the configured scripts directory.
+Arbitrary transitive JavaScript imports still follow Node's module cache; restart
+the server after changing an imported helper if necessary.
