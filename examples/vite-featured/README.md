@@ -55,6 +55,14 @@ stylesheet falls back to system sans-serif when offline.
   `label`, `source` or `preserve`. The featured and collection JSON contain the
   breadcrumb references; the example does not render a breadcrumb navigation bar.
 
+The example also enables `featured-part-of.searchRecords`. Generated manifest
+search records contain full `partOf` labels, a `background` inherited from the
+featured section, and a `collectionSlugs` facet. An astronomy object therefore
+keeps its astronomy label while its result badge uses Heritage's yellow, even
+though the astronomy card itself is lavender. `verify.mjs` checks these search
+outputs alongside the homepage output. A Typesense search UI is not included;
+see `CONFIG.md` in the repository root for query and facet usage.
+
 To replace automatic selection and change the section order, add to `.iiifrc.yml`:
 
 ```yaml

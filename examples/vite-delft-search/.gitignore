@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.iiif/
+.env.local
+search-lock.json

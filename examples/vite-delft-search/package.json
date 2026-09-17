@@ -1,0 +1,26 @@
+{
+  "name": "iiif-hss-example-vite-delft-search",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "cli:build": "pnpm --dir ../.. build:cli",
+    "search:check": "node ../../bin/iiif-hss.js index --iiif-build-dir dist/iiif --resource-index manifests",
+    "search:import": "node tools/import.mjs",
+    "search:key": "node tools/search-key.mjs",
+    "verify": "node tools/verify.mjs",
+    "setup": "docker compose up -d && pnpm cli:build && pnpm search:key && pnpm build && pnpm search:check && pnpm search:import && pnpm verify"
+  },
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-instantsearch": "7.49.1",
+    "typesense-instantsearch-adapter": "3.0.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^6.0.7"
+  }
+}

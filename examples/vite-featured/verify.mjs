@@ -50,6 +50,15 @@ assert.ok(
   images.items.some((item) => !item.thumbnail),
   "Missing image fallback must be demonstrable"
 );
+const searchRows = (await readFile(new URL("./dist/iiif/meta/search/manifests.jsonl", import.meta.url), "utf8"))
+  .split("\n").filter(Boolean).map(line => JSON.parse(line));
+const astronomyObject = searchRows.find(row => row.type === "Manifest" && row.collectionSlugs?.includes("collections/heritage/astronomy"));
+assert.ok(astronomyObject, "Deep collection membership must reach manifest search records");
+assert.equal(astronomyObject.background, heritage.background, "Result badges inherit the featured section colour");
+assert.equal(astronomyObject.partOf.at(-1)["hss:slug"], "collections/heritage/astronomy");
+assert.notEqual(astronomyObject.partOf.at(-1).background, astronomyObject.background);
+assert.ok((await read("meta/search/manifests.mapping.json")).facets.includes("collectionSlugs"));
+assert.deepEqual((await read(`${astronomyObject.slug}/search-record.json`)).record, astronomyObject);
 console.log(
   "Featured homepage verified: selection, enrichment, metadata, backgrounds, counts, folders, thumbnails and bounded embedding."
 );

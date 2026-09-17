@@ -6,6 +6,7 @@ run:
   - feature-heritage
   - collection-item-order
   - collection-thumbnail
+  - extract-search-record
   - featured-part-of
 stores:
   local:
@@ -15,7 +16,11 @@ stores:
     destination: collections
     pattern: '**/*.json'
     subFiles: true
+search:
+  indexNames: [manifests]
 config:
+  featured-part-of:
+    searchRecords: true
   collection-item-order:
     byCollection:
       collections/printed-works: label
