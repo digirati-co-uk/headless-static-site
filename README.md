@@ -56,3 +56,9 @@ Already-loaded resources can use the programmatic `iiif-memory` store. Each inpu
 ## Schema and compatibility policy
 
 Output schemas have canonical `https://iiif-hss.dev/schemas/output-v1/` IDs and are available offline through `iiif-hss/schemas/output-v1/*`. `formatVersion` changes only for incompatible tree or semantic changes. Additive contract changes retain the format version and increment `contractVersion`; consumers must ignore unknown fields. `resultVersion` independently versions the portable programmatic build result. Readers and validators shipped by a release enforce that release's declared contract.
+
+### Delft faceted search example
+
+[examples/vite-delft-search](examples/vite-delft-search/README.md) demonstrates
+Vite + React + React InstantSearch with 16 Delft objects, coloured featured
+collection facets and the search CLI. Typesense runs on host port 18108.

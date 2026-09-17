@@ -6,7 +6,6 @@ import slug from "slug";
 import { stringify } from "yaml";
 import { createFeaturedCollection } from "../../util/create-featured-collection.ts";
 import { createCollection } from "../../util/create-collection.ts";
-import type { SearchIndexes } from "../../util/extract.ts";
 import { loadJson } from "../../util/load-json.ts";
 import type { ActiveResourceJson } from "../../util/store.ts";
 import type { BuildConfig } from "../build.ts";
@@ -23,7 +22,6 @@ export async function indices(
     editable,
     overrides,
     collections,
-    searchIndexes,
     allIndices,
   }: {
     allResources: Array<ActiveResourceJson>;
@@ -38,7 +36,6 @@ export async function indices(
     editable?: Record<string, string>;
     overrides?: Record<string, string>;
     collections?: Record<string, string[]>;
-    searchIndexes?: SearchIndexes;
     allIndices?: Record<string, string[]>;
   },
   { options, configUrl, buildDir, config, cacheDir, topicsDir, collectionRewrites, files, trace, lateCollectionOrdering, lateCollectionThumbnails, collectionOrder = new Map<string, CollectionOrder>() }: BuildConfig
@@ -465,58 +462,6 @@ export async function indices(
     });
     (indexCollectionJson as any)["hss:totalItems"] = indexCollectionJson.items.length;
     await writeJson(join(buildDir, "collection.json"), indexCollectionJson, items === undefined ? "index" : "preserve");
-  }
-
-  // Search indexes.
-  if (searchIndexes) {
-    const searchRoot = join(buildDir, "meta/search");
-    await files.mkdir(searchRoot);
-
-    const indexes = Object.keys(searchIndexes).sort();
-    const allIndiciesKeys = Object.keys(allIndices || {}).sort();
-    for (const index of indexes) {
-      const searchIndex = searchIndexes[index];
-      const schema = join(searchRoot, `${index}.schema.json`);
-      const data = join(searchRoot, `${index}.jsonl`);
-      const mapping = join(searchRoot, `${index}.mapping.json`);
-      const indiciesToAddToIndex = searchIndex.allIndices ? allIndiciesKeys : searchIndex.indices || [];
-
-      // Need to add dynamic indices.
-      for (const indicesToAdd of indiciesToAddToIndex) {
-        if (allIndices?.[indicesToAdd]) {
-          searchIndex.schema.fields.push({
-            name: `topic_${indicesToAdd}`,
-            type: "string[]",
-            facet: true,
-            optional: true,
-          });
-        }
-      }
-
-      await writeJson(schema, {
-        name: index,
-        ...searchIndex.schema,
-      });
-      if (searchIndex.emitCombined !== false) {
-        await files.writeFile(
-          data,
-          [...searchIndex.records]
-            .sort((a, b) => String(a.slug || a.id || "").localeCompare(String(b.slug || b.id || "")))
-            .map((record) => JSON.stringify(record))
-            .join("\n")
-        );
-      }
-      await writeJson(mapping, {
-        name: index,
-        format: "record-jsonl",
-        scope: "resource",
-        idStrategy: "resource-id",
-        schema: `meta/search/${index}.schema.json`,
-        data: searchIndex.emitCombined === false ? undefined : `meta/search/${index}.jsonl`,
-        facets: searchIndex.schema.fields.filter((field) => field.facet).map((field) => field.name),
-        canvasRegistry: "meta/canvas-search-index.json",
-      });
-    }
   }
 
   // Standard files

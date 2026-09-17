@@ -84,6 +84,7 @@ program
   .command("index")
   .description("Manage search index")
   .option("--typesense", "Index into Typesense index")
+  .option("--resource-index <name>", "Validate a combined resource index; with --typesense, upsert its records")
   .option("--iiif-build-dir <path>", "Path to IIIF build directory")
   .option("--frozen-lockfile", "Do not update lock file")
   .option("--check-remote", "Check remote records hashes")

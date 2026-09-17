@@ -350,3 +350,160 @@ test.each([null, "collections/a", [42], ["missing"], ["collections/a", "collecti
     await expect(run()).rejects.toThrow(/collections.hydrate/);
   }
 );
+
+test("finalizers update manifest and collection search outputs without contaminating cached records", async () => {
+  const { config, run, read } = await fixture();
+  config.run.push("extract-search-record", "featured-search");
+  Object.assign(config, { search: { indexNames: ["manifests"], emitRecord: true } });
+  const builtIns: typeof defaultBuiltIns = {
+    ...defaultBuiltIns,
+    collectionFinalizers: [
+      ...defaultBuiltIns.collectionFinalizers!,
+      {
+        id: "featured-search",
+        name: "Featured search",
+        search: {
+          manifests: { schema: { fields: [{ name: "featured", type: "bool", optional: true, facet: true }] } },
+        },
+        handler(collection, { slug, collections, searchRecords }) {
+          if (slug !== "featured") return;
+          const pending = [...(collection.items || [])];
+          const visited = new Set<string>();
+          while (pending.length) {
+            const item = pending.pop()!;
+            const memberSlug = (item as any)["hss:slug"];
+            if (visited.has(memberSlug)) continue;
+            visited.add(memberSlug);
+            const record = searchRecords?.get(memberSlug);
+            if (record) {
+              record.featured = true;
+              delete record.summary;
+            }
+            pending.push(...(collections[memberSlug]?.items || []));
+          }
+        },
+      },
+    ],
+  };
+  for (let i = 0; i < 2; i++) {
+    const result = await run(builtIns);
+    const slug = result.stores.allResources.find((resource) => resource.type === "Manifest")!.slug;
+    const record = (await read(result, `${slug}/search-record.json`)).record;
+    expect(record.featured).toBe(true);
+    expect(record.summary).toBeUndefined();
+    expect((await read(result, "collections/a/search-record.json")).record.featured).toBe(true);
+    const rows = (
+      await readFile(
+        join(result.buildConfig.files.resolve(result.buildConfig.buildDir), "meta/search/manifests.jsonl"),
+        "utf8"
+      )
+    )
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(rows.filter((row) => row.slug === slug)).toEqual([record]);
+    expect((await read(result, "meta/search/manifests.schema.json")).fields).toContainEqual({
+      name: "featured",
+      type: "bool",
+      optional: true,
+      facet: true,
+    });
+    const cached = await result.buildConfig.files.loadJson(
+      join(result.buildConfig.cacheDir, slug, "search-record.json")
+    );
+    expect(cached.record.featured).toBeUndefined();
+    expect((await read(result, `${slug}/manifest.json`)).featured).toBeUndefined();
+  }
+  config.collections.featured.items = [];
+  const removed = await run(builtIns);
+  const slug = removed.stores.allResources.find((resource) => resource.type === "Manifest")!.slug;
+  expect((await read(removed, `${slug}/search-record.json`)).record.featured).toBeUndefined();
+  config.collections.featured.items = ["collections/a"];
+  config.run = config.run.filter((id) => id !== "featured-search");
+  expect((await read(await run(builtIns), `${slug}/search-record.json`)).record.featured).toBeUndefined();
+});
+
+test("featured-part-of optionally adds collection and manifest search breadcrumbs on each build", async () => {
+  const { config, run, read, write } = await fixture();
+  config.run.push("extract-search-record");
+  const options: { searchRecords: boolean; searchRecordMode?: "top-level" | "full" } = { searchRecords: false };
+  Object.assign(config, {
+    search: { indexNames: ["manifests"], emitRecord: true },
+    config: { "featured-part-of": options },
+  });
+  const initial = await run();
+  const slug = initial.stores.allResources.find((resource) => resource.type === "Manifest")!.slug;
+  expect((await read(initial, `${slug}/search-record.json`)).record.partOf).toBeUndefined();
+  options.searchRecords = true;
+  options.searchRecordMode = "top-level";
+  const topLevel = await run();
+  for (const resourceSlug of [slug, "collections/a", "collections/a/b/c/d"]) {
+    const record = (await read(topLevel, `${resourceSlug}/search-record.json`)).record;
+    expect(slugs(record)).toEqual(["collections/a"]);
+    expect(record.partOf[0].background).toBe("#f00");
+  }
+  expect(slugs(await read(topLevel, "collections/a/b/c/d/collection.json"))).toEqual([
+    "featured",
+    "collections/a",
+    "collections/a/b",
+    "collections/a/b/c",
+  ]);
+  delete options.searchRecordMode;
+  await write("content/a/b/c/d/_collection.yml", 'label: D\nbackground: "#00f"\n');
+  const enabled = await run();
+  const collection = await read(enabled, "collections/a/b/c/d/collection.json");
+  expect((await read(enabled, "collections/a/b/c/d/search-record.json")).record.partOf).toEqual(collection.partOf);
+  const manifestRecord = (await read(enabled, `${slug}/search-record.json`)).record;
+  expect(slugs(manifestRecord)).toEqual([
+    "featured",
+    "collections/a",
+    "collections/a/b",
+    "collections/a/b/c",
+    "collections/a/b/c/d",
+  ]);
+  expect(manifestRecord.partOf[1].background).toBe("#f00");
+  expect(manifestRecord.partOf.at(-1).background).toBe("#00f");
+  expect(manifestRecord.background).toBe("#f00");
+  expect(manifestRecord.collectionSlugs).toEqual([
+    "collections/a",
+    "collections/a/b",
+    "collections/a/b/c",
+    "collections/a/b/c/d",
+  ]);
+  expect((await read(enabled, `${slug}/manifest.json`)).partOf).toBeUndefined();
+  const rows = (
+    await readFile(
+      join(enabled.buildConfig.files.resolve(enabled.buildConfig.buildDir), "meta/search/manifests.jsonl"),
+      "utf8"
+    )
+  )
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  expect(rows.find((row) => row.slug === slug)).toEqual(manifestRecord);
+  expect((await read(enabled, "meta/search/manifests.schema.json")).fields).toContainEqual({
+    name: "partOf",
+    type: "object[]",
+    optional: true,
+    index: false,
+  });
+  const mapping = await read(enabled, "meta/search/manifests.mapping.json");
+  expect(mapping.facets).toContain("collectionSlugs");
+  expect((await read(enabled, "meta/search/manifests.schema.json")).fields).toContainEqual({
+    name: "background",
+    type: "string",
+    optional: true,
+    index: false,
+  });
+  await write("content/a/_collection.yml", "label: A\n");
+  const noColour = await run();
+  expect((await read(noColour, `${slug}/search-record.json`)).record.background).toBeUndefined();
+  options.searchRecordMode = "top-level";
+  expect(slugs((await read(await run(), `${slug}/search-record.json`)).record)).toEqual(["collections/a"]);
+  config.collections.featured.items = [];
+  const removed = (await read(await run(), `${slug}/search-record.json`)).record;
+  expect(removed.partOf).toBeUndefined();
+  expect(removed.background).toBeUndefined();
+  expect(removed.collectionSlugs).toBeUndefined();
+  config.collections.featured.items = ["collections/a"];
+  options.searchRecords = false;
+  expect((await read(await run(), `${slug}/search-record.json`)).record.partOf).toBeUndefined();
+});

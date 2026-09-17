@@ -30,7 +30,7 @@ export async function emit(
     allPaths?: Record<string, string>;
     idsToSlugs?: Record<string, { slug: string; type: string }>;
   },
-  { options, configUrl, cacheDir, buildDir, log, imageServiceLoader, files, search, concurrency, config, lateCollectionThumbnails, lateCollectionOrdering }: BuildConfig,
+  { options, configUrl, cacheDir, buildDir, log, imageServiceLoader, files, concurrency, config, lateCollectionThumbnails, lateCollectionOrdering }: BuildConfig,
   { canvasSearchIndex }: { canvasSearchIndex?: CanvasSearchIndex }
 ) {
   if (!options.emit) {
@@ -484,16 +484,6 @@ export async function emit(
           join(manifestBuildDirectory, "meta.json"),
           { overwrite: true }
         );
-
-        if (search.emitRecord && files.exists(join(cacheDir, manifest.slug, "search-record.json"))) {
-          // Temporary? Or config?
-          files.copy(
-            // 3. Save the meta file to disk
-            join(cacheDir, manifest.slug, "search-record.json"),
-            join(manifestBuildDirectory, "search-record.json"),
-            { overwrite: true }
-          );
-        }
 
         files.copy(join(cacheDir, manifest.slug, "indices.json"), join(manifestBuildDirectory, "indices.json"), {
           overwrite: true,

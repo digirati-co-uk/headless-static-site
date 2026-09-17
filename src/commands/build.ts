@@ -1,3 +1,5 @@
+import { loadResourceSearchRecords } from "../util/resource-search-records.ts";
+import { emitSearch } from "./build-steps/7-emit-search.ts";
 import { collectionItemOrder } from "../finalize/collection-item-order.ts";
 import { collectionThumbnail } from "../finalize/collection-thumbnail.ts";
 import { featuredPartOf } from "../finalize/featured-part-of.ts";
@@ -213,6 +215,7 @@ const BUILD_PHASE_LABELS: Record<BuildStepId, string> = {
   "emit-files": "Emitting files",
   "build-indices": "Building indices",
   "finalize-collections": "Finalizing collections",
+  "emit-search": "Emitting search records",
   "save-files": "Saving files",
 };
 
@@ -644,7 +647,6 @@ async function buildInternal(
         storeCollections: emitted.storeCollections,
         indexCollection: emitted.indexCollection,
         collectionItems: emitted.collectionItems,
-        searchIndexes: enrichments.searchIndexes,
         allIndices: enrichments.allIndices,
         siteMap: emitted.siteMap,
       },
@@ -652,8 +654,21 @@ async function buildInternal(
     )
   );
 
+  const resourceSearchRecords = await loadResourceSearchRecords(
+    stores.allResources,
+    buildConfig,
+    enrichments.resourceSearchRecords
+  );
+  const searchRecords = new Map(
+    [...resourceSearchRecords].flatMap(([slug, entry]) =>
+      entry.search.record ? [[slug, entry.search.record] as const] : []
+    )
+  );
   await runPhase("finalize-collections", "Finalizing collections", () =>
-    finalizeCollections(emitted, stores.allResources, buildConfig)
+    finalizeCollections(emitted, stores.allResources, buildConfig, searchRecords)
+  );
+  await runPhase("emit-search", "Emitting search records", () =>
+    emitSearch(resourceSearchRecords, enrichments.searchIndexes, enrichments.allIndices, buildConfig)
   );
 
   await buildConfig.fileTypeCache.save();

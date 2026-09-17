@@ -330,7 +330,7 @@ export async function getBuildConfig(options: BuildOptions, builtIns: BuildBuilt
           searchConfigs.push(extraction.search[index]);
         }
       }
-      for (const enrichment of enrichments) {
+      for (const enrichment of [...enrichments, ...collectionFinalizers]) {
         if (enrichment.search?.[index]) {
           searchConfigs.push(enrichment.search[index]);
         }

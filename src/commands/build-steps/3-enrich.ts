@@ -1,3 +1,4 @@
+import { projectSearchRecord, type ResourceSearchRecords } from "../../util/resource-search-records.ts";
 import { join } from "node:path";
 import PQueue from "p-queue";
 import type { BuildProgressCallbacks } from "../../util/build-progress.ts";
@@ -65,27 +66,14 @@ export async function enrich(
   );
 
   const canvasSearchIndex: CanvasSearchIndex = {};
+  const resourceSearchRecords: ResourceSearchRecords = new Map();
 
   function addToSearchIndex(search: Partial<SearchRecordReturn>, indices: Record<string, string[]>) {
     const result: Array<{ index: string; record?: any; remoteRecords?: RemoteRecordLink[] }> = [];
     if (search.indexes && search.record) {
       for (const index of search.indexes) {
         if (searchIndexes[index]) {
-          const record = Object.fromEntries(
-            Object.entries(search.record).filter(([key]) => searchIndexes[index].keys.includes(key))
-          );
-          if (searchIndexes[index].allIndices) {
-            const keys = Object.keys(indices);
-            for (const facet of keys) {
-              record[`topic_${facet}`] = indices[facet];
-            }
-          } else if (searchIndexes[index].indices?.length) {
-            for (const facet of searchIndexes[index].indices || []) {
-              if (indices[facet]) {
-                record[`topic_${facet}`] = indices[facet];
-              }
-            }
-          }
+          const record = projectSearchRecord(search.record, searchIndexes[index], indices);
           if (search.remoteRecords?.[index]) {
             result.push({ index, remoteRecords: search.remoteRecords?.[index] });
           }
@@ -268,7 +256,13 @@ ${errors.map((e, n) => `  ${n + 1})  ${(e as any)?.reason?.message}`).join(", ")
 
     // savingFiles.push(cachedResource.save());
     const indices = await cachedResource.indices.value;
-    addToSearchIndex(await cachedResource.searchRecord.value, indices);
+    const search = structuredClone(await cachedResource.searchRecord.value);
+    const indexed = addToSearchIndex(search, indices);
+    resourceSearchRecords.set(manifest.slug, {
+      search,
+      indices,
+      indexedRecords: indexed.flatMap((entry) => (entry.record ? [entry.record] : [])),
+    });
     recordIndices(indices);
     await cachedResource.save();
     progress.increment();
@@ -465,6 +459,7 @@ ${errors.map((e, n) => `  ${n + 1}) ${(e as any)?.reason?.message}`).join(", ")}
     stats,
     searchIndexes,
     canvasSearchIndex,
+    resourceSearchRecords,
     allIndices,
   };
 }

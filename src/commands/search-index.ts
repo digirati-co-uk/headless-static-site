@@ -21,12 +21,48 @@ const CANVAS_INDEX_FILE = "meta/canvas-search-index.json";
 
 interface SearchIndexCommandOptions {
   iiifBuildDir?: string;
+  resourceIndex?: string;
   typesense: boolean;
   checkRemote?: boolean;
   frozenLockfile: boolean;
 }
 
 export async function searchIndexCommand(options: SearchIndexCommandOptions) {
+  if (options.resourceIndex) {
+    const name = options.resourceIndex;
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error("Invalid resource index name");
+    const indexLocation = join(getBuildDir(options), "meta/search");
+    const schema = JSON.parse(await readFile(join(indexLocation, `${name}.schema.json`), "utf8"));
+    const lines = (await readFile(join(indexLocation, `${name}.jsonl`), "utf8"))
+      .split("\n")
+      .filter((line) => line.trim());
+    const records = lines.map((line) => JSON.parse(line));
+    const ids = new Set<string>();
+    for (const record of records) {
+      if (typeof record.id !== "string" || !record.id || ids.has(record.id))
+        throw new Error("Resource search records must have unique, non-empty string IDs");
+      ids.add(record.id);
+    }
+    console.log(`Resource index ${name}: ${records.length} records`);
+    if (options.typesense) {
+      const search = new TypesenseSearchIndex({
+        indexLocation,
+        indexMapping: parseIndexMapping(process.env.SEARCH_INDEX_MAPPING || ""),
+      });
+      await search.ensureTypesenseCollection(name, schema);
+      for (let offset = 0; offset < records.length; offset += 250) {
+        await search.client
+          .collections(search.getIndex(name))
+          .documents()
+          .import(records.slice(offset, offset + 250), {
+            action: "upsert",
+            dirty_values: "reject",
+          });
+      }
+      console.log(`Imported ${records.length} records into ${search.getIndex(name)}`);
+    }
+    return;
+  }
   console.log(chalk.blue`Checking search indexes`);
 
   const result = await searchIndexReconciliation(options);

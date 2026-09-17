@@ -16,7 +16,8 @@ export async function finalizeCollections(
     siteMap?: Record<string, any>;
   },
   sourceResources: ActiveResourceJson[],
-  { options, collectionFinalizers = [], files, buildDir, config, collectionOrder }: BuildConfig
+  { options, collectionFinalizers = [], files, buildDir, config, collectionOrder }: BuildConfig,
+  searchRecords: ReadonlyMap<string, Record<string, any>> = new Map()
 ) {
   if (!options.emit || options.exact || options.stores?.length || !resources) return;
   const hydrate = config.collections?.hydrate === undefined ? [] : config.collections.hydrate;
@@ -38,18 +39,29 @@ export async function finalizeCollections(
   const api = {
     collections,
     config,
+    searchRecords,
     orderPolicies: collectionOrder,
     sourceOrder: new Map(sourceResources.map((resource, index) => [resource.slug, index])),
   };
   const snippet = ({ items, "@context": context, annotations, structures, ...metadata }: any) => metadata;
   for (const step of collectionFinalizers) {
     const before = structuredClone(collections);
+    const identities = new Map(
+      [...searchRecords].map(([slug, record]) => [slug, { record, id: record.id, slug: record.slug }])
+    );
     const stepConfig = step.configure
       ? await step.configure(api, config.config?.[step.id] || {})
       : config.config?.[step.id];
     try {
       for (const [slug, collection] of Object.entries(collections)) {
         await step.handler(collection, { ...api, slug }, stepConfig);
+      }
+      if (searchRecords.size !== identities.size)
+        throw new Error(`Collection finalizer "${step.id}" cannot change search record membership`);
+      for (const [slug, record] of searchRecords) {
+        const identity = identities.get(slug);
+        if (!identity || record !== identity.record || record.id !== identity.id || record.slug !== identity.slug)
+          throw new Error(`Collection finalizer "${step.id}" cannot change search record id or slug (${slug})`);
       }
       const changes = new Map<string, Record<string, any>>();
       for (const [slug, collection] of Object.entries(collections)) {

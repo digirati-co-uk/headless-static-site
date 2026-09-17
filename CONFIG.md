@@ -343,6 +343,57 @@ Unreachable collections, the featured root and manifests retain their existing
 metadata. No featured output means no breadcrumb changes. This is a site-navigation
 convention on `partOf`, rather than a list of only immediate IIIF parents.
 
+To also add these breadcrumbs to existing collection and manifest search records,
+enable `searchRecords` (off by default):
+
+```yaml
+run:
+  - extract-search-record
+  - featured-part-of
+search:
+  indexNames: [manifests]
+config:
+  featured-part-of:
+    searchRecords: true
+    searchRecordMode: full # default; top-level keeps only the featured section
+```
+
+When enabled, the script adds three search fields:
+
+- `partOf`: the full ordered ancestor objects, including `featured` and, for
+  manifests, their containing collection. Use the last entry's label for a result's
+  collection badge. `searchRecordMode: top-level` keeps only the collection directly
+  under `featured` in this field; it does not change the other two fields.
+- `background`: the colour of the collection directly under `featured`, regardless
+  of colours on deeper collections or the resource itself. Omitted when that section
+  has no string `background`, or the manifest is directly under `featured`.
+- `collectionSlugs`: the full collection path as slugs, excluding `featured`.
+  Collection records also include their own slug. This is a `string[]` facet for
+  filtering and counting at any level, independent of `searchRecordMode`.
+
+For Featured → Heritage (yellow) → Astronomy (purple) → Object, the object keeps
+Astronomy's label in `partOf`, has a yellow `background`, and has
+`collectionSlugs: ["collections/heritage", "collections/heritage/astronomy"]`.
+The last breadcrumb's own background remains purple; use the record's `background`
+for the result badge to match the featured section.
+
+The `manifests` schema declares these fields automatically. `partOf` and `background`
+are stored display fields (`index: false`); `collectionSlugs` is indexed with
+`facet: true`. Custom index schemas need equivalent declarations.
+For an object-only results screen, use `filter_by: "type:=Manifest"` and
+`facet_by: "collectionSlugs"`. To select Heritage, add
+`collectionSlugs:=collections/heritage` to the filter with `&&`. Join facet slugs to
+`featured/collection.json` for sidebar ordering, labels and colours. Use search
+facet counts for the numbers, not IIIF immediate-member counts. The client chooses
+whether facet counts include or exclude the currently selected collection filter.
+
+Collection-document breadcrumbs keep their full paths in both modes; manifest
+and canvas documents are unchanged. Shared resources receive one path. Missing
+search records are skipped. Cached rebuilds recalculate the fields when membership,
+colour or settings change. Turning `searchRecords` off restores extraction output.
+Place steps that edit membership or breadcrumb metadata before `featured-part-of`
+so the search records reflect those edits.
+
 Register your own finalizer from a JS/TS file in the configured scripts directory:
 
 ```js
@@ -371,9 +422,62 @@ changes and deletions to collection references in aggregate output and
 `meta/resources.json`. Membership edits refresh counts and the immediate members
 of embedded featured sections, without embedding their descendants. Identity
 (`id`, `type`, `hss:slug`) must remain unchanged; routing and resource creation
-belong to earlier phases. This phase does not rerun extraction/search indexing or
-modify manifest documents. Put membership-editing steps before `featured-part-of`
+belong to earlier phases. This phase does not rerun extraction or modify manifest documents. Put membership-editing steps before `featured-part-of`
 so breadcrumbs reflect the final hierarchy.
+
+### Search records during finalization
+
+Finalizers receive `searchRecords`, a map keyed by resource slug containing mutable
+search records for both collections and manifests. Edit fields on an existing
+record with `searchRecords.get(slug)`; missing records are not synthesized. The
+map's membership and each record's `id` and `slug` must stay unchanged.
+
+Individual `search-record.json` files and standard combined `meta/search/*.jsonl`
+indexes are published after finalization. Declare additional indexed fields in the
+finalizer's `search` schema, just as for extraction/enrichment scripts. Collection
+metadata edits do not automatically change search fields; edit the record explicitly.
+
+For example, this marks every descendant of the featured collection, including
+manifests below the embedded depth:
+
+```js
+import { finalizeCollection } from "iiif-hss";
+
+finalizeCollection(
+  {
+    id: "featured-search",
+    name: "Featured search",
+    search: {
+      manifests: {
+        schema: {
+          fields: [{ name: "featured", type: "bool", optional: true, facet: true }],
+        },
+      },
+    },
+  },
+  (collection, { slug, collections, searchRecords }) => {
+    if (slug !== "featured") return;
+    const pending = [...(collection.items || [])];
+    const visited = new Set();
+    while (pending.length) {
+      const item = pending.pop();
+      const memberSlug = item["hss:slug"];
+      if (visited.has(memberSlug)) continue;
+      visited.add(memberSlug);
+      const record = searchRecords.get(memberSlug);
+      if (record) record.featured = true;
+      pending.push(...(collections[memberSlug]?.items || []));
+    }
+  }
+);
+```
+
+Enable `extract-search-record` and `featured-search` in `run`, with
+`search.indexNames: ["manifests"]`. Place membership-editing finalizers before
+`featured-search`. Records are detached from extraction caches, so cached rebuilds
+start clean when membership changes or the finalizer is disabled. Existing search
+emission options still apply. Canvas records, extraction topic indexes and files
+published independently by custom exporters are unaffected.
 
 ### Folder collection authoring
 

@@ -8,6 +8,7 @@ export const BUILD_STEP_ORDER = [
   "emit-files",
   "build-indices",
   "finalize-collections",
+  "emit-search",
   "save-files",
 ] as const;
 
