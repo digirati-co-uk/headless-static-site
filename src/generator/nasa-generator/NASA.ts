@@ -21,7 +21,7 @@ export class NASA {
     const reqUrl = new URL(`${NASA.BASE_URL}/search`);
     reqUrl.search = queryStringStringify(params);
 
-    const response = await fetch(reqUrl.toString(), {
+    const response = await this.fetcher(reqUrl.toString(), {
       headers: {
         Accept: "application/json",
       },

@@ -1,0 +1,16 @@
+label:
+  en:
+    - Cities on paper
+summary:
+  en:
+    - Explore streets, canals and the changing shape of the city.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "12"
+thumbnail:
+  - id: /images/delft.jpg
+    type: Image

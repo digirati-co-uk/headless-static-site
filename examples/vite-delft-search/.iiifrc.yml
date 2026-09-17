@@ -1,0 +1,36 @@
+server:
+  url: http://localhost:5178/iiif
+run:
+  - folder-collections
+  - extract-thumbnail
+  - extract-topics
+  - extract-search-record
+  - collection-item-order
+  - collection-thumbnail
+  - featured-part-of
+search:
+  indexNames: [manifests]
+  emitRecord: true
+config:
+  featured-part-of:
+    searchRecords: true
+  extract-topics:
+    language: nl
+    translate: false
+    topicTypes:
+      material: [Materiaal]
+      objectType: [Objectnaam]
+  folder-collections:
+    labelStrategy: metadata
+collections:
+  featured:
+    label: { nl: [Collecties] }
+    items: [collections/heritage, collections/physics, collections/calculation, collections/portraits]
+stores:
+  sample:
+    type: iiif-json
+    path: ./fixtures
+    base: ./fixtures
+    destination: collections
+    subFiles: true
+    pattern: '**/*.json'

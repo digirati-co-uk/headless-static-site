@@ -5,8 +5,11 @@ import { Command } from "commander";
 import { buildCommand } from "./commands/build";
 import { generateCommand } from "./commands/generate.ts";
 import { initCommand } from "./commands/init.ts";
+import { searchIndexCommand } from "./commands/search-index.ts";
 import { serveCommand } from "./commands/serve.ts";
 import { validateCommand } from "./commands/validate.ts";
+import { warmCommand } from "./commands/warm.ts";
+import "dotenv/config";
 
 const program = new Command();
 
@@ -14,6 +17,8 @@ program
   .command("build")
   .description("Build headless static site")
   .option("--no-cache", "Disable caching")
+  .option("--no-extraction-cache", "Recompute cacheable extractions while retaining source caches")
+  .option("--no-network-cache", "Disable network request caching")
   .option("-w, --watch", "Watch for changes")
   .option("-s, --scripts <path>", "Build scripts")
   .option("--debug", "Debug")
@@ -26,6 +31,7 @@ program
   .option("--no-enrich", "Disable enrichment")
   .option("--no-client", "Disable client.js building")
   .option("--no-generate", "Disable IIIF generator")
+  .option("--no-prefetch", "Skip remote request-cache warm-up")
   .option("--html", "Include HTML in build")
   .option("--python", "Allow python scripts")
   .option("--topics", "Flush topic data to /topics folder")
@@ -46,7 +52,20 @@ program
   .command("generate")
   .description("Run IIIF generators")
   .option("--no-cache", "Disable caching")
+  .option("--no-network-cache", "Disable network request caching")
   .action(generateCommand);
+
+program
+  //
+  .command("warm")
+  .description("Warm request cache for remote stores")
+  .option("--no-cache", "Disable caching")
+  .option("--no-network-cache", "Disable network request caching")
+  .option("-c, --config <path>", "Path to config file")
+  .option("--stores <name...>", "Names of stores to warm")
+  .option("-s, --scripts <path>", "Build scripts")
+  .option("--debug", "Debug")
+  .action(warmCommand);
 
 program
   //
@@ -59,5 +78,16 @@ program
   .command("init")
   .description("Initialize config")
   .action(initCommand);
+
+program
+  //
+  .command("index")
+  .description("Manage search index")
+  .option("--typesense", "Index into Typesense index")
+  .option("--resource-index <name>", "Validate a combined resource index; with --typesense, upsert its records")
+  .option("--iiif-build-dir <path>", "Path to IIIF build directory")
+  .option("--frozen-lockfile", "Do not update lock file")
+  .option("--check-remote", "Check remote records hashes")
+  .action(searchIndexCommand);
 
 program.parse(argv);

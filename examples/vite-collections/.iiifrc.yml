@@ -1,0 +1,97 @@
+server:
+  url: https://example.org/iiif
+run:
+  - extract-collection-thumbnail
+  - fill-empty-collection
+  - cached-resource-summary
+collections:
+  index:
+    label: Collection recipes
+    items: [featured, manifests]
+  featured:
+    label: Collection recipes
+    summary: Eight independent stores. Combine folders, curated selections and scripts while keeping your existing objects where they are.
+    items:
+      - collections/option-a
+      - collections/option-b
+      - collections/mixed
+      - collections/cross-store
+      - collections/automatic
+      - collections/scripted
+      - collections/legacy
+      - collections/filtered
+stores:
+  option-a:
+    type: iiif-json
+    path: ./fixtures/option-a
+    base: ./fixtures/option-a
+    destination: collections/option-a
+    pattern: '**/*.json'
+  option-b:
+    type: iiif-json
+    path: ./fixtures/option-b
+    base: ./fixtures/option-b
+    destination: collections/option-b
+    pattern: '**/*.json'
+  mixed:
+    type: iiif-json
+    path: ./fixtures/mixed
+    base: ./fixtures/mixed
+    destination: collections/mixed
+    pattern: '**/*.json'
+    subFiles: true
+  cross-store:
+    type: iiif-json
+    path: ./fixtures/cross-store
+    base: ./fixtures/cross-store
+    destination: collections/cross-store
+    pattern: '**/*.json'
+    config:
+      folder-collections:
+        enabled: false
+  automatic:
+    type: iiif-json
+    path: ./fixtures/automatic
+    base: ./fixtures/automatic
+    destination: collections/automatic
+    pattern: '**/*.json'
+    run: [folder-collections]
+    config:
+      folder-collections:
+        labelStrategy: customMap
+        customMap:
+          instruments: Scientific instruments
+  scripted:
+    type: iiif-json
+    path: ./fixtures/scripted
+    base: ./fixtures/scripted
+    destination: collections/scripted
+    pattern: '**/*.json'
+  legacy:
+    type: iiif-json
+    path: ./fixtures/legacy
+    base: ./fixtures/legacy
+    destination: collections/legacy
+    pattern: '**/*.json'
+  filtered:
+    type: iiif-json
+    path: ./fixtures/filtered
+    base: ./fixtures/filtered
+    destination: collections/filtered
+    pattern: '**/*.json'
+    ignore: ['**/drafts/**']
+  # Declared last deliberately: curated slugs resolve independently of store order.
+  shared-objects:
+    type: iiif-json
+    path: ./fixtures/shared
+    base: ./fixtures/shared
+    destination: manifests
+    pattern: '**/*.json'
+  memory:
+    type: iiif-memory
+    inputs:
+      - resource:
+          id: https://example.org/manifests/programmatic
+          type: Manifest
+          label: { en: [A programmatically supplied object] }
+          items: []

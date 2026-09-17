@@ -1,12 +1,16 @@
-import type { Extraction } from "./extract";
+import type { CollectionFinalizer } from "./finalize-collection.ts";
 import type { Enrichment } from "./enrich";
-import type { Rewrite } from "./rewrite.ts";
+import type { Extraction } from "./extract";
 import type { IIIFGenerator } from "./iiif-generator.ts";
+import type { Linker } from "./linker.ts";
+import type { Rewrite } from "./rewrite.ts";
 
 declare interface Global {
   __hss?: {
     extractions?: Extraction[];
+    collectionFinalizers?: CollectionFinalizer[];
     enrichments?: Enrichment[];
+    linkers?: Linker[];
     rewrites?: Rewrite[];
     generators?: IIIFGenerator[];
   };
@@ -14,25 +18,52 @@ declare interface Global {
 
 export function getNodeGlobals() {
   const extractions: Extraction[] = [];
+  const collectionFinalizers: CollectionFinalizer[] = [];
   const enrichments: Enrichment[] = [];
+  const linkers: Linker[] = [];
   const rewrites: Rewrite[] = [];
   const generators: IIIFGenerator[] = [];
 
   const g = global as Global;
 
+  function dedupeById<T extends { id?: string }>(items: T[]) {
+    const deduped: T[] = [];
+    const byId = new Map<string, number>();
+
+    for (const item of items) {
+      if (!item?.id) {
+        deduped.push(item);
+        continue;
+      }
+      const existingIndex = byId.get(item.id);
+      if (typeof existingIndex === "number") {
+        deduped[existingIndex] = item;
+      } else {
+        byId.set(item.id, deduped.length);
+        deduped.push(item);
+      }
+    }
+
+    return deduped;
+  }
+
   if (g.__hss) {
+    collectionFinalizers.push(...dedupeById(g.__hss.collectionFinalizers || []));
     if (g.__hss.extractions) {
-      extractions.push(...g.__hss.extractions);
+      extractions.push(...dedupeById(g.__hss.extractions as Array<Extraction & { id?: string }>));
     }
     if (g.__hss.enrichments) {
-      enrichments.push(...g.__hss.enrichments);
+      enrichments.push(...dedupeById(g.__hss.enrichments as Array<Enrichment & { id?: string }>));
+    }
+    if (g.__hss.linkers) {
+      linkers.push(...dedupeById(g.__hss.linkers as Array<Linker & { id?: string }>));
     }
     if (g.__hss.rewrites) {
-      rewrites.push(...g.__hss.rewrites);
+      rewrites.push(...dedupeById(g.__hss.rewrites as Array<Rewrite & { id?: string }>));
     }
     if (g.__hss.generators) {
-      generators.push(...g.__hss.generators);
+      generators.push(...dedupeById(g.__hss.generators as Array<IIIFGenerator & { id?: string }>));
     }
   }
-  return { extractions, enrichments, rewrites, generators };
+  return { collectionFinalizers, extractions, enrichments, linkers, rewrites, generators };
 }

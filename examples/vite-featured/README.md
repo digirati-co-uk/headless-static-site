@@ -1,0 +1,93 @@
+# Featured collection homepage (Vite)
+
+A complete static collection homepage driven by one generated IIIF document:
+`/iiif/featured/collection.json`. Its hero, section headings, descriptions, cards,
+images, metadata, background colours and counts come from the build output.
+The custom `background` property colours cards; behaviours enable horizontal carousels.
+
+From the repository root, after `pnpm install`:
+
+```sh
+pnpm --dir examples/vite-featured dev
+# Open http://localhost:5173/collections (use the URL Vite prints).
+pnpm --dir examples/vite-featured build
+pnpm --dir examples/vite-featured preview
+```
+
+Use Node 22 or later. The Vite config imports the checkout's source plugin so you
+can develop HSS without rebuilding its package first. The example has no frontend
+framework or additional UI dependencies. Vite copies the generated IIIF output to
+`dist/iiif`. Serve `dist` with SPA fallback for `/collections` and its query-string
+detail routes. For a real deployment, change `serverUrl` in `vite.config.ts` to the
+canonical IIIF base URL. Images are local static assets; the optional Google Fonts
+stylesheet falls back to system sans-serif when offline.
+
+## Try the features
+
+- Open `/collections`: three automatically featured sections with keyboard/touch
+  carousels, collection search, responsive cards and links to detail pages.
+- Change a label, summary or metadata in `fixtures/**/_collection.yml`. Watch mode
+  rebuilds the IIIF and reloads the page; descriptions have no duplicate definition
+  in frontend code or configuration.
+- `scripts/feature-heritage.js` marks the heritage section through ordinary
+  collection enrichment and updates its summary. The other sections are marked
+  directly in their sidecars. `images/_collection.yaml` demonstrates the alternate
+  extension. The store intentionally uses `**/*.json` and `subFiles: true`.
+- Change `background: "#f8d447"` in a section sidecar to colour its cards. A card's
+  own `background` overrides that default: `heritage/astronomy/_collection.yml`
+  uses lavender (`"#d9c9f2"`). Quote hex colours so YAML treats them as strings.
+  Without either property, cards use the neutral default.
+- Remove a section's carousel behaviour to switch to a grid. Unknown behaviours
+  are ignored by the frontend.
+- `fixtures/images/details` has no sidecar: HSS creates it as an automatic folder
+  collection. `heritage/navigation` inherits a thumbnail from its immediate item.
+- Images mixes a direct Manifest card with collection cards, including an item
+  without a thumbnail or summary to show the fallback state.
+- Cards display authored “Objects in collection” metadata separately from the
+  computed direct member count. The sample holdings/descriptions are illustrative.
+- The root index explicitly references `featured` and `manifests`.
+- `collections.hydrate: [collections/heritage]` adds immediate member details to
+  the heritage collection's standalone JSON too. Breadcrumb ancestors also carry
+  their collection's `background` colour when present.
+- Late finalizers sort the printed-works cards by label, derive missing collection
+  thumbnails from the final member order, then add `partOf` breadcrumb chains.
+  Change `config.collection-item-order.byCollection` in `.iiifrc.yml` to try
+  `label`, `source` or `preserve`. The featured and collection JSON contain the
+  breadcrumb references; the example does not render a breadcrumb navigation bar.
+
+The example also enables `featured-part-of.searchRecords`. Generated manifest
+search records contain full `partOf` labels, a `background` inherited from the
+featured section, and a `collectionSlugs` facet. An astronomy object therefore
+keeps its astronomy label while its result badge uses Heritage's yellow, even
+though the astronomy card itself is lavender. `verify.mjs` checks these search
+outputs alongside the homepage output. A Typesense search UI is not included;
+see `CONFIG.md` in the repository root for query and facet usage.
+
+To replace automatic selection and change the section order, add to `.iiifrc.yml`:
+
+```yaml
+collections:
+  featured:
+    # Keep the existing label, summary and thumbnail here too.
+    items: [collections/images, collections/heritage]
+```
+
+Unmarked collections can also be selected explicitly. `items: []` demonstrates
+empty output; omit `items` to restore marker-based selection. Unknown, duplicate,
+Manifest or self-referencing slugs produce build errors. Removing the entire
+featured configuration disables output; remove `featured` from the root index's
+explicit list at the same time.
+
+`pnpm build` runs `verify.mjs` after Vite: a small assertion script checking the
+actual generated sections, enrichment, source summaries, metadata, background colours, late ordering, breadcrumbs, counts,
+thumbnail fallbacks, automatic folders and bounded embedding. It expects the
+original fixture/configuration; restore those after trying editorial changes.
+
+## Images
+
+Two historic prints are bundled for a reproducible demo:
+
+- `astronomy.jpg`: [1769 astronomical diagrams, Library of Congress](https://loc.gov/item/2013593153), downloaded via its IIIF image service.
+- `delft.jpg`: [historic Delft map, Essential Vermeer](https://www.essentialvermeer.com/delft/view-of-delt-archive.html).
+
+The website is a demonstration archive, not an official university website.

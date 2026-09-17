@@ -1,0 +1,15 @@
+{
+  "id": "https://example.org/samples/shared/map",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Map from the existing catalogue"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Illustrative teaching object; no external service is needed to run this example."
+    ]
+  },
+  "items": []
+}

@@ -1,0 +1,16 @@
+label:
+  en:
+    - A city remembered
+summary:
+  en:
+    - A closer look at the landscapes of everyday life.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "26"
+thumbnail:
+  - id: /images/delft.jpg
+    type: Image

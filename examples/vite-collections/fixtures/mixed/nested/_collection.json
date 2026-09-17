@@ -1,0 +1,7 @@
+{
+  "label": "Nested JSON sidecar",
+  "summary": "An underscore JSON declaration inside a YAML-authored parent.",
+  "items": [
+    "manifests/instrument"
+  ]
+}

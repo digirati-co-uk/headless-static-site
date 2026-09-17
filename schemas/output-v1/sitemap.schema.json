@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/sitemap.schema.json",
+  "title": "IIIF HSS sitemap",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "required": ["type"],
+    "properties": {
+      "type": { "enum": ["Manifest", "Collection"] },
+      "label": { "type": "string" },
+      "canvases": { "type": "integer", "minimum": 0 },
+      "hasCanvasData": { "type": "boolean" },
+      "source": { "type": "object" }
+    },
+    "additionalProperties": true
+  }
+}

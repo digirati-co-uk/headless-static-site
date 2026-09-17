@@ -1,0 +1,17 @@
+label:
+  en:
+    - Mapping the heavens
+summary:
+  en:
+    - Celestial charts, instruments and the pursuit of the stars.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "12"
+thumbnail:
+  - id: /images/astronomy.jpg
+    type: Image
+background: "#d9c9f2"

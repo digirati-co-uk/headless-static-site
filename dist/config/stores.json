@@ -1,0 +1,8 @@
+{
+  "default": {
+    "path": "content",
+    "type": "iiif-json",
+    "pattern": "**/*.json",
+    "subFiles": true
+  }
+}

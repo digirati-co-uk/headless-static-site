@@ -1,0 +1,15 @@
+{
+  "id": "https://example.org/samples/filtered/drafts/private",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Unpublished object"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Illustrative teaching object; no external service is needed to run this example."
+    ]
+  },
+  "items": []
+}

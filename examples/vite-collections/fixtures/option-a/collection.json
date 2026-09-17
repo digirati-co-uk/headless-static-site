@@ -1,0 +1,4 @@
+{
+  "label": "Option A \u00b7 collection files and objects",
+  "summary": "A parent without items discovers three ordinary collection JSON files and an objects folder. The objects stay grouped in their own child collection."
+}

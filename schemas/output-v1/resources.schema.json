@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/resources.schema.json",
+  "title": "IIIF HSS resource lookup",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "required": ["id", "type", "hss:slug"],
+    "properties": {
+      "id": { "type": "string" },
+      "type": { "enum": ["Manifest", "Collection"] },
+      "hss:slug": { "type": "string" },
+      "hss:totalItems": { "type": "integer", "minimum": 0 }
+    },
+    "additionalProperties": true
+  }
+}

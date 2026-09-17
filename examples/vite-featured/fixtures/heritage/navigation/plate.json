@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/heritage/navigation",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "The art of navigation \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Finding a place in the world through measurement and observation."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/astronomy.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/heritage/navigation/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

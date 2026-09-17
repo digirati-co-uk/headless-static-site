@@ -1,0 +1,24 @@
+{
+  "content/new-one": {
+    "type": "Manifest",
+    "source": {
+      "type": "disk",
+      "path": "content",
+      "filePath": "content/new-one.json",
+      "relativePath": ""
+    },
+    "label": "Blank Manifest",
+    "canvases": 1
+  },
+  "content/wunder": {
+    "type": "Manifest",
+    "source": {
+      "type": "disk",
+      "path": "content",
+      "filePath": "content/wunder.json",
+      "relativePath": ""
+    },
+    "label": "Wunder der Vererbung / von Fritz Bolle. test",
+    "canvases": 36
+  }
+}

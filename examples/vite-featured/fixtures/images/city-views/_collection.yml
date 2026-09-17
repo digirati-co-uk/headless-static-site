@@ -1,0 +1,16 @@
+label:
+  en:
+    - Views of Delft
+summary:
+  en:
+    - The city seen through the eyes of its mapmakers.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "12"
+thumbnail:
+  - id: /images/delft.jpg
+    type: Image

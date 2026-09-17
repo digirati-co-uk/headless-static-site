@@ -1,0 +1,16 @@
+label:
+  en:
+    - Ideas that shaped a city
+summary:
+  en:
+    - From ambitious drawings to the places we call home.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "26"
+thumbnail:
+  - id: /images/delft.jpg
+    type: Image
