@@ -86,7 +86,9 @@ describe("vite plugin lifecycle", () => {
 
   test("runs build hook safely in build mode without starting watch", async () => {
     const { iiifPlugin } = await import("../src/vite-plugin");
+    const outgoingFetch = vi.fn();
     const plugin = iiifPlugin({
+      fetch: outgoingFetch,
       enabled: true,
       config: {
         stores: {
@@ -106,6 +108,7 @@ describe("vite plugin lifecycle", () => {
     await plugin.buildStart?.call({} as any);
 
     expect(createServerMock).toHaveBeenCalledTimes(1);
+    expect(createServerMock.mock.calls[0]?.[1]).toMatchObject({ fetch: outgoingFetch });
     expect(cachedBuildMock).toHaveBeenCalledTimes(1);
     expect(cachedBuildMock).toHaveBeenCalledWith({ cache: false, emit: true });
     expect(requestMock).not.toHaveBeenCalledWith("/watch");
@@ -129,10 +132,7 @@ describe("vite plugin lifecycle", () => {
     expect(events.map((event) => event.type)).toEqual(["start", "success"]);
 
     events.length = 0;
-    await writeFile(
-      join(testDir, "missing.yml"),
-      "stores:\n  local:\n    type: iiif-json\n    path: missing\n",
-    );
+    await writeFile(join(testDir, "missing.yml"), "stores:\n  local:\n    type: iiif-json\n    path: missing\n");
     const skippedPlugin = iiifPlugin({
       enabled: true,
       onBuild: (event) => events.push(event),
@@ -201,7 +201,7 @@ describe("vite plugin lifecycle", () => {
       await plugin.configResolved?.({
         command: "build",
         mode: "production",
-      root: runtimeRoot,
+        root: runtimeRoot,
         build: {
           outDir: "dist",
         },
@@ -615,10 +615,7 @@ describe("vite plugin lifecycle", () => {
   test("discovers config and content from Vite root when process cwd differs", async () => {
     testDir = await mkdtemp(join(tmpdir(), "iiif-hss-vite-root-"));
     await mkdir(join(testDir, "content"), { recursive: true });
-    await writeFile(
-      join(testDir, "custom.yml"),
-      "stores:\n  local:\n    type: iiif-json\n    path: ./content\n",
-    );
+    await writeFile(join(testDir, "custom.yml"), "stores:\n  local:\n    type: iiif-json\n    path: ./content\n");
     await writeFile(join(testDir, "content", "demo.json"), JSON.stringify({ type: "Manifest", id: "demo" }));
 
     const { iiifPlugin } = await import("../src/vite-plugin");

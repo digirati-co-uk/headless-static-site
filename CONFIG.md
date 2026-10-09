@@ -691,3 +691,108 @@ refreshes watch roots as stores change. It watches root configuration sidecars,
 including YAML read by a JavaScript config, and the configured scripts directory.
 Arbitrary transitive JavaScript imports still follow Node's module cache; restart
 the server after changing an imported helper if necessary.
+
+## Opt-in remote publication checks
+
+Existing remote stores keep native fetch, fallback slug rules and permissive page
+failure handling. No discovery limits are imposed unless configured. `urls`, when
+present (including an empty array), takes precedence over `url`.
+
+For a publisher accepting untrusted IIIF input, a store can explicitly enable:
+
+```json
+{
+  "type": "iiif-remote",
+  "urls": ["https://example.org/collection.json"],
+  "saveManifests": false,
+  "validation": { "strict": true, "requireSlugTemplate": true },
+  "discovery": {
+    "maxResources": 10000,
+    "maxCollectionPages": 1000,
+    "maxChildren": 10000
+  },
+  "slugTemplate": {
+    "type": "Collection",
+    "domain": "example.org",
+    "prefix": "/",
+    "suffix": ".json"
+  }
+}
+```
+
+`validation.strict` rejects invalid roots/pages, unavailable collection pages,
+unsafe final slugs and conflicting output slugs involving this store. Slug
+rewrites run before final validation. `requireSlugTemplate` separately rejects a
+fallback slug, so legacy stores can keep fallback rules while enabling strict
+discovery. Every manifest and collection must match a template when this option
+is enabled; add rules for child resources and their domains as needed. Neither
+option reads project-specific `config` metadata.
+
+Discovery limits are non-negative integers. `maxResources` counts distinct
+root/child URLs per store, including alias URLs. `maxCollectionPages` counts
+distinct linked page URLs across the store, excluding collection roots.
+`maxChildren` counts distinct direct child reference URLs per collection across
+all of its pages, before canonical alias deduplication. Limits apply during both
+warming and parsing, including cached responses, and failures drain queued work.
+They have no implicit defaults. Cycles and repeated resource identities are
+handled without requiring limits.
+
+These validation settings do not select a network transport. Astro and Vite
+integrations accept an optional outgoing `fetch` function, used for builds,
+rebuilds and debug UI remote requests:
+
+```ts
+import { iiifPlugin } from "iiif-hss/vite-plugin";
+import { fetchPublicResource } from "iiif-hss/library";
+
+const plugin = iiifPlugin({ fetch: fetchPublicResource });
+// Astro: iiifAstro({ fetch: fetchPublicResource })
+```
+
+`fetchPublicResource` is an opt-in Node HTTP(S) GET adapter: public addresses only,
+ports 80/443, no credentials in URLs, a 30-second total request deadline, at most
+three followed redirects and 16 MiB limits on both transferred and decoded body
+bytes. It decodes gzip, deflate and Brotli; supports `method: "GET"`, `headers`,
+`signal` and `redirect`; and rejects other explicitly supplied RequestInit
+options. It returns a buffered Response with final URL/redirect metadata.
+Redirects revalidate their destination and remove authentication/cookie headers
+when crossing origins. `validatePublicUrl` checks URL syntax and literal IPs;
+hostname DNS validation occurs only when the adapter connects.
+
+The separate Astro reader retains its `fetchFn` option. Configure it explicitly
+when remote fallback also requires the guard:
+
+```ts
+import { createIiifAstroServer } from "iiif-hss/astro/server";
+import { fetchPublicResource } from "iiif-hss/library";
+const iiif = createIiifAstroServer({ fetchFn: fetchPublicResource });
+```
+
+Programmatic builds continue to accept `build(options, builtIns, { fetch })`.
+An injected fetch takes precedence; omitted hooks use native fetch. A build
+with a custom transport can still reuse its existing request cache: caches must
+be owned and populated by trusted code. Switching fetch policies does not
+retroactively validate cached network origins or partition caches by policy.
+
+### Shared discovery and slug helpers
+
+`iiif-hss/slugs` is browser-safe and exports `makeGetSlugHelper`,
+`compileSlugConfig`, `compileReverseSlugConfig`, `SlugConfig` and
+`assertSafeSlug`. Resolution preserves the existing named/inline/fallback order;
+validation is explicit. Editors can call `assertSafeSlug` on their final preview
+slug. ARK-style colons are supported; malformed escaping, encoded separators,
+traversal segments and unsafe path characters are rejected. Actual filesystem
+escape is rejected independently of opt-in publication checks.
+
+`discoverCollectionChildren(startUrl, resource, fetchJson, onError?, options?)`
+is exported from `iiif-hss/library`. Its optional fifth argument accepts `strict`,
+`maxCollectionPages` and `maxChildren` (and a shared `budget` for callers walking
+multiple collections, created with the exported `createDiscoveryBudget`). Caller error callbacks remain supported; omitted options
+preserve permissive discovery. This helper discovers direct references and
+pages, not the full recursive resource graph; `maxResources` is enforced by the
+store's recursive traversal.
+
+Integrations still support copying caller-supplied prebuilt output when a build
+is skipped. They do not delete that source directory. Publishers restoring
+caches must keep reusable cache data separate from public output and remove
+only their own stale generated files before page generation or artifact copying.

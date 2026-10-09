@@ -58,8 +58,7 @@ describe("extractRuntimeHints", () => {
       {
         caches: {
           value: Promise.resolve({
-            [extractRuntimeHints.id]:
-              '{"type":"Collection","source":{"type":"disk"},"saveToDisk":true}',
+            [extractRuntimeHints.id]: '{"type":"Collection","source":{"type":"disk"},"saveToDisk":true}',
           }),
         },
       } as any,
@@ -68,6 +67,19 @@ describe("extractRuntimeHints", () => {
 
     expect(missingCache).toBe(true);
     expect(matchingCache).toBe(false);
+  });
+
+  test("extracts paginated collection membership for offline navigation", async () => {
+    const result = await extractRuntimeHints.handler(
+      {
+        type: "Collection",
+        source: { type: "remote", url: "https://example.org/root" },
+        remoteChildren: ["https://example.org/child"],
+      } as any,
+      {} as any,
+      {}
+    );
+    expect(result.meta["hss:runtime"].children).toEqual(["https://example.org/child"]);
   });
 
   test("never publishes disk source paths", async () => {

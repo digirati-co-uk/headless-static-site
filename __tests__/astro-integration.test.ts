@@ -111,7 +111,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-      root: runtimeRoot,
+          root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -157,7 +157,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-      root: runtimeRoot,
+          root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -201,7 +201,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-      root: runtimeRoot,
+          root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -229,9 +229,38 @@ describe("astro integration lifecycle", () => {
     });
   });
 
+  test("preserves a configured prebuilt source when there are no stores", async () => {
+    const { iiifAstro } = await import("../src/astro-integration");
+    const output = join(runtimeRoot, "dist");
+    const old = join(runtimeRoot, "prebuilt/manifests/removed");
+    await mkdir(old, { recursive: true });
+    await writeFile(join(old, "meta.json"), "{}");
+    await mkdir(join(runtimeRoot, "iiif-config"), { recursive: true });
+    await writeFile(join(runtimeRoot, "iiif-config/config.yml"), "stores: {}\n");
+    const integration = iiifAstro({ enabled: true, iiifBuildDir: join(runtimeRoot, "prebuilt") });
+    const hooks = integration.hooks as Record<string, (options: any) => Promise<void>>;
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    await hooks["astro:config:setup"]({
+      command: "build",
+      config: { root: pathToFileURL(`${runtimeRoot}/`) },
+      isRestart: false,
+      updateConfig: vi.fn(),
+      addWatchFile: vi.fn(),
+      logger,
+    });
+    await hooks["astro:config:done"]({ config: { root: pathToFileURL(`${runtimeRoot}/`), mode: "production" } });
+    await hooks["astro:build:start"]({ logger });
+    await hooks["astro:build:done"]({ dir: pathToFileURL(`${output}/`), logger });
+    expect(existsSync(old)).toBe(true);
+    expect(existsSync(join(output, "iiif/manifests/removed/meta.json"))).toBe(true);
+    expect(cachedBuildMock).not.toHaveBeenCalled();
+  });
+
   test("runs build hook once for astro build", async () => {
     const { iiifAstro } = await import("../src/astro-integration");
+    const outgoingFetch = vi.fn();
     const integration = iiifAstro({
+      fetch: outgoingFetch,
       enabled: true,
       config: {
         stores: {
@@ -260,6 +289,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:build:start"]({ logger });
 
     expect(createServerMock).toHaveBeenCalledTimes(1);
+    expect(createServerMock.mock.calls[0]?.[1]).toMatchObject({ fetch: outgoingFetch });
     expect(cachedBuildMock).toHaveBeenCalledTimes(1);
     expect(cachedBuildMock).toHaveBeenCalledWith({ cache: false, emit: true });
   });
@@ -389,7 +419,7 @@ describe("astro integration lifecycle", () => {
 
     await previewPlugin.configurePreviewServer({
       config: {
-      root: runtimeRoot,
+        root: runtimeRoot,
         preview: {
           host: "127.0.0.1",
           port: 4321,
@@ -462,7 +492,7 @@ describe("astro integration lifecycle", () => {
     await hooks["astro:server:setup"]({
       server: {
         config: {
-      root: runtimeRoot,
+          root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,
@@ -711,7 +741,7 @@ describe("astro integration lifecycle", () => {
       logger: { warn: vi.fn() },
       server: {
         config: {
-      root: runtimeRoot,
+          root: runtimeRoot,
           server: {
             host: "localhost",
             port: 4321,

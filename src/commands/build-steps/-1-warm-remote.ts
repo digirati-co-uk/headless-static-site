@@ -1,5 +1,10 @@
 import PQueue from "p-queue";
-import { discoverCollectionChildren, isCollectionLike } from "../../stores/iiif-remote-discovery.ts";
+import {
+  createDiscoveryBudget,
+  DiscoveryLimitError,
+  discoverCollectionChildren,
+  isCollectionLike,
+} from "../../stores/iiif-remote-discovery.ts";
 import type { IIIFRemoteStore } from "../../stores/iiif-remote.ts";
 import type { BuildProgressCallbacks } from "../../util/build-progress.ts";
 import { resolveNetworkConfig } from "../../util/network.ts";
@@ -17,7 +22,7 @@ interface WarmStats {
 }
 
 function normalizeStoreUrls(storeConfig: IIIFRemoteStore) {
-  if (storeConfig.urls && storeConfig.urls.length > 0) {
+  if (storeConfig.urls) {
     return storeConfig.urls;
   }
   if (storeConfig.url) {
@@ -68,20 +73,40 @@ export async function warmRemoteStores(
     state.storeRequestCaches[storeId] = requestCache;
 
     const queue = new PQueue({ concurrency: network.concurrency });
-    const visited = new Set<string>();
+    const budget = createDiscoveryBudget(storeConfig.discovery);
+    const canonicalIds = new Set<string>();
+    let failure: Error | undefined;
 
     const enqueue = (url: string) => {
-      if (!url || visited.has(url)) {
+      if (!url || failure) {
         return;
       }
-      visited.add(url);
+      try {
+        if (!budget.resource(url)) return;
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error("IIIF warming failed", { cause: error });
+        return;
+      }
       stats.urls += 1;
 
       queue.add(async () => {
+        if (failure) return;
         try {
           const resource = await requestCache.fetch(url);
           const id = resource?.["@id"] || resource?.id;
-          if (!id || !isCollectionLike(resource)) {
+          if (
+            storeConfig.validation?.strict &&
+            (!id ||
+              typeof id !== "string" ||
+              !["Manifest", "Collection", "sc:Manifest", "sc:Collection"].includes(
+                resource?.type || resource?.["@type"]
+              ))
+          ) {
+            throw new Error(`Invalid IIIF Manifest or Collection at ${url}`);
+          }
+          if (!id || canonicalIds.has(id)) return;
+          canonicalIds.add(id);
+          if (!isCollectionLike(resource)) {
             return;
           }
 
@@ -90,14 +115,17 @@ export async function warmRemoteStores(
             resource,
             (childUrl) => requestCache.fetch(childUrl),
             (childUrl, error) => {
+              if (storeConfig.validation?.strict) throw error;
               buildConfig.log(`Failed warming collection page ${childUrl}`, error);
-            }
+            },
+            { ...storeConfig.discovery, strict: storeConfig.validation?.strict, budget }
           );
 
           for (const child of children) {
             enqueue(child.id);
           }
-        } catch (_error) {
+        } catch (error) {
+          if (storeConfig.validation?.strict || error instanceof DiscoveryLimitError) failure = error instanceof Error ? error : new Error("IIIF warming failed", { cause: error });
           stats.failures += 1;
           buildConfig.log(`Failed warming URL: ${url}`);
         }
@@ -109,6 +137,7 @@ export async function warmRemoteStores(
     }
 
     await queue.onIdle();
+    if (failure) throw failure;
   }
 
   return stats;

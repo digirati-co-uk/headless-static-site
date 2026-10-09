@@ -98,3 +98,19 @@ export function makeGetSlugHelper(store: GenericStore, slugs: BuildConfig["slugs
     return getDefaultSlug(resource.id);
   };
 }
+
+/** Slugs become directory paths; encoded traversal and separators are unsafe too. */
+export function assertSafeSlug(slug: string) {
+  const unsafe = () => new Error(`Unsafe IIIF slug: ${slug}`);
+  if (!slug || slug.startsWith("/") || /^[a-z]:/i.test(slug) || slug.includes("\\")) throw unsafe();
+  for (const segment of slug.split("/")) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      throw unsafe();
+    }
+    if (!decoded || decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f?#]/.test(decoded)) throw unsafe();
+  }
+  return slug;
+}

@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -571,4 +572,20 @@ describe("astro server/client API", () => {
     expect(stores?.type).toBe("Collection");
     expect(Array.isArray(stores?.items)).toBe(true);
   });
+});
+
+test("native Astro reader still loads localhost on a non-standard port", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ id: "https://example.org/local", type: "Manifest", items: [] }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as import("node:net").AddressInfo;
+  try {
+    const loaded = await createIiifAstroServer().loadManifest(`http://127.0.0.1:${address.port}/manifest`);
+    expect(loaded.resource?.id).toBe("https://example.org/local");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

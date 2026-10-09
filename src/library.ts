@@ -9,3 +9,12 @@ export * from "./stores/iiif-memory";
 export { getManifestImageServices } from "./util/manifest-image-services.ts";
 
 export * from "./util/finalize-collection.ts";
+
+export { fetchPublicResource, validatePublicUrl } from "./util/public-fetch.ts";
+
+export {
+  createDiscoveryBudget,
+  discoverCollectionChildren,
+  type CollectionDiscoveryOptions,
+  type RemoteDiscoveryLimits,
+} from "./stores/iiif-remote-discovery.ts";

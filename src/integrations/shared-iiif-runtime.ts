@@ -15,6 +15,9 @@ import {
 import { resolveHostUrl } from "../util/resolve-host-url";
 
 export interface IIIFHSSSPluginOptions {
+  /** Outgoing requests for builds and the development inspection UI. */
+  fetch?: typeof globalThis.fetch;
+
   /**
    * Base path for the Hono server routes.
    */
@@ -421,6 +424,7 @@ export function createIiifRuntime(
     const configSource = await resolveIiifConfig();
     const { config: _skipConfig, ...restConfigSource } = configSource;
     server = await createServer(configSource.config, {
+      fetch: options.fetch,
       configSource: restConfigSource,
       reloadConfig: async () => {
         const server = resolvedConfig?.config.server;

@@ -9,9 +9,15 @@ type RuntimeHints = {
   type: "Manifest" | "Collection";
   source?: RuntimeSource;
   saveToDisk: boolean;
+  children?: string[];
 };
 
-function toRuntimeHints(resource: { type: string; source: any; saveToDisk?: boolean }): RuntimeHints | null {
+function toRuntimeHints(resource: {
+  type: string;
+  source: any;
+  saveToDisk?: boolean;
+  remoteChildren?: string[];
+}): RuntimeHints | null {
   const type = resource.type === "Manifest" || resource.type === "Collection" ? resource.type : null;
   if (!type) {
     return null;
@@ -31,6 +37,7 @@ function toRuntimeHints(resource: { type: string; source: any; saveToDisk?: bool
 
   return {
     type,
+    ...(resource.remoteChildren ? { children: resource.remoteChildren } : {}),
     ...(portableSource ? { source: portableSource } : {}),
     saveToDisk: source.type === "disk" || Boolean(resource.saveToDisk),
   };

@@ -69,3 +69,16 @@ describe("slug-engine", () => {
     expect(reverseTest1[0]).toEqual("https://example.org/iiif/123/456.json");
   });
 });
+
+test.each([".", "+", "__"])("round trips literal separator %s", (pathSeparator) => {
+  const config: SlugConfig = {
+    type: "Manifest",
+    domain: "example.org",
+    prefix: "/iiif/",
+    suffix: ".json",
+    pathSeparator,
+  };
+  const url = "https://example.org/iiif/123/456.json";
+  const [slug] = compileSlugConfig(config)(url);
+  expect(compileReverseSlugConfig(config)(slug!)[0]).toBe(url);
+});

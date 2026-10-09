@@ -43,6 +43,7 @@ export type IiifServerBuildEvent =
     };
 
 interface IIIFServerOptions {
+  fetch?: typeof globalThis.fetch;
   customManifestEditor?: string;
   configSource?: Omit<ResolvedConfigSource, "config">;
   reloadConfig?: () => Promise<IIIFRC>;
@@ -179,6 +180,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
         configSource = source;
       }
       result = await build({ ...options, cwd: projectRoot }, defaultBuiltIns, {
+        fetch: serverOptions.fetch,
         storeRequestCaches,
         // Failed builds must not leave queued writes/copies in the next build.
         fileHandler: buildFiles,
@@ -307,6 +309,7 @@ export async function createServer(config: IIIFRC, serverOptions: IIIFServerOpti
   });
 
   registerDebugUiRoutes({
+    fetch: serverOptions.fetch,
     app,
     fileHandler,
     getActivePaths: () => ({ ...activePaths }),

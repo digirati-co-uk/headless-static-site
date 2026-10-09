@@ -95,55 +95,90 @@ function getPaginationLinks(resource: any): string[] {
   return links;
 }
 
+export interface RemoteDiscoveryLimits {
+  /** Distinct attempted root/child URLs per store, including aliases. */
+  maxResources?: number;
+  /** Distinct linked page URLs per store; root collections are resources, not pages. */
+  maxCollectionPages?: number;
+  /** Distinct direct child reference URLs per collection, across its pages. */
+  maxChildren?: number;
+}
+
+export class DiscoveryLimitError extends Error {}
+
+export function checkDiscoveryLimit(size: number, limit: number | undefined, name: string) {
+  if (limit !== undefined && size > limit) throw new DiscoveryLimitError(`IIIF discovery exceeds ${limit} ${name}.`);
+}
+
+export function createDiscoveryBudget(limits: RemoteDiscoveryLimits = {}) {
+  for (const [name, value] of ["maxResources", "maxCollectionPages", "maxChildren"].map(
+    (name) => [name, limits[name as keyof RemoteDiscoveryLimits]] as const
+  )) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      throw new Error(`Invalid IIIF discovery limit ${name}: expected a non-negative integer.`);
+    }
+  }
+  const resources = new Set<string>();
+  const pages = new Set<string>();
+  return {
+    resource(url: string) {
+      if (resources.has(url)) return false;
+      checkDiscoveryLimit(resources.size + 1, limits.maxResources, "resource URLs");
+      resources.add(url);
+      return true;
+    },
+    page(url: string) {
+      if (pages.has(url)) return;
+      checkDiscoveryLimit(pages.size + 1, limits.maxCollectionPages, "collection pages");
+      pages.add(url);
+    },
+  };
+}
+
+export interface CollectionDiscoveryOptions extends RemoteDiscoveryLimits {
+  strict?: boolean;
+  /** Share page accounting when walking multiple collections in one store. */
+  budget?: ReturnType<typeof createDiscoveryBudget>;
+}
+
 export async function discoverCollectionChildren(
   startUrl: string,
   startResource: any,
   fetchJson: (url: string) => Promise<any>,
-  onError?: (url: string, error: unknown) => void
+  onError?: (url: string, error: unknown) => void,
+  options: CollectionDiscoveryOptions = {}
 ): Promise<RemoteChildReference[]> {
+  const budget = options.budget || createDiscoveryBudget(options);
   const discovered = new Map<string, RemoteChildReference>();
-  const visitedPages = new Set<string>();
+  const queuedPages = new Set<string>([startUrl]);
   const pendingPages: Array<{ url: string; resource: any }> = [{ url: startUrl, resource: startResource }];
 
-  while (pendingPages.length > 0) {
-    const current = pendingPages.shift();
-    if (!current) {
-      continue;
+  const enqueuePage = async (url: string) => {
+    if (queuedPages.has(url)) return;
+    budget.page(url);
+    queuedPages.add(url);
+    try {
+      pendingPages.push({ url, resource: await fetchJson(url) });
+    } catch (error) {
+      onError?.(url, error);
+      if (options.strict) throw new Error(`Failed to load IIIF collection page ${url}`, { cause: error });
     }
-    if (visitedPages.has(current.url)) {
-      continue;
-    }
-    visitedPages.add(current.url);
+  };
 
+  for (let index = 0; index < pendingPages.length; index++) {
+    const current = pendingPages[index];
+    if (options.strict && (!isCollectionLike(current.resource) || !getId(current.resource))) {
+      throw new Error(`Invalid IIIF Collection or CollectionPage at ${current.url}`);
+    }
     for (const child of getDirectChildren(current.resource)) {
       if (child.type === "CollectionPage") {
-        if (!visitedPages.has(child.id)) {
-          try {
-            const page = await fetchJson(child.id);
-            pendingPages.push({ url: child.id, resource: page });
-          } catch (error) {
-            onError?.(child.id, error);
-          }
-        }
-        continue;
-      }
-      if (!discovered.has(child.id)) {
+        await enqueuePage(child.id);
+      } else if (!discovered.has(child.id)) {
+        checkDiscoveryLimit(discovered.size + 1, options.maxChildren, "children");
         discovered.set(child.id, child);
       }
     }
-
-    for (const pageUrl of getPaginationLinks(current.resource)) {
-      if (visitedPages.has(pageUrl)) {
-        continue;
-      }
-      try {
-        const page = await fetchJson(pageUrl);
-        pendingPages.push({ url: pageUrl, resource: page });
-      } catch (error) {
-        onError?.(pageUrl, error);
-      }
-    }
+    for (const url of getPaginationLinks(current.resource)) await enqueuePage(url);
   }
-
   return Array.from(discovered.values());
 }

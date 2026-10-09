@@ -97,12 +97,19 @@
         "types": "./build/astro/client.d.ts",
         "default": "./build/astro/client.js"
       }
+    },
+    "./slugs": {
+      "import": {
+        "types": "./build/slugs.d.ts",
+        "default": "./build/slugs.js"
+      }
     }
   },
   "typesVersions": {
     "*": {
       "*": ["lib/scripts.d.ts"],
       "library": ["build/library.d.ts"],
+      "slugs": ["build/slugs.d.ts"],
       "client": ["build/client.d.ts"],
       "vite/client": ["build/vite/client.d.ts"],
       "astro": ["build/astro-integration.d.ts"],

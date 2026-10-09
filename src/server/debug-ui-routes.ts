@@ -217,6 +217,7 @@ export function findDebugUiDir(currentWorkingDirectory: string, resolveModule?: 
 }
 
 interface RegisterDebugUiRoutesOptions {
+  fetch?: typeof globalThis.fetch;
   app: Hono;
   projectRoot?: string;
   fileHandler: FileHandler;
@@ -408,6 +409,7 @@ function defaultBuildStatus(): BuildStatus {
 }
 
 export function registerDebugUiRoutes({
+  fetch: request,
   app,
   projectRoot = process.cwd(),
   fileHandler,
@@ -604,7 +606,7 @@ export function registerDebugUiRoutes({
     let resource = filePath ? await fileHandler.loadJson(filePath, true) : null;
     if (!resource && source?.type === "remote" && source.url) {
       try {
-        const remoteResponse = await fetch(source.url);
+        const remoteResponse = await (request ?? globalThis.fetch)(source.url);
         if (remoteResponse.ok) {
           resource = await remoteResponse.json();
         }
@@ -872,7 +874,7 @@ export function registerDebugUiRoutes({
     const checks = [];
     for (const url of urls.slice(0, 5)) {
       try {
-        const response = await fetch(url);
+        const response = await (request ?? globalThis.fetch)(url);
         const json = response.ok ? await response.json() : null;
         checks.push({
           url,

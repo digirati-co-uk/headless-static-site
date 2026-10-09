@@ -66,6 +66,8 @@ export interface ProtoResourceDirectory {
      * Number of sub-resources (only used for estimation)
      */
     subResources?: number;
+    /** Canonical direct membership of a remote collection, including pages. */
+    remoteChildren?: string[];
     virtual?: boolean;
     /**
      * Where this resource originated from.

@@ -74,6 +74,15 @@ function validatePortableRuntimeHints(value: unknown, file: string) {
     return;
   }
   const runtime = requireObject((value as Record<string, any>)["hss:runtime"], file, "hss:runtime");
+  if (runtime.children !== undefined) {
+    if (
+      !Array.isArray(runtime.children) ||
+      runtime.children.some((id: unknown) => typeof id !== "string") ||
+      new Set(runtime.children).size !== runtime.children.length
+    ) {
+      fail(file, "hss:runtime.children", "must be an array of unique canonical child IDs");
+    }
+  }
   if (typeof runtime.source === "undefined") {
     return;
   }

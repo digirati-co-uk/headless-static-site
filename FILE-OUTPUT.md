@@ -198,6 +198,16 @@ The `hss:runtime` value has this shape:
 
 Astro server/client helpers use it to choose local JSON or the remote source. Disk hints contain only `{ "type": "disk" }`; absolute and relative source paths are never published. This makes `meta.json` part of the runtime resolution contract, not merely display metadata.
 
+Remote collections may also include `hss:runtime.children`, an array of canonical
+direct upstream child IDs discovered across collection pages. It preserves
+first-seen order, removes canonical duplicates and self-references, and can be
+empty. It does not contain all descendants or describe changes made by custom
+collection finalizers. Membership is refreshed on resource-cache reuse. The
+source URL remains the fetched URL, which may be an alias of the canonical ID.
+This optional metadata does not require `saveManifests` or change output paths.
+It extends the existing open metadata schema; the required tree and manifest
+contract, format version and contract version are unchanged.
+
 ### `<slug>/indices.json`
 
 This maps facet or topic types to the values assigned to one resource:

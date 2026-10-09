@@ -154,6 +154,7 @@ export async function loadStores(
           } else {
             validCount++;
             const data = await files.loadJson(join(resourceDir, "resource.json"));
+            data.remoteChildren = resource.remoteChildren;
             data.inputKey = resource.inputKey;
             data.saveToDisk = resource.saveToDisk;
             await files.saveJson(join(resourceDir, "resource.json"), data);

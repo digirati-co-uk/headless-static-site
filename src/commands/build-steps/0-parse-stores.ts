@@ -1,7 +1,7 @@
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { IFS } from "unionfs";
 import type { BuildProgressCallbacks } from "../../util/build-progress.ts";
-import { makeGetSlugHelper } from "../../util/make-slug-helper.ts";
+import { assertSafeSlug, makeGetSlugHelper } from "../../util/make-slug-helper.ts";
 import { resolveNetworkConfig } from "../../util/network.ts";
 import { createStoreRequestCache } from "../../util/store-request-cache.ts";
 import type { ParsedResource, Store } from "../../util/store.ts";
@@ -20,7 +20,7 @@ function getRemoteStoreRootUrls(storeConfig: any): string[] {
   if (!storeConfig || storeConfig.type !== "iiif-remote") {
     return [];
   }
-  if (Array.isArray(storeConfig.urls) && storeConfig.urls.length) {
+  if (Array.isArray(storeConfig.urls)) {
     return storeConfig.urls.filter(Boolean);
   }
   if (typeof storeConfig.url === "string" && storeConfig.url) {
@@ -178,6 +178,12 @@ export async function parseStores(
         }
       }
 
+      // Slug rewrites run before containment checks; intermediate identifiers are not paths.
+      const outputPath = relative(resolve(buildConfig.cacheDir), resolve(join(buildConfig.cacheDir, resource.slug)));
+      if (isAbsolute(outputPath) || outputPath === ".." || outputPath.startsWith(`..${sep}`)) {
+        throw new Error(`Unsafe IIIF slug: ${resource.slug}`);
+      }
+      if (storeConfig.type === "iiif-remote" && storeConfig.validation?.strict) assertSafeSlug(resource.slug);
       const previous = parsedSlugs.get(resource.slug);
       if (previous && (previous.virtual || resource.virtual)) {
         const folder = resource.source.type === "disk" ? resource.source.filePath : null;
@@ -202,6 +208,13 @@ export async function parseStores(
           continue;
         }
         throw new Error(`Conflicting collection slug "${resource.slug}": ${previous.path} and ${resource.path}`);
+      }
+      if (
+        previous &&
+        previous.path !== resource.path &&
+        (storeConfig.validation?.strict || effectiveStoreConfigs[previous.storeId]?.validation?.strict)
+      ) {
+        throw new Error(`Conflicting resource slug "${resource.slug}": ${previous.path} and ${resource.path}`);
       }
       parsedSlugs.set(resource.slug, resource);
 

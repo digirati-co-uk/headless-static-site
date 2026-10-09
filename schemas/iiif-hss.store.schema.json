@@ -82,6 +82,43 @@
       "properties": {
         "$schema": { "type": "string", "format": "uri" },
         "type": { "const": "iiif-remote" },
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional publication checks. Omission preserves permissive discovery and fallback slug rules.",
+          "properties": {
+            "strict": {
+              "type": "boolean",
+              "description": "Fail invalid resources/pages, missing pages, unsafe final slugs and conflicting output slugs."
+            },
+            "requireSlugTemplate": {
+              "type": "boolean",
+              "description": "Require a matching named or inline slug template, independently of strict discovery."
+            }
+          }
+        },
+        "discovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional limits; none are imposed when omitted. Counts include cached responses.",
+          "properties": {
+            "maxResources": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Distinct attempted root and child URLs per store, including aliases."
+            },
+            "maxCollectionPages": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Distinct linked collection-page URLs per store; excludes collection roots."
+            },
+            "maxChildren": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Distinct direct child reference URLs per collection across all pages."
+            }
+          }
+        },
         "url": { "type": "string", "format": "uri" },
         "urls": {
           "type": "array",

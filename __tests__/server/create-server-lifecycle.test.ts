@@ -163,3 +163,14 @@ test("a failed watcher can be recreated on the next build", async () => {
     warning.mockRestore();
   }
 });
+
+test("forwards the injected outgoing fetch through builds and configuration reloads", async () => {
+  buildMock.mockReset().mockResolvedValue(result);
+  const outgoingFetch = vi.fn();
+  const reloadConfig = vi.fn(async () => ({ stores: {} }));
+  const server = await createServer({ stores: {} }, { fetch: outgoingFetch, reloadConfig });
+  await server._extra.cachedBuild({});
+  await server._extra.cachedBuild({ dev: true });
+  expect(reloadConfig).toHaveBeenCalled();
+  for (const call of buildMock.mock.calls) expect(call[2].fetch).toBe(outgoingFetch);
+});

@@ -34,7 +34,7 @@ The Vite-only `onBuild` callback is awaited for production and development build
 
 ## Programmatic builds
 
-Programmatic callers can inject a fetch-compatible request function. Every build-time network request, including remote stores, pagination, retries, extraction, enrichment, generators, and image services, uses this function. CLI, Vite, and Astro callers continue to use `globalThis.fetch`.
+Programmatic callers can inject a fetch-compatible request function. Every build-time network request, including remote stores, pagination, retries, extraction, enrichment, generators, and image services, uses this function. CLI, Vite, and Astro callers continue to use `globalThis.fetch` by default. Vite/Astro integrations also accept an explicit `fetch` option; Astro readers use their existing `fetchFn` option. See [opt-in remote publication checks](./CONFIG.md#opt-in-remote-publication-checks) for guarded requests and strict discovery.
 
 ```ts
 import { build } from "iiif-hss/library";

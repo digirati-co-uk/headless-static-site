@@ -193,3 +193,60 @@ test("bounded loading preserves source order and drains failures before returnin
   await expect(loadStores(parsed, config)).rejects.toThrow("load failed");
   expect(active).toBe(0);
 });
+
+test("rejects collisions between different stores after rewrites", async () => {
+  const config: any = createBuildConfig();
+  config.config.generators = {};
+  config.config.stores.secondary = { type: "iiif-json", path: "./other", validation: { strict: true } };
+  config.stores.push("secondary");
+  config.manifestRewrites = [{ rewrite: () => "manifests/shared" }];
+  await expect(parseStores(config, { storeRequestCaches: {} })).rejects.toThrow("Conflicting resource slug");
+  config.config.stores.primary.validation = { strict: true };
+  config.config.stores.primary.type = "iiif-remote";
+  config.config.stores.secondary.type = "iiif-remote";
+  config.storeTypes["iiif-remote"] = config.storeTypes["iiif-json"];
+  config.manifestRewrites = [{ rewrite: () => "../outside" }];
+  await expect(parseStores(config, { storeRequestCaches: {} })).rejects.toThrow("Unsafe IIIF slug");
+});
+
+test.each(["primary", "secondary"])("strict collisions are independent of store order (%s)", async (strictId) => {
+  const config: any = createBuildConfig();
+  config.config.generators = {};
+  config.config.stores.secondary = { type: "iiif-remote", url: "https://example.org/secondary" };
+  config.config.stores.primary.type = "iiif-remote";
+  config.storeTypes["iiif-remote"] = config.storeTypes["iiif-json"];
+  config.stores.push("secondary");
+  config.manifestRewrites = [{ rewrite: () => "manifests/shared" }];
+  // Existing consumers retain first-wins behavior at load time.
+  await expect(parseStores(config, { storeRequestCaches: {} })).resolves.toBeDefined();
+  config.config.stores[strictId].validation = { strict: true };
+  await expect(parseStores(config, { storeRequestCaches: {} })).rejects.toThrow("Conflicting resource slug");
+});
+
+test("cached loading refreshes upstream membership including removal of all children", async () => {
+  const config: any = createBuildConfig();
+  config.options.cache = true;
+  config.config.generators = {};
+  config.storeTypes["iiif-json"].invalidate = async () => false;
+  const parsed = await parseStores(config, { storeRequestCaches: {} });
+  const resource = parsed.storeResources.primary[0];
+  resource.type = "Collection";
+  await config.files.saveJson(`${config.cacheDir}/${resource.slug}/resource.json`, {
+    ...resource,
+    remoteChildren: ["old"],
+  });
+  for (const children of [["new"], []]) {
+    resource.remoteChildren = children;
+    const loaded = await loadStores(parsed, config);
+    expect(loaded.allResources[0].remoteChildren).toEqual(children);
+  }
+});
+
+test("validates containment after rewrites for every store without banning intermediate slugs", async () => {
+  const config: any = createBuildConfig();
+  config.config.generators = {};
+  config.manifestRewrites = [{ rewrite: () => "../outside" }];
+  await expect(parseStores(config, { storeRequestCaches: {} })).rejects.toThrow("Unsafe IIIF slug");
+  config.manifestRewrites.push({ rewrite: () => "manifests/safe" });
+  await expect(parseStores(config, { storeRequestCaches: {} })).resolves.toBeDefined();
+});

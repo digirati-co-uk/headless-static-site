@@ -31,6 +31,7 @@ export default defineConfig([
       client: "src/dev/client.ts",
       "node-client": "src/dev/node-client.ts",
       library: "src/library.ts",
+      slugs: "src/slugs.ts",
       "vite-plugin": "src/vite-plugin.ts",
       "astro-integration": "src/astro-integration.ts",
       "astro/server": "src/astro/server.ts",

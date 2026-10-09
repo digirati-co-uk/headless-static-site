@@ -19,6 +19,19 @@ describe("getBuildConfig search indexNames", () => {
     (global as any).__hss = undefined;
   });
 
+  test("keeps native fetch and existing network defaults unless a caller injects fetch", async () => {
+    const native = vi.fn();
+    vi.stubGlobal("fetch", native);
+    const config = { ...defaultBuiltIns, customConfig: { stores: {} } };
+    const result = await getBuildConfig({ cwd: testDir, scripts: "./missing" }, config as any);
+    expect(result.fetch).toBe(native);
+    expect(result.network).toMatchObject({ prefetch: true, concurrency: 2, minDelayMs: 100, maxRetries: 4 });
+    const injected = vi.fn();
+    expect(
+      (await getBuildConfig({ cwd: testDir, scripts: "./missing" }, { ...config, fetch: injected } as any)).fetch
+    ).toBe(injected);
+  });
+
   test.each([
     ["extractions", "extractions", "allExtractions"],
     ["enrichments", "enrichments", "allEnrichments"],
@@ -111,7 +124,10 @@ describe("getBuildConfig search indexNames", () => {
       }
     );
     expect(result.extractions.map((step) => step.id)).toEqual([
-      "extract-thumbnail", "extract-slug-source", "extract-label-string", "extract-runtime-hints",
+      "extract-thumbnail",
+      "extract-slug-source",
+      "extract-label-string",
+      "extract-runtime-hints",
     ]);
   });
 

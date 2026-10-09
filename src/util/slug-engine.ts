@@ -60,7 +60,7 @@ function removeTrailingSlash(str: string) {
 }
 
 export function compileReverseSlugConfig(config: SlugConfig): CompiledSlugConfig {
-  const pathSeparator = config.pathSeparator ? new RegExp(config.pathSeparator, "g") : null;
+  const pathSeparator = config.pathSeparator || null;
   return (targetPath: string) => {
     const domain = removeTrailingSlash(config.domain);
     let path = removeTrailingSlash(targetPath);
@@ -90,7 +90,7 @@ export function compileReverseSlugConfig(config: SlugConfig): CompiledSlugConfig
       parts.push(prefix);
     }
     if (pathSeparator) {
-      parts.push(path.replace(pathSeparator, "/"));
+      parts.push(path.replaceAll(pathSeparator, "/"));
     } else {
       parts.push(path);
     }

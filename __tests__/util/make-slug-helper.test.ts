@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { makeGetSlugHelper } from "../../src/util/make-slug-helper.ts";
+import { assertSafeSlug, makeGetSlugHelper } from "../../src/util/make-slug-helper.ts";
 
 describe("makeGetSlugHelper default slug behavior", () => {
   test("removes trailing manifest.json from URL path", () => {
@@ -92,4 +92,29 @@ describe("makeGetSlugHelper default slug behavior", () => {
     expect(slug).toBe("manifests/from-named");
     expect(source).toBe("named-template");
   });
+});
+
+test.each([
+  "../outside",
+  "manifests/%2e%2e/private",
+  "manifests/%2fetc",
+  "manifests/a\\b",
+  "manifests/",
+  "manifests/a%00",
+  "/absolute",
+  "C:/absolute",
+  "bad%escape",
+])("rejects unsafe final output path %s", (slug) => {
+  expect(() => assertSafeSlug(slug)).toThrow("Unsafe IIIF slug");
+});
+
+test("resolves candidates before validation and preserves ARK identifiers", () => {
+  const resolve = makeGetSlugHelper({} as any, {});
+  expect(resolve({ id: "https://example.org/ark:/12345/object", type: "Manifest" })[0]).toBe("ark:/12345/object");
+  expect(assertSafeSlug("ark:/12345/object")).toBe("ark:/12345/object");
+  const unsafe = makeGetSlugHelper(
+    { slugTemplate: { type: "Manifest", domain: "example.org", prefix: "/", addedPrefix: "../" } } as any,
+    {}
+  );
+  expect(unsafe({ id: "https://example.org/object", type: "Manifest" })[0]).toBe("manifests/../object");
 });

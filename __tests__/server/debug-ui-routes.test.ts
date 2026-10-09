@@ -6,6 +6,34 @@ import { createServer as createSharedServer } from "../../src/create-server.ts";
 import { findDebugUiDir } from "../../src/server/debug-ui-routes.ts";
 
 describe("debug UI routes", () => {
+  test("uses the injected fetch for connection checks and remote resource inspection", async () => {
+    const calls: string[] = [];
+    const remote = "https://example.org/injected";
+    const server = await createServer(
+      { stores: {} },
+      {
+        fetch: async (input: any) => {
+          calls.push(String(input));
+          return new Response(JSON.stringify({ id: remote, type: "Manifest", items: [] }));
+        },
+      }
+    );
+    const preview = await server.request("/_debug/api/config/stores/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ store: { type: "iiif-remote", url: remote } }),
+    });
+    expect(preview.status).toBe(200);
+    await unlink(join(testDir, ".iiif/build/manifests/demo/manifest.json"));
+    await writeFile(
+      join(testDir, ".iiif/build/meta/sitemap.json"),
+      JSON.stringify({ "manifests/demo": { type: "Manifest", source: { type: "remote", url: remote } } })
+    );
+    const resource = await (await server.request("/_debug/api/resource/manifests/demo")).json();
+    expect(resource.resource?.id).toBe(remote);
+    expect(calls).toEqual([remote, remote]);
+  });
+
   let testDir = "";
   const createServer = (config: any, options: any = {}) =>
     createSharedServer(config, { projectRoot: testDir, ...options });
@@ -533,7 +561,11 @@ describe("debug UI routes", () => {
 
   test("keeps configured hierarchy separate from all resources, including generated collections", async () => {
     const buildDir = join(testDir, ".iiif", "build");
-    const generated = { id: "http://localhost:7111/featured/collection.json", type: "Collection", label: { en: ["Featured"] } };
+    const generated = {
+      id: "http://localhost:7111/featured/collection.json",
+      type: "Collection",
+      label: { en: ["Featured"] },
+    };
     await writeFile(join(buildDir, "meta", "resources.json"), JSON.stringify({ featured: generated }));
     await writeFile(join(buildDir, "collection.json"), JSON.stringify({ type: "Collection", items: [generated] }));
     const server = await createServer({ stores: {} });
