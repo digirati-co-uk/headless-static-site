@@ -1,0 +1,16 @@
+label:
+  en:
+    - Science in print
+summary:
+  en:
+    - An illustrated history of curiosity and discovery.
+metadata:
+  - label:
+      en:
+        - Objects in collection
+    value:
+      en:
+        - "19"
+thumbnail:
+  - id: /images/astronomy.jpg
+    type: Image

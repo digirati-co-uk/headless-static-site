@@ -1,0 +1,15 @@
+{
+  "id": "https://example.org/samples/option-a/objects/map",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Map of Delft"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Illustrative teaching object; no external service is needed to run this example."
+    ]
+  },
+  "items": []
+}

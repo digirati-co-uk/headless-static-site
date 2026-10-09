@@ -1,10 +1,13 @@
-import { join, relative } from "node:path";
+import { createHash } from "node:crypto";
+import { dirname, join, relative, resolve as resolvePath, sep } from "node:path";
 import { copy } from "fs-extra/esm";
 import PQueue from "p-queue";
 import type { IFS } from "unionfs";
 import { parse as parseYaml } from "yaml";
 import { isEmpty } from "./is-empty";
 import { makeProgressBar } from "./make-progress-bar";
+
+export type SavedFile = { sha256: string; size: number; mtimeMs: number; ctimeMs: number; ino: number };
 
 export class FileHandler {
   fs: IFS;
@@ -15,8 +18,21 @@ export class FileHandler {
   openBinaryChanged: Map<string, boolean> = new Map();
   directories: Set<string> = new Set();
   root: string;
-  copyTargets: Map<string, { from: string; options: any }> = new Map();
+  copyTargets: Array<{ from: string; to: string; options: any }> = [];
+  writtenFiles: Set<string> = new Set();
+  writtenHashes = new Map<string, { bytes: number; sha256: string }>();
+  producers: Map<string, string> = new Map();
   ui: boolean;
+  // Dev builds share only immutable write signatures, never mutable parsed Vaults.
+  savedFiles?: Map<string, SavedFile>;
+  captureRoot?: string;
+  capturedFiles = new Map<string, Buffer>();
+  writeStats = { written: 0, skipped: 0, skippedBytes: 0 };
+  readSnapshot?: { root: string; files: Map<string, Buffer> };
+
+  private inSnapshot(path: string) {
+    return Boolean(this.readSnapshot && path.startsWith(`${this.readSnapshot.root}${sep}`));
+  }
 
   constructor(fs: IFS, root: string, ui = false) {
     this.fs = fs;
@@ -25,7 +41,7 @@ export class FileHandler {
   }
 
   dirExists(path: string) {
-    return this.fs.existsSync(path);
+    return this.fs.existsSync(this.resolve(path));
   }
 
   dirIsEmpty(path: string) {
@@ -41,49 +57,46 @@ export class FileHandler {
   }
 
   resolve(path: string) {
-    let out = "";
-    if (path.startsWith("/")) {
-      out = join(this.root, relative(this.root, path));
-    } else {
-      out = join(this.root, path);
-    }
-
-    // console.log({ in: path, out, root: this.root });
-
-    return out;
+    return resolvePath(this.root, path);
   }
 
   exists(filePath: string) {
+    if (this.inSnapshot(this.resolve(filePath))) return this.readSnapshot!.files.has(this.resolve(filePath));
     if (this.openJsonMap.has(this.resolve(filePath))) {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   existsBinary(filePath: string) {
+    if (this.inSnapshot(this.resolve(filePath))) return this.readSnapshot!.files.has(this.resolve(filePath));
     if (this.openBinaryMap.has(this.resolve(filePath))) {
       return true;
     }
 
-    return this.fs.existsSync(filePath);
+    return this.fs.existsSync(this.resolve(filePath));
   }
 
   async loadJson(path: string, fresh = false) {
     const filePath = this.resolve(path);
-    // Returns empty object if not exists.
-    if (!this.exists(filePath)) {
-      return {};
-    }
     return this.openJson(filePath, true, fresh);
   }
 
   async copy(from: string, to: string, options: any) {
-    this.copyTargets.set(to, { from, options });
+    this.copyTargets.push({ from: this.resolve(from), to: this.resolve(to), options });
   }
 
   async readFile(path: string) {
     const filePath = this.resolve(path);
+    if (this.inSnapshot(filePath)) {
+      const bytes = this.readSnapshot!.files.get(filePath);
+      if (!bytes) throw Object.assign(new Error(`No snapshot file: ${filePath}`), { code: "ENOENT" });
+      return bytes;
+    }
+    if (this.openJsonChanged.get(filePath)) {
+      return Buffer.from(JSON.stringify(this.openJsonMap.get(filePath), null, 2));
+    }
     if (this.openBinaryMap.has(filePath)) {
       return this.openBinaryMap.get(filePath) as Buffer;
     }
@@ -102,6 +115,12 @@ export class FileHandler {
 
   async openJson(path: string, allowEmpty = false, fresh = false) {
     const filePath = this.resolve(path);
+    if (this.inSnapshot(filePath)) {
+      const bytes = this.readSnapshot!.files.get(filePath);
+      if (!bytes && allowEmpty) return {};
+      if (!bytes) throw Object.assign(new Error(`No snapshot file: ${filePath}`), { code: "ENOENT" });
+      return JSON.parse(bytes.toString("utf8"));
+    }
     if (!fresh && this.openJsonMap.has(filePath)) {
       return this.openJsonMap.get(filePath);
     }
@@ -126,10 +145,49 @@ export class FileHandler {
   }
 
   async mkdir(path: string) {
-    await this.fs.promises.mkdir(path, { recursive: true });
+    const resolved = this.resolve(path);
+    if (this.directories.has(resolved)) return;
+    await this.fs.promises.mkdir(resolved, { recursive: true });
+    this.directories.add(resolved);
   }
 
-  async saveJson(path: string, data: object, force = false) {
+  async remove(path: string) {
+    const resolved = this.resolve(path);
+    await this.fs.promises.rm(resolved, { recursive: true, force: true });
+    for (const key of this.directories) {
+      if (key === resolved || key.startsWith(`${resolved}${sep}`)) this.directories.delete(key);
+    }
+    for (const map of [this.savedFiles, this.capturedFiles]) {
+      if (map)
+        for (const key of map.keys()) {
+          if (key === resolved || key.startsWith(`${resolved}${sep}`)) map.delete(key);
+        }
+    }
+    for (const collection of [this.openJsonMap, this.openJsonChanged, this.openBinaryMap, this.openBinaryChanged]) {
+      for (const key of collection.keys()) {
+        if (key === resolved || key.startsWith(`${resolved}${sep}`)) {
+          collection.delete(key);
+        }
+      }
+    }
+  }
+
+  private claim(path: string, producer?: string) {
+    if (!producer) return;
+    const filePath = this.resolve(path);
+    const existing = this.producers.get(filePath);
+    if (existing && existing !== producer) {
+      throw new Error(`Output collision at ${filePath}: ${existing} conflicts with ${producer}`);
+    }
+    this.producers.set(filePath, producer);
+  }
+
+  clearProducerClaims() {
+    this.producers.clear();
+  }
+
+  async saveJson(path: string, data: object, force = false, producer?: string) {
+    this.claim(path, producer);
     const filePath = this.resolve(path);
     const existing = this.openJsonMap.get(filePath);
     if (!existing) {
@@ -141,20 +199,79 @@ export class FileHandler {
     this.openJsonMap.set(filePath, data);
 
     if (force) {
-      await this.writeFile(filePath, JSON.stringify(data, null, 2));
+      await this.writeFile(filePath, JSON.stringify(data, null, 2), undefined, data);
+      this.openJsonChanged.set(filePath, false);
       return;
     }
 
     this.openJsonChanged.set(filePath, true);
   }
 
-  async writeFile(path: string, data: any) {
+  /** Persist a materialized resource only when its final content changes. */
+  async writeJsonIfChanged(path: string, value: object) {
     const filePath = this.resolve(path);
-    await this.fs.promises.writeFile(filePath, data);
+    const data = JSON.stringify(value);
+    let previous: string | undefined;
+    try {
+      previous = await this.fs.promises.readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (previous !== data) await this.writeFile(filePath, data);
+    this.openJsonMap.set(filePath, value);
+    this.openJsonChanged.set(filePath, false);
   }
 
-  async saveAll(force = false) {
-    const queue = new PQueue();
+  async writeFile(path: string, data: any, producer?: string, json?: object) {
+    this.claim(path, producer);
+    const filePath = this.resolve(path);
+    const digest = {
+      bytes: typeof data === "string" ? Buffer.byteLength(data) : data.byteLength,
+      sha256: createHash("sha256").update(data).digest("hex"),
+    };
+    const previous = this.savedFiles?.get(filePath);
+    let unchanged = false;
+    if (previous?.sha256 === digest.sha256) {
+      try {
+        const stat = await this.fs.promises.stat(filePath);
+        unchanged =
+          stat.size === previous.size &&
+          stat.mtimeMs === previous.mtimeMs &&
+          stat.ctimeMs === previous.ctimeMs &&
+          stat.ino === previous.ino;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    if (unchanged) {
+      this.writeStats.skipped++;
+      this.writeStats.skippedBytes += digest.bytes;
+    } else {
+      await this.mkdir(dirname(filePath));
+      await this.fs.promises.writeFile(filePath, data);
+      this.writeStats.written++;
+      if (this.savedFiles) {
+        const { size, mtimeMs, ctimeMs, ino } = await this.fs.promises.stat(filePath);
+        this.savedFiles.set(filePath, { sha256: digest.sha256, size, mtimeMs, ctimeMs, ino });
+      }
+    }
+    this.writtenFiles.add(filePath);
+    this.writtenHashes.set(filePath, digest);
+    if (json) this.openJsonMap.set(filePath, json);
+    else {
+      this.openJsonMap.delete(filePath);
+      this.openJsonChanged.delete(filePath);
+    }
+    if (this.openBinaryMap.has(filePath)) this.openBinaryMap.set(filePath, Buffer.from(data));
+    if (this.captureRoot && (filePath === this.captureRoot || filePath.startsWith(`${this.captureRoot}${sep}`))) {
+      this.capturedFiles.set(filePath, Buffer.from(data));
+    }
+  }
+
+  async saveAll(force = false, concurrency = 16) {
+    const queue = new PQueue({ concurrency });
+    const timings: Record<string, number> = {};
+    let started = performance.now();
 
     // Open JSON
     const files = Array.from(this.openJsonMap.keys())
@@ -166,38 +283,145 @@ export class FileHandler {
       .filter((k) => (force ? true : this.openBinaryChanged.get(k)))
       .map((k) => [k, this.openBinaryMap.get(k)] as const);
 
-    const progress = makeProgressBar("Writing files", files.length + binaryFiles.length, this.ui);
+    const progress = makeProgressBar(
+      "Writing files",
+      files.length + binaryFiles.length + this.copyTargets.length,
+      this.ui
+    );
+    const failedToWrite: any[] = [];
 
+    const reserved = new Map<string, string>();
+    for (const filePath of [
+      ...this.writtenFiles,
+      ...files.map(([filePath]) => filePath),
+      ...binaryFiles.map(([filePath]) => filePath),
+    ]) {
+      reserved.set(filePath, "generated output");
+    }
+    const copySources = new Map<string, string>();
+    const hashableCopies = new Set<string>();
+    const currentCopyTree = new Set<string>();
+    const reserveCopy = (filePath: string, source: string) => {
+      if (currentCopyTree.has(filePath)) return;
+      const existing = reserved.get(filePath);
+      if (existing) {
+        throw new Error(`Output collision at ${filePath}: ${existing} conflicts with copied file ${source}`);
+      }
+      reserved.set(filePath, `copied file ${source}`);
+      copySources.set(filePath, source);
+      currentCopyTree.add(filePath);
+    };
+    const reserveCopyTree = async (source: string, destination: string) => {
+      const virtualFile = this.openJsonMap.has(source) || this.openBinaryMap.has(source);
+      if (virtualFile) {
+        reserveCopy(destination, source);
+        return;
+      }
+      const stat = await this.fs.promises.stat(source);
+      if (!stat.isDirectory()) {
+        reserveCopy(destination, source);
+        return;
+      }
+      const entries = await this.fs.promises.readdir(source, { withFileTypes: true });
+      await Promise.all(
+        entries.map((entry) => reserveCopyTree(join(source, entry.name), join(destination, entry.name)))
+      );
+    };
+    const virtualCopies = new Map(this.copyTargets.map(({ from }) => [from, [] as string[]]));
+    for (const path of new Set([...this.openJsonMap.keys(), ...this.openBinaryMap.keys()])) {
+      for (let directory = dirname(path); directory !== dirname(directory); directory = dirname(directory)) {
+        virtualCopies.get(directory)?.push(path);
+      }
+    }
+    for (const target of this.copyTargets) {
+      currentCopyTree.clear();
+      const virtualSources = virtualCopies.get(target.from)!;
+      for (const source of virtualSources) reserveCopy(join(target.to, relative(target.from, source)), source);
+      try {
+        await reserveCopyTree(target.from, target.to);
+      } catch (error) {
+        // A directory containing only buffered files may not exist until writes finish.
+        if (
+          (error as NodeJS.ErrnoException).code !== "ENOENT" ||
+          !virtualSources.length ||
+          this.fs.existsSync(target.from)
+        )
+          throw error;
+      }
+      if (target.options?.overwrite === true && Object.keys(target.options).every((key) => key === "overwrite")) {
+        hashableCopies.add(target.to);
+      }
+    }
+    timings["copy-preflight"] = performance.now() - started;
+    started = performance.now();
     for (const [filePath, data] of files) {
-      queue.add(async () => await this.writeFile(filePath, JSON.stringify(data, null, 2)));
+      queue.add(
+        async () =>
+          await this.writeFile(filePath, JSON.stringify(data, null, 2), undefined, data).catch((err) =>
+            failedToWrite.push({ filePath, err })
+          )
+      );
     }
 
     for (const [filePath, data] of binaryFiles) {
-      queue.add(async () => await this.writeFile(filePath, data));
-    }
-
-    // Copy fields.
-    const copyKeys = Array.from(this.copyTargets.keys());
-    for (const key of copyKeys) {
-      // biome-ignore lint/style/noNonNullAssertion: This is from the copyTargets map.
-      const { from, options } = this.copyTargets.get(key)!;
-      queue.add(async () => await copy(from, key, options));
+      queue.add(async () => await this.writeFile(filePath, data).catch((err) => failedToWrite.push({ filePath, err })));
     }
 
     queue.on("completed", () => progress.increment());
 
     await queue.onIdle();
+
+    timings["writes"] = performance.now() - started;
+    started = performance.now();
+    // Copy chains retain serial semantics; independent targets can run together.
+    if ([...copySources.values()].some((source) => copySources.has(source))) queue.concurrency = 1;
+    for (const { from, to, options } of this.copyTargets) {
+      queue.add(async () => {
+        try {
+          const json = this.openJsonMap.get(from);
+          const known = this.writtenHashes.get(from);
+          if (json && known && hashableCopies.has(to)) {
+            const data = JSON.stringify(json, null, 2);
+            if (createHash("sha256").update(data).digest("hex") === known.sha256) {
+              // Buffered generated JSON can go straight to its public destination.
+              await this.writeFile(to, data);
+              return;
+            }
+          }
+          await copy(from, to, options);
+          for (const [destination] of copySources) {
+            if (destination === to || destination.startsWith(`${to}${sep}`)) this.writtenFiles.add(destination);
+          }
+          if (hashableCopies.has(to)) {
+            for (const [destination, source] of copySources) {
+              if (destination === to || destination.startsWith(`${to}${sep}`)) {
+                const digest = this.writtenHashes.get(source);
+                if (digest) this.writtenHashes.set(destination, digest);
+              }
+            }
+          }
+        } catch (err) {
+          failedToWrite.push({ filePath: to, err });
+        }
+      });
+    }
+    await queue.onIdle();
+    timings["copies"] = performance.now() - started;
     progress.stop();
 
-    // Clear all copy targets.
-    this.copyTargets.clear();
-    this.openJsonChanged.clear();
-    this.openBinaryChanged.clear();
+    // Leave failed writes queued so callers can retry without losing pending edits.
+    const failedPaths = new Set(failedToWrite.map(({ filePath }) => filePath));
+    this.copyTargets = this.copyTargets.filter(({ to }) => failedPaths.has(to));
+    for (const changed of [this.openJsonChanged, this.openBinaryChanged]) {
+      for (const path of changed.keys()) if (!failedPaths.has(path)) changed.delete(path);
+    }
+
+    return { failedToWrite, timings };
   }
 
   async cachePathExists(to: string) {
     try {
-      await this.fs.promises.stat(to);
+      await this.fs.promises.stat(this.resolve(to));
       return true;
     } catch (e) {
       return false;

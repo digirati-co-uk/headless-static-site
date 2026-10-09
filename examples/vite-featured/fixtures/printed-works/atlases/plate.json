@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/printed-works/atlases",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Cities on paper \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Explore streets, canals and the changing shape of the city."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/delft.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/printed-works/atlases/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

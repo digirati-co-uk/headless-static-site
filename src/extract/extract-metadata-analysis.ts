@@ -134,6 +134,7 @@ export const extractMetadataAnalysis: Extraction<ExtractionConfig, ExtractFormat
         const primaryLabel = await getSingleLabel(label, {
           language,
           translate,
+          fetch: api.build?.fetch,
         });
 
         for (const lang of labelLanguages) {

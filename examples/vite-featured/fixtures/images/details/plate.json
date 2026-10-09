@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/images/details",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Look a little closer \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Small details, extraordinary stories."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/delft.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/images/details/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

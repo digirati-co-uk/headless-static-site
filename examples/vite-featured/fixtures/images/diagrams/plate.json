@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/images/diagrams",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "A visual language \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Beautiful diagrams that make complex ideas visible."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/astronomy.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/images/diagrams/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

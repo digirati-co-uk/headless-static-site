@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/indices.schema.json",
+  "title": "IIIF HSS indices",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+  }
+}

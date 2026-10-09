@@ -1,0 +1,6 @@
+label: Mixed · curated order and folder discovery
+summary: YAML pins a shared object and a nested JSON collection first. Local files and folders are appended; repeated references appear once. A JSON-only pattern and subFiles remain compatible.
+items:
+  - manifests/map
+  - collections/mixed/nested
+  - collections/mixed/local

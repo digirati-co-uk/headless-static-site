@@ -1,0 +1,150 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #172e30;
+  background: #f5f3eb;
+  line-height: 1.6;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+a {
+  color: #075e65;
+  text-underline-offset: 0.2em;
+}
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #bd4b16;
+  outline-offset: 5px;
+}
+header {
+  padding: 1.2rem 5vw;
+  background: #163d3f;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+header a {
+  color: #fff;
+}
+main {
+  max-width: 1250px;
+  margin: auto;
+  padding: 3rem 5vw;
+}
+h1 {
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  margin: 1rem 0;
+}
+main > p {
+  max-width: 760px;
+  font-size: 1.1rem;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 1.2rem;
+  margin: 2rem 0;
+}
+article {
+  border: 1px solid #c7d1c8;
+  border-top: 4px solid #628674;
+  padding: 1.5rem;
+  background: #fffef9;
+}
+article > a {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 650;
+  line-height: 1.3;
+  margin-top: 0.5rem;
+}
+small {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+}
+code {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+details {
+  border-top: 1px solid #c7d1c8;
+  padding-top: 1rem;
+}
+pre {
+  overflow: auto;
+  padding: 1rem;
+  background: #163d3f;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.recipe-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 2rem 0 3rem;
+}
+.recipe-navigation a {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #c7d1c8;
+  border-radius: 2rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.recipe-navigation a:hover {
+  background: #e2ebe4;
+}
+.featured-section {
+  padding: 2rem;
+  margin: 2rem 0;
+  background: #e6ece3;
+  scroll-margin-top: 1rem;
+}
+.featured-section:nth-of-type(3n + 2) {
+  background: #e3eaf0;
+}
+.featured-section:nth-of-type(3n + 3) {
+  background: #eee5d7;
+}
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.section-heading > div {
+  max-width: 760px;
+}
+.section-heading > a {
+  flex-shrink: 0;
+}
+h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.2;
+  margin: 0.5rem 0;
+}
+.featured-section .grid {
+  margin-bottom: 0;
+}
+@media (max-width: 650px) {
+  .featured-section {
+    padding: 1.2rem;
+    margin-inline: -1rem;
+  }
+  .section-heading {
+    display: block;
+  }
+  header {
+    flex-wrap: wrap;
+  }
+}

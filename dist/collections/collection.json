@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "undefined/collections/collection.json",
+  "type": "Collection",
+  "label": {
+    "en": [
+      "Collections"
+    ]
+  },
+  "hss:slug": "collections",
+  "items": [
+    {
+      "@context": "http://iiif.io/api/presentation/3/context.json",
+      "id": "undefined/topics/collection.json",
+      "type": "Collection",
+      "label": {
+        "en": [
+          "Topics"
+        ]
+      },
+      "hss:slug": "topics"
+    },
+    {
+      "@context": "http://iiif.io/api/presentation/3/context.json",
+      "id": "undefined/stores/default/collection.json",
+      "type": "Collection",
+      "label": {
+        "en": [
+          "default"
+        ]
+      },
+      "hss:slug": "stores/default"
+    }
+  ]
+}

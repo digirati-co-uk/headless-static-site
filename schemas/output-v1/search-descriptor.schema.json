@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/search-descriptor.schema.json",
+  "title": "IIIF HSS search descriptor",
+  "type": "object",
+  "required": ["name", "format", "scope", "idStrategy", "schema", "facets", "canvasRegistry"],
+  "properties": {
+    "name": { "type": "string" },
+    "format": { "const": "record-jsonl" },
+    "scope": { "const": "resource" },
+    "idStrategy": { "const": "resource-id" },
+    "schema": { "type": "string" },
+    "data": { "type": "string" },
+    "facets": { "type": "array", "items": { "type": "string" } },
+    "canvasRegistry": { "type": "string" }
+  },
+  "additionalProperties": false
+}

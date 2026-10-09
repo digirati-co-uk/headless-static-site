@@ -1,0 +1,75 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "undefined/collection.json",
+  "type": "Collection",
+  "label": {
+    "en": [
+      "Index"
+    ]
+  },
+  "items": [
+    {
+      "id": "undefined/content/wunder/manifest.json",
+      "type": "Manifest",
+      "label": {
+        "en": [
+          "Wunder der Vererbung / von Fritz Bolle. test"
+        ]
+      },
+      "hss:slug": "content/wunder",
+      "thumbnail": [
+        {
+          "id": "https://iiif.wellcomecollection.org/thumbs/b18035723_0004.JP2/full/72,100/0/default.jpg",
+          "type": "Image",
+          "height": 100,
+          "width": 72,
+          "service": [
+            {
+              "@id": "https://iiif.wellcomecollection.org/thumbs/b18035723_0004.JP2",
+              "@type": "ImageService2",
+              "profile": "http://iiif.io/api/image/2/level0.json",
+              "width": 732,
+              "height": 1024,
+              "sizes": [
+                {
+                  "width": 72,
+                  "height": 100
+                },
+                {
+                  "width": 143,
+                  "height": 200
+                },
+                {
+                  "width": 286,
+                  "height": 400
+                },
+                {
+                  "width": 732,
+                  "height": 1024
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "undefined/content/new-one/manifest.json",
+      "type": "Manifest",
+      "label": {
+        "en": [
+          "Blank Manifest"
+        ]
+      },
+      "hss:slug": "content/new-one",
+      "thumbnail": [
+        {
+          "id": "https://iiif.library.leeds.ac.uk/thumbs/v2/mh4cf1hy_objects_613417_001.tif/full/400,/0/default.jpg",
+          "type": "Image",
+          "width": 400,
+          "height": 400
+        }
+      ]
+    }
+  ]
+}

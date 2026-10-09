@@ -1,0 +1,35 @@
+{
+  "@context": "http://iiif.io/api/presentation/3/context.json",
+  "id": "https://example.org/source/printed-works/science",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Science in print \u2014 plate 1"
+    ]
+  },
+  "summary": {
+    "en": [
+      "An illustrated history of curiosity and discovery."
+    ]
+  },
+  "thumbnail": [
+    {
+      "id": "/images/astronomy.jpg",
+      "type": "Image"
+    }
+  ],
+  "items": [
+    {
+      "id": "https://example.org/source/printed-works/science/canvas",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Plate 1"
+        ]
+      },
+      "width": 1200,
+      "height": 900,
+      "items": []
+    }
+  ]
+}

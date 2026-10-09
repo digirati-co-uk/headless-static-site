@@ -1,0 +1,15 @@
+{
+  "id": "https://example.org/samples/automatic/instruments/optics/lens",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Optical lens"
+    ]
+  },
+  "summary": {
+    "en": [
+      "Illustrative teaching object; no external service is needed to run this example."
+    ]
+  },
+  "items": []
+}

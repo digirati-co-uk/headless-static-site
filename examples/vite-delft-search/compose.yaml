@@ -1,0 +1,11 @@
+name: hss-delft-search
+services:
+  typesense:
+    image: typesense/typesense:30.2
+    ports:
+      - "127.0.0.1:18108:8108"
+    volumes:
+      - search-data:/data
+    command: '--data-dir=/data --api-key=delft-demo-local-admin --enable-cors'
+volumes:
+  search-data:

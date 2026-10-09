@@ -1,0 +1,6 @@
+{
+  "id": "https://example.org/samples/inner-2",
+  "type": "Collection",
+  "label": "Inner collection 2",
+  "summary": "An ordinary IIIF collection file. It can be empty now and populated by a script later."
+}

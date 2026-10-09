@@ -1,0 +1,82 @@
+[
+  {
+    "file": "fixtures/heritage/geodesie/be0e4342-916b-47bb-bed1-60fb870dae47.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/be0e4342-916b-47bb-bed1-60fb870dae47.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/be0e4342-916b-47bb-bed1-60fb870dae47.json"
+  },
+  {
+    "file": "fixtures/heritage/geodesie/ceeb68c2-738c-4f32-af8e-78b1f6d56c10.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/ceeb68c2-738c-4f32-af8e-78b1f6d56c10.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/ceeb68c2-738c-4f32-af8e-78b1f6d56c10.json"
+  },
+  {
+    "file": "fixtures/heritage/geodesie/418e1dd2-82c9-4ea7-a283-d9f1126c5e5c.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/418e1dd2-82c9-4ea7-a283-d9f1126c5e5c.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/418e1dd2-82c9-4ea7-a283-d9f1126c5e5c.json"
+  },
+  {
+    "file": "fixtures/heritage/geodesie/7e2a5a21-30a1-41a5-9567-40a124cfcf41.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/7e2a5a21-30a1-41a5-9567-40a124cfcf41.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/7e2a5a21-30a1-41a5-9567-40a124cfcf41.json"
+  },
+  {
+    "file": "fixtures/heritage/universiteitsgeschiedenis/ec9c216a-4dc4-4e7b-acf1-dfd4759b3e96.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/ec9c216a-4dc4-4e7b-acf1-dfd4759b3e96.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/ec9c216a-4dc4-4e7b-acf1-dfd4759b3e96.json"
+  },
+  {
+    "file": "fixtures/heritage/universiteitsgeschiedenis/ac04d965-7552-438e-b808-1394b6bd651b.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/ac04d965-7552-438e-b808-1394b6bd651b.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/ac04d965-7552-438e-b808-1394b6bd651b.json"
+  },
+  {
+    "file": "fixtures/physics/optica/55e8acb7-f747-480e-b71e-9cc1bcbc7123.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/55e8acb7-f747-480e-b71e-9cc1bcbc7123.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/55e8acb7-f747-480e-b71e-9cc1bcbc7123.json"
+  },
+  {
+    "file": "fixtures/physics/optica/86092889-a03d-459a-a076-577fdf18f2de.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/86092889-a03d-459a-a076-577fdf18f2de.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/86092889-a03d-459a-a076-577fdf18f2de.json"
+  },
+  {
+    "file": "fixtures/physics/optica/324c531b-ec71-4c45-adcb-33ae12c832a5.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/324c531b-ec71-4c45-adcb-33ae12c832a5.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/324c531b-ec71-4c45-adcb-33ae12c832a5.json"
+  },
+  {
+    "file": "fixtures/physics/optica/45f21d18-43d5-4298-a98f-09327914e864.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/45f21d18-43d5-4298-a98f-09327914e864.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/45f21d18-43d5-4298-a98f-09327914e864.json"
+  },
+  {
+    "file": "fixtures/calculation/instrumenten/a5a89562-31c6-4a20-a1c4-86a66a95b6de.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/a5a89562-31c6-4a20-a1c4-86a66a95b6de.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/a5a89562-31c6-4a20-a1c4-86a66a95b6de.json"
+  },
+  {
+    "file": "fixtures/calculation/instrumenten/597e1880-9174-4bda-b848-282facf09433.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/597e1880-9174-4bda-b848-282facf09433.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/597e1880-9174-4bda-b848-282facf09433.json"
+  },
+  {
+    "file": "fixtures/calculation/instrumenten/a107684c-47d6-49bc-bfc6-505ff4f6026d.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/a107684c-47d6-49bc-bfc6-505ff4f6026d.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/a107684c-47d6-49bc-bfc6-505ff4f6026d.json"
+  },
+  {
+    "file": "fixtures/portraits/hoogleraren/04dc7bba-87fb-4a73-adb7-c96f5bdc79c2.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/04dc7bba-87fb-4a73-adb7-c96f5bdc79c2.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/04dc7bba-87fb-4a73-adb7-c96f5bdc79c2.json"
+  },
+  {
+    "file": "fixtures/portraits/hoogleraren/3dc52d11-ce5b-47a2-8dc7-2a73a6a5a828.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/3dc52d11-ce5b-47a2-8dc7-2a73a6a5a828.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/3dc52d11-ce5b-47a2-8dc7-2a73a6a5a828.json"
+  },
+  {
+    "file": "fixtures/portraits/hoogleraren/3e67505e-900c-470b-9f1a-ae4a9a2deea2.json",
+    "source": "examples/delft-performance/manifests/collective-access/objects/3e67505e-900c-470b-9f1a-ae4a9a2deea2.json",
+    "id": "https://tu-delft-heritage.github.io/collective-access-data/iiif/objects/3e67505e-900c-470b-9f1a-ae4a9a2deea2.json"
+  }
+]

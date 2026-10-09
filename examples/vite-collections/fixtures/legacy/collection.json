@@ -1,0 +1,14 @@
+{
+  "@context": "http://iiif.io/api/presentation/2/context.json",
+  "@id": "https://example.org/samples/legacy",
+  "@type": "sc:Collection",
+  "label": "Legacy \u00b7 IIIF Presentation 2",
+  "description": "A v2 collection keeps its curated reference, upgrades to v3 and merges local children. A duplicate source ID appears once.",
+  "manifests": [
+    {
+      "@id": "https://example.org/samples/legacy/book",
+      "@type": "sc:Manifest",
+      "label": "Historic book"
+    }
+  ]
+}

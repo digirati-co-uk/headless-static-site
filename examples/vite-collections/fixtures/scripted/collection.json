@@ -1,0 +1,4 @@
+{
+  "label": "Scripted \u00b7 start empty, fill during the build",
+  "summary": "This declaration has no items. An enrichment script selects existing objects by their source directory and adds them in label order."
+}

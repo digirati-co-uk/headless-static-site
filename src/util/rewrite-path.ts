@@ -11,8 +11,8 @@ export function rewritePath(config: { base?: string; destination?: string }) {
       currentPath = join(config.destination, currentPath);
     }
 
-    if (currentPath.endsWith("_collection.yml") || currentPath.endsWith("_collection.yaml")) {
-      return currentPath.replace(/\/_collection\.(yml|yaml)$/, "");
+    if (/(^|\/)_?collection\.(json|ya?ml)$/.test(currentPath)) {
+      return currentPath.replace(/(^|\/)_?collection\.(json|ya?ml)$/, "");
     }
 
     // Remove extension.

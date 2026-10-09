@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://iiif-hss.dev/schemas/output-v1/meta.schema.json",
+  "title": "IIIF HSS extensible resource metadata",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "hss:runtime": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "children": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional canonical direct upstream child IDs across collection pages, in first-seen order."
+        }
+      }
+    }
+  }
+}

@@ -1,16 +1,14 @@
 import fs from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { cwd } from "node:process";
 import { loadJson } from "./load-json";
 
 export function createFiletypeCache(cacheFile: string) {
-  let isLoaded = false;
+  let loaded: Promise<void> | undefined;
   let didChange = false;
   let fileTypeCache: Record<string, string> = {};
 
   const loadIfExists = async () => {
-    if (isLoaded) return;
-    isLoaded = true;
     if (fs.existsSync(cacheFile)) {
       const file = await fs.promises.readFile(cacheFile, "utf-8");
       try {
@@ -25,19 +23,20 @@ export function createFiletypeCache(cacheFile: string) {
   return {
     //
     async getFileType(filePath: string) {
-      await loadIfExists();
+      await (loaded ||= loadIfExists());
       if (fileTypeCache[filePath]) {
         return fileTypeCache[filePath];
       }
 
       if (fs.existsSync(filePath)) {
-        if (filePath.endsWith("/_collection.yml") || filePath.endsWith("/_collection.yaml")) {
+        if (/(^|\/)_?collection\.(json|ya?ml)$/.test(filePath)) {
           fileTypeCache[filePath] = "Collection";
           didChange = true;
           return fileTypeCache[filePath];
         }
 
-        let jsonResource = await loadJson(join(cwd(), filePath), true);
+        const jsonPath = isAbsolute(filePath) ? filePath : join(cwd(), filePath);
+        let jsonResource = await loadJson(jsonPath, true);
 
         if (jsonResource.default) {
           jsonResource = jsonResource.default;
@@ -65,7 +64,7 @@ export function createFiletypeCache(cacheFile: string) {
     },
     async save() {
       if (didChange) {
-        fs.promises.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
+        await fs.promises.writeFile(cacheFile, JSON.stringify(fileTypeCache, null, 2));
       }
     },
   };
